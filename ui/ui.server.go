@@ -484,6 +484,30 @@ func displayMessage(ctx *Context, message string, color string) {
 	ctx.append = append(ctx.append, script)
 }
 
+// displayError renders an error toast similar to displayMessage's red variant
+// and includes a Reload button that refreshes the application.
+func displayError(ctx *Context, message string) {
+	// Fixed red styling with reload button
+	script := Trim(fmt.Sprintf(`<script>(function(){
+        var box=document.getElementById("__messages__");
+        if(box==null){box=document.createElement("div");box.id="__messages__";box.style.position="fixed";box.style.top="0";box.style.right="0";box.style.padding="8px";box.style.zIndex="9999";box.style.pointerEvents="none";document.body.appendChild(box);} 
+        var n=document.createElement("div");
+        n.style.display='flex';n.style.alignItems='center';n.style.gap='10px';
+        n.style.padding='12px 16px';n.style.margin='8px';n.style.borderRadius='12px';
+        n.style.minHeight='44px';n.style.minWidth='340px';n.style.maxWidth='340px';
+        n.style.background='#fee2e2';n.style.color='#991b1b';n.style.border='1px solid #fecaca';
+        n.style.borderLeft='4px solid #dc2626';n.style.boxShadow='0 6px 18px rgba(0,0,0,0.08)';
+        n.style.fontWeight='600';n.style.pointerEvents='auto';
+        var dot=document.createElement('span');dot.style.width='10px';dot.style.height='10px';dot.style.borderRadius='9999px';dot.style.background='#dc2626';
+        var t=document.createElement('span');t.textContent=%q;
+        var btn=document.createElement('button');btn.textContent='Reload';btn.style.background='#991b1b';btn.style.color='#fff';btn.style.border='none';btn.style.padding='6px 10px';btn.style.borderRadius='8px';btn.style.cursor='pointer';btn.style.fontWeight='700';btn.onclick=function(){ try { window.location.reload(); } catch(_){} };
+        n.appendChild(dot);n.appendChild(t);n.appendChild(btn);
+        box.appendChild(n);
+        setTimeout(function(){ try { if(n && n.parentNode) { n.parentNode.removeChild(n); } } catch(_){} }, 88000);
+    })();</script>`, message))
+	ctx.append = append(ctx.append, script)
+}
+
 func (ctx *Context) Success(message string) {
 	displayMessage(ctx, message, "bg-green-700 text-white")
 }
@@ -491,6 +515,9 @@ func (ctx *Context) Success(message string) {
 func (ctx *Context) Error(message string) {
 	displayMessage(ctx, message, "bg-red-700 text-white")
 }
+
+// ErrorReload shows an error toast with a Reload button.
+func (ctx *Context) ErrorReload(message string) { displayError(ctx, message) }
 
 func (ctx *Context) Info(message string) {
 	displayMessage(ctx, message, "bg-blue-700 text-white")
@@ -724,7 +751,7 @@ func (app *App) Listen(port string) {
 					if rec := recover(); rec != nil {
 						log.Println("handler panic recovered:", rec)
 						// Enqueue an error toast to the client
-						displayMessage(ctx, fmt.Sprintf("%v", rec), "bg-red-700 text-white")
+						displayError(ctx, "Something went wrong ...")
 						// Send minimal body with any queued scripts
 						if len(ctx.append) > 0 {
 							w.Write([]byte(strings.Join(ctx.append, "")))
