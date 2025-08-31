@@ -17,6 +17,7 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 - A small set of UI inputs (text, password, number, date/time, select, checkbox, radio, textarea), buttons, tables, icons
 - Toast messages: `Success`, `Error`, `Info`, and an error toast with a Reload button
 - Optional dev autoreload overlay (`app.Autoreload(true)`) for quick feedback
+- Optional dev autorestart (`app.AutoRestart(true)`) to rebuild and restart on changes
 
 ## Install
 
@@ -39,7 +40,8 @@ import (
 
 func main() {
     app := ui.MakeApp("en")
-    app.Autoreload(true) // optional during development
+    app.AutoRestart(true) // optional during development (rebuild + restart on file changes)
+    app.Autoreload(true)  // optional during development (browser auto-reload + offline banner)
 
     hello := func(ctx *ui.Context) string { ctx.Success("Hello from g-sui!"); return "" }
 
@@ -119,6 +121,7 @@ Refer to the `examples/` directory for practical usage and composition patterns.
 ## Development notes
 
 - Autoreload: `app.Autoreload(true)` injects a tiny WS client that shows an offline banner and reloads on reconnect (handy during dev).
+- Autorestart: `app.AutoRestart(true)` watches your main package for file changes and rebuilds + restarts the app process. Combine with Autoreload for a smooth local DX.
 - The library favors simple strings for HTML; helpers build class names and attributes for you.
 - Validation uses `go-playground/validator`; see the login and showcase examples.
 

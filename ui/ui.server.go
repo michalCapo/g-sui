@@ -10,14 +10,19 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"golang.org/x/net/websocket"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -775,6 +780,195 @@ func (app *App) Listen(port string) {
 	if err := http.ListenAndServe(port, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Println("Error:", err)
 	}
+}
+
+func (app *App) AutoRestart(enable bool) {
+	if !enable {
+		return
+	}
+
+	// Detect the directory of the user's main package (where main.main is defined).
+	mainDir := detectMainDir()
+	if mainDir == "" {
+		// Fallback to current working directory
+		if wd, err := os.Getwd(); err == nil {
+			mainDir = wd
+		} else {
+			log.Println("[autorestart] cannot determine working directory:", err)
+			return
+		}
+	}
+
+	go watchAndRestart(mainDir)
+}
+
+// watchAndRestart watches the provided directory recursively for file changes
+// and rebuilds + execs the binary in-place when a change is detected.
+func watchAndRestart(root string) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Println("[autorestart] watcher error:", err)
+		return
+	}
+	defer watcher.Close()
+
+	// Add directories recursively
+	addDirs := func() error {
+		return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil // ignore traversal errors
+			}
+			if d.IsDir() {
+				name := d.Name()
+				if shouldSkipDir(name) {
+					return filepath.SkipDir
+				}
+				if err := watcher.Add(path); err != nil {
+					// Non-fatal: keep going
+					return nil
+				}
+			}
+			return nil
+		})
+	}
+
+	if err := addDirs(); err != nil {
+		log.Println("[autorestart] add dirs error:", err)
+	}
+
+	log.Printf("[autorestart] watching %s for changes...\n", root)
+
+	// Debounce timer
+	var (
+		restartPending bool
+		timer          *time.Timer
+		mu             sync.Mutex
+	)
+
+	schedule := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if restartPending {
+			if timer != nil {
+				timer.Reset(350 * time.Millisecond)
+			}
+			return
+		}
+		restartPending = true
+		timer = time.AfterFunc(350*time.Millisecond, func() {
+			// Build new binary in temp dir; then exec into it
+			if err := rebuildAndExec(root); err != nil {
+				log.Println("[autorestart] rebuild failed:", err)
+				restartPending = false
+			}
+		})
+	}
+
+	for {
+		select {
+		case ev, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+
+			// Watch for new directories created (e.g., when adding packages)
+			if ev.Has(fsnotify.Create) {
+				if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
+					// Add new directory and its children
+					_ = filepath.WalkDir(ev.Name, func(p string, d os.DirEntry, err error) error {
+						if err != nil {
+							return nil
+						}
+						if d.IsDir() {
+							if shouldSkipDir(d.Name()) {
+								return filepath.SkipDir
+							}
+							_ = watcher.Add(p)
+						}
+						return nil
+					})
+					continue
+				}
+			}
+
+			// Only react to relevant file changes
+			if (ev.Has(fsnotify.Write) || ev.Has(fsnotify.Create) || ev.Has(fsnotify.Rename) || ev.Has(fsnotify.Remove)) && shouldTrigger(ev.Name) {
+				log.Println("[autorestart] change:", ev.Name)
+				schedule()
+			}
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Println("[autorestart] watcher error:", err)
+		}
+	}
+}
+
+func shouldSkipDir(name string) bool {
+	switch name {
+	case ".git", "vendor", "node_modules", ".idea", ".vscode", "dist", "build", "bin", ".DS_Store":
+		return true
+	}
+	return strings.HasPrefix(name, ".")
+}
+
+func shouldTrigger(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".go", ".tmpl", ".html", ".css", ".js":
+		return true
+	}
+	return false
+}
+
+// detectMainDir attempts to find the source directory of main.main
+func detectMainDir() string {
+	// First, try to inspect the stack for main.main when AutoRestart is called from user code
+	for skip := 1; skip < 32; skip++ {
+		pc, file, _, ok := runtime.Caller(skip)
+		if !ok {
+			break
+		}
+		fn := runtime.FuncForPC(pc)
+		if fn != nil && fn.Name() == "main.main" { // exact main package entrypoint
+			return filepath.Dir(file)
+		}
+	}
+	return ""
+}
+
+// rebuildAndExec builds the main package in root and re-execs into the new binary.
+func rebuildAndExec(root string) error {
+	tmp := filepath.Join(os.TempDir(), fmt.Sprintf("g-sui-%d", time.Now().UnixNano()))
+	cmd := exec.Command("go", "build", "-o", tmp)
+	cmd.Dir = root
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// Replace current process with the new binary
+	args := append([]string{tmp}, os.Args[1:]...)
+	env := os.Environ()
+
+	// Best effort: exec on Unix, spawn+exit on Windows
+	if runtime.GOOS == "windows" {
+		c := exec.Command(tmp, os.Args[1:]...)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		c.Stdin = os.Stdin
+		if err := c.Start(); err != nil {
+			return err
+		}
+		// Exit current process to let the new one take over
+		os.Exit(0)
+		return nil
+	}
+
+	return syscall.Exec(tmp, args, env)
 }
 
 func (app *App) Autoreload(enable bool) {
