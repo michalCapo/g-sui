@@ -144,50 +144,65 @@ func (t *TTableSimple) Attr(attrs string) *TTableSimple {
 }
 
 func (t *TTableSimple) Render() string {
-	var rowsBuilder strings.Builder
-	colspanRegex := regexp.MustCompile(`colspan=['"]?(\d+)['"]?`)
+    var rowsBuilder strings.Builder
+    colspanRegex := regexp.MustCompile(`colspan=['"]?(\d+)['"]?`)
 
-	for rowIndex, row := range t.rows {
-		rowsBuilder.WriteString("<tr>")
-		usedCols := 0
+    for rowIndex, row := range t.rows {
+        rowsBuilder.WriteString("<tr>")
+        usedCols := 0
 
-		for i, cell := range row {
-			class := ""
-			if t.colClasses[i] != "" {
-				class = fmt.Sprintf(` class="%s"`, t.colClasses[i])
-			}
+        for i, cell := range row {
+            class := ""
+            if t.colClasses[i] != "" {
+                class = fmt.Sprintf(` class="%s"`, t.colClasses[i])
+            }
 
-			// Add cell-specific attributes if they exist
-			attrs := ""
-			if rowIndex < len(t.cellAttrs) && i < len(t.cellAttrs[rowIndex]) && t.cellAttrs[rowIndex][i] != "" {
-				attrs = " " + t.cellAttrs[rowIndex][i]
-			}
+            // Add cell-specific attributes if they exist
+            attrs := ""
+            if rowIndex < len(t.cellAttrs) && i < len(t.cellAttrs[rowIndex]) && t.cellAttrs[rowIndex][i] != "" {
+                attrs = " " + t.cellAttrs[rowIndex][i]
+            }
 
-			rowsBuilder.WriteString(fmt.Sprintf(`<td%s%s>%s</td>`, class, attrs, cell))
+            // Determine colspan for this cell before placing it
+            nextColspan := 1
+            if attrs != "" {
+                matches := colspanRegex.FindStringSubmatch(attrs)
+                if len(matches) > 1 {
+                    if parsedColspan, err := strconv.Atoi(matches[1]); err == nil {
+                        nextColspan = parsedColspan
+                    }
+                }
+            }
 
-			// Calculate how many columns this cell uses
-			colspan := 1
-			if attrs != "" {
-				matches := colspanRegex.FindStringSubmatch(attrs)
-				if len(matches) > 1 {
-					if parsedColspan, err := strconv.Atoi(matches[1]); err == nil {
-						colspan = parsedColspan
-					}
-				}
-			}
-			usedCols += colspan
-		}
+            // If this cell would overflow the current row, wrap to a new row first
+            if usedCols > 0 && usedCols+nextColspan > t.numCols {
+                // pad the remaining cells if needed
+                for i := usedCols; i < t.numCols; i++ {
+                    padClass := ""
+                    if i < len(t.colClasses) && t.colClasses[i] != "" {
+                        padClass = fmt.Sprintf(` class="%s"`, t.colClasses[i])
+                    }
+                    rowsBuilder.WriteString(fmt.Sprintf(`<td%s></td>`, padClass))
+                }
+                rowsBuilder.WriteString("</tr><tr>")
+                usedCols = 0
+            }
 
-		// Only add empty cells if we haven't reached the total number of columns
-		for i := usedCols; i < t.numCols; i++ {
-			class := ""
-			if i < len(t.colClasses) && t.colClasses[i] != "" {
-				class = fmt.Sprintf(` class="%s"`, t.colClasses[i])
-			}
-			rowsBuilder.WriteString(fmt.Sprintf(`<td%s></td>`, class))
-		}
-		rowsBuilder.WriteString("</tr>")
-	}
+            // Place the cell
+            rowsBuilder.WriteString(fmt.Sprintf(`<td%s%s>%s</td>`, class, attrs, cell))
+            usedCols += nextColspan
+        }
+
+        // Only add empty cells if we haven't reached the total number of columns
+        for i := usedCols; i < t.numCols; i++ {
+            class := ""
+            if i < len(t.colClasses) && t.colClasses[i] != "" {
+                class = fmt.Sprintf(` class="%s"`, t.colClasses[i])
+            }
+            rowsBuilder.WriteString(fmt.Sprintf(`<td%s></td>`, class))
+        }
+        rowsBuilder.WriteString("</tr>")
+    }
 
 	return fmt.Sprintf(
 		`<table class="table-auto %s"><tbody>%s</tbody></table>`,

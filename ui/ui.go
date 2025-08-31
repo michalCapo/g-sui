@@ -34,7 +34,7 @@ const (
 	Yellow        = " bg-yellow-400 text-gray-800 hover:text-gray-200 hover:bg-yellow-600 font-bold border-gray-300 flex items-center justify-center"
 	YellowOutline = " border border-yellow-500 text-yellow-600 hover:text-gray-700 hover:bg-yellow-500 flex items-center justify-center"
 	Green         = " bg-green-600 text-white hover:bg-green-700 checked:bg-green-600 border-gray-300 flex items-center justify-center"
-	GreenOutline  = " border border-green-500 text-green-500 hover:text-white hover:bg-green-599 flex items-center justify-center"
+	GreenOutline  = " border border-green-500 text-green-500 hover:text-white hover:bg-green-600 flex items-center justify-center"
 	Purple        = " bg-purple-500 text-white hover:bg-purple-700 border-purple-500 flex items-center justify-center"
 	PurpleOutline = " border border-purple-500 text-purple-500 hover:text-white hover:bg-purple-600 flex items-center justify-center"
 	Blue          = " bg-blue-800 text-white hover:bg-blue-700 border-gray-300 flex items-center justify-center"

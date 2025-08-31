@@ -176,6 +176,30 @@ Single aggregated server with all examples:
 go run examples/main.go
 ```
 
+### Watch Mode (auto-reload on file changes)
+
+Requires `reflex` (file watcher):
+
+```bash
+# Install once (choose one):
+go install github.com/cespare/reflex@latest
+# or on macOS with Homebrew
+brew install reflex
+```
+
+Start the examples server in watch mode:
+
+```bash
+./watch.sh
+```
+
+This runs:
+
+```bash
+reflex -s -r '\\ .go$' -- sh -c 'go run ./examples'
+```
+so any `.go` change restarts the server automatically.
+
 Then open http://localhost:1422. Use the top navigation menu to switch between pages.
 
 Available routes:

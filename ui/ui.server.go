@@ -460,32 +460,28 @@ func (ctx *Context) Redirect(href string) string {
 }
 
 func displayMessage(ctx *Context, message string, color string) {
-	ctx.append = append(ctx.append,
-		Trim((`<script>
-            (function() {
-                const el = document.getElementById("__messages__");
-                if(el == null) {
-                    const loader = document.createElement("div");
-                    loader.id = "__messages__";
-                    loader.classList = "fixed top-0 right-0 p-2 z-40";
-                    document.body.appendChild(loader);
-                }
-            })();
-        </script>`)),
-
-		Trim(fmt.Sprintf(`<script>
-            (function () {
-                const el = document.getElementById("__messages__");
-                if(el != null) {
-                    const loader = document.createElement("div");
-                    loader.classList = "p-4 m-2 rounded text-center border border-gray-700 shadow-xl text-xl text-center w-64 %s";
-                    loader.innerHTML = "%s";
-                    el.appendChild(loader);
-					setTimeout(() => el.removeChild(loader), 5000);
-                }
-            })();
-        </script>`, color, Normalize(message))),
-	)
+	// Styled toast matching t-sui visuals
+	script := Trim(fmt.Sprintf(`<script>(function(){
+        var box=document.getElementById("__messages__");
+        if(box==null){box=document.createElement("div");box.id="__messages__";box.style.position="fixed";box.style.top="0";box.style.right="0";box.style.padding="8px";box.style.zIndex="9999";box.style.pointerEvents="none";document.body.appendChild(box);} 
+        var n=document.createElement("div");
+        n.style.display="flex";n.style.alignItems="center";n.style.gap="10px";
+        n.style.padding="12px 16px";n.style.margin="8px";n.style.borderRadius="12px";
+        n.style.minHeight="44px";n.style.minWidth="340px";n.style.maxWidth="340px";
+        n.style.boxShadow="0 6px 18px rgba(0,0,0,0.08)";n.style.border="1px solid";
+        var C=%q;var isGreen=C.indexOf('green')>=0;var isRed=C.indexOf('red')>=0;
+        var accent=isGreen?"#16a34a":(isRed?"#dc2626":"#4f46e5");
+        if(isGreen){n.style.background="#dcfce7";n.style.color="#166534";n.style.borderColor="#bbf7d0";}
+        else if(isRed){n.style.background="#fee2e2";n.style.color="#991b1b";n.style.borderColor="#fecaca";}
+        else{n.style.background="#eef2ff";n.style.color="#3730a3";n.style.borderColor="#e0e7ff";}
+        n.style.borderLeft="4px solid "+accent;
+        var dot=document.createElement("span");dot.style.width="10px";dot.style.height="10px";dot.style.borderRadius="9999px";dot.style.background=accent;
+        var t=document.createElement("span");t.textContent=%q; 
+        n.appendChild(dot);n.appendChild(t);
+        box.appendChild(n);
+        setTimeout(function(){try{box.removeChild(n);}catch(_){}} ,5000);
+    })();</script>`, color, message))
+	ctx.append = append(ctx.append, script)
 }
 
 func (ctx *Context) Success(message string) {
@@ -494,6 +490,10 @@ func (ctx *Context) Success(message string) {
 
 func (ctx *Context) Error(message string) {
 	displayMessage(ctx, message, "bg-red-700 text-white")
+}
+
+func (ctx *Context) Info(message string) {
+	displayMessage(ctx, message, "bg-blue-700 text-white")
 }
 
 func (ctx *Context) DownloadAs(file *io.Reader, contentType string, name string) error {
@@ -717,10 +717,23 @@ func (app *App) Listen(port string) {
 		for found, path := range stored {
 			if value == path {
 				ctx := makeContext(app, r, w)
-
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write([]byte((*found)(ctx)))
 
+				// Recover from panics inside handler calls to avoid broken fetches
+				defer func() {
+					if rec := recover(); rec != nil {
+						log.Println("handler panic recovered:", rec)
+						// Enqueue an error toast to the client
+						displayMessage(ctx, fmt.Sprintf("%v", rec), "bg-red-700 text-white")
+						// Send minimal body with any queued scripts
+						if len(ctx.append) > 0 {
+							w.Write([]byte(strings.Join(ctx.append, "")))
+						}
+					}
+				}()
+
+				// Normal call
+				w.Write([]byte((*found)(ctx)))
 				if len(ctx.append) > 0 {
 					w.Write([]byte(strings.Join(ctx.append, "")))
 				}
@@ -740,18 +753,22 @@ func (app *App) Listen(port string) {
 func (app *App) Autoreload(enable bool) {
 	if enable {
 		app.HTMLHead = append(app.HTMLHead, `
-		<script>
-			const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-			const socket = new WebSocket(protocol + window.location.host + '/live');
-			socket.addEventListener('close', function (event) {
-				document.body.innerHTML += '<div class="fixed inset-0 z-40 opacity-75 bg-gray-800"></div>';
-				document.body.innerHTML += '<div class="fixed z-50 top-6 left-6 p-6 text-white bg-red-700 rounded border border-gray-500 uppercase font-bold">Offline</div>';
-				setInterval(() => {
-					fetch('/').then(() => window.location.reload()).catch(() => {});
-				}, 2000);
-			});
-		</script>
-	`)
+        <script>
+            (function(){
+                if (window.__srui_live__) return;
+                window.__srui_live__ = true;
+                const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+                const socket = new WebSocket(protocol + window.location.host + '/live');
+                socket.addEventListener('close', function () {
+                    document.body.innerHTML += '<div class="fixed inset-0 z-40 opacity-75 bg-gray-800"></div>';
+                    document.body.innerHTML += '<div class="fixed z-50 top-6 left-6 p-6 text-white bg-red-700 rounded border border-gray-500 uppercase font-bold">Offline</div>';
+                    setInterval(() => {
+                        fetch('/').then(() => window.location.reload()).catch(() => {});
+                    }, 2000);
+                });
+            })();
+        </script>
+    `)
 
 		http.Handle("/live", websocket.Handler(func(ws *websocket.Conn) {
 			defer ws.Close()
@@ -805,7 +822,7 @@ var __post = Trim(`
 		}, 100);
 
 		fetch(path, {method: "POST", body: JSON.stringify(body)})
-			.then(html => html.text())
+			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
 			.then(function (html) {
 				const parser = new DOMParser();
 				const doc = parser.parseFromString(html, 'text/html');
@@ -826,12 +843,8 @@ var __post = Trim(`
 					}
 				}
 			})
-			.finally(function() {
-				clearTimeout(loading);
-				if(loader) {
-					document.body.removeChild(loader);
-				}
-			});
+			.catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
+			.finally(function(){ clearTimeout(loading); if(loader){ try { document.body.removeChild(loader); } catch(_){} } });
     }
 `)
 
@@ -878,45 +891,45 @@ var __stringify = Trim(`
 
 var __submit = Trim(`
     function __submit(event, swap, target_id, path, values) {
-        event.preventDefault(); 
+		event.preventDefault(); 
 
-        const el = event.target;
-        const tag = el.tagName.toLowerCase();
-        const form = tag === "form" ? el : el.closest("form");
-        const id = form.getAttribute("id");
-        let body = values; 
+		const el = event.target;
+		const tag = el.tagName.toLowerCase();
+		const form = tag === "form" ? el : el.closest("form");
+		const id = form.getAttribute("id");
+		let body = values; 
 
-        let found = Array.from(document.querySelectorAll('[form=' + id + '][name]'));
+		let found = Array.from(document.querySelectorAll('[form=' + id + '][name]'));
 
-        if (found.length === 0) {
-            found = Array.from(form.querySelectorAll('[name]'));
-        };
+		if (found.length === 0) {
+			found = Array.from(form.querySelectorAll('[name]'));
+		};
 
-        found.forEach((item) => {
-            const name = item.getAttribute("name");
-            const type = item.getAttribute("type");
-            let value = item.value;
-            
-            if (type === 'checkbox') {
-                value = String(item.checked)
-            }
+		found.forEach((item) => {
+			const name = item.getAttribute("name");
+			const type = item.getAttribute("type");
+			let value = item.value;
+			
+			if (type === 'checkbox') {
+				value = String(item.checked)
+			}
 
-            if(name != null) {
-                body = body.filter(element => element.name !== name);
-                body.push({ name, type, value });
-            }
-        });
+			if(name != null) {
+				body = body.filter(element => element.name !== name);
+				body.push({ name, type, value });
+			}
+		});
 
-        let loader;
-        let loading = setTimeout(() => {
-            loader = document.createElement("div");
-            loader.classList = "fixed inset-0 flex gap-4 items-center justify-center z-50 bg-white opacity-75 font-bold text-3xl";
-            loader.innerHTML = "Loading ...";
-            document.body.appendChild(loader);
-        }, 100);
+		let loader;
+		let loading = setTimeout(() => {
+			loader = document.createElement("div");
+			loader.classList = "fixed inset-0 flex gap-4 items-center justify-center z-50 bg-white opacity-75 font-bold text-3xl";
+			loader.innerHTML = "Loading ...";
+			document.body.appendChild(loader);
+		}, 100);
 
-        fetch(path, {method: "POST", body: JSON.stringify(body)})
-            .then(html => html.text())
+		fetch(path, {method: "POST", body: JSON.stringify(body)})
+			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
 			.then(function (html) {
 				const parser = new DOMParser();
 				const doc = parser.parseFromString(html, 'text/html');
@@ -937,12 +950,8 @@ var __submit = Trim(`
 					}
 				}
 			})
-            .finally(function() {
-                clearTimeout(loading);
-                if(loader) {
-                    document.body.removeChild(loader);
-                }
-            });
+            .catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
+            .finally(function(){ clearTimeout(loading); if(loader){ try { document.body.removeChild(loader); } catch(_){} } });
     }
 `)
 
@@ -959,7 +968,7 @@ var __load = Trim(`
 		}, 100);
 
 		fetch(href, {method: "GET"})
-			.then(html => html.text())
+			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
 			.then(function (html) {
 				const parser = new DOMParser();
 				const doc = parser.parseFromString(html, 'text/html');
@@ -976,16 +985,36 @@ var __load = Trim(`
 
 				window.history.pushState({}, doc.title, href);
 			})
-			.finally(function() {
-				clearTimeout(loading);
-				if(loader) {
-					document.body.removeChild(loader);
-				}
-			});
+			.catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
+			.finally(function(){ clearTimeout(loading); if(loader){ try { document.body.removeChild(loader); } catch(_){} } });
     }
 `)
 
 var ContentID = Target()
+
+// Error UI helper injected into every page
+
+var __error = Trim(`
+    function __error(message) {
+        (function(){
+            try {
+                var box = document.getElementById('__messages__');
+                if (box == null) { box = document.createElement('div'); box.id='__messages__'; box.style.position='fixed'; box.style.top='0'; box.style.right='0'; box.style.padding='8px'; box.style.zIndex='9999'; box.style.pointerEvents='none'; document.body.appendChild(box); }
+                var n = document.getElementById('__error_toast__');
+                if (!n) {
+                    n = document.createElement('div'); n.id='__error_toast__';
+                    n.style.display='flex'; n.style.alignItems='center'; n.style.gap='10px'; n.style.padding='12px 16px'; n.style.margin='8px'; n.style.borderRadius='12px'; n.style.minHeight='44px'; n.style.minWidth='340px'; n.style.maxWidth='340px';
+                    n.style.background='#fee2e2'; n.style.color='#991b1b'; n.style.border='1px solid #fecaca'; n.style.borderLeft='4px solid #dc2626'; n.style.boxShadow='0 6px 18px rgba(0,0,0,0.08)'; n.style.fontWeight='600'; n.style.pointerEvents='auto';
+                    var dot=document.createElement('span'); dot.style.width='10px'; dot.style.height='10px'; dot.style.borderRadius='9999px'; dot.style.background='#dc2626'; n.appendChild(dot);
+                    var span=document.createElement('span'); span.id='__error_text__'; n.appendChild(span);
+                    var btn=document.createElement('button'); btn.textContent='Reload'; btn.style.background='#991b1b'; btn.style.color='#fff'; btn.style.border='none'; btn.style.padding='6px 10px'; btn.style.borderRadius='8px'; btn.style.cursor='pointer'; btn.style.fontWeight='700'; btn.onclick=function(){ try { window.location.reload(); } catch(_){} }; n.appendChild(btn);
+                    box.appendChild(n);
+                }
+                var spanText = document.getElementById('__error_text__'); if (spanText) { spanText.textContent = message || 'Something went wrong ...'; }
+            } catch(_) { try { alert(message || 'Something went wrong ...'); } catch(__){} }
+        })();
+    }
+`)
 
 func MakeApp(defaultLanguage string) *App {
 	return &App{
@@ -1020,7 +1049,7 @@ func MakeApp(defaultLanguage string) *App {
 				}
 			</style>`,
 			`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
-			Script(__stringify, __post, __submit, __load),
+			Script(__stringify, __error, __post, __submit, __load),
 		},
 		HTMLBody: func(class string) string {
 			if class == "" {

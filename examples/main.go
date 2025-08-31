@@ -6,51 +6,72 @@ import (
 )
 
 // simple registry of routes for menu rendering
+// simple registry of routes for menu rendering
 type route struct {
-	Path  string
-	Title string
+    Path  string
+    Title string
 }
 
+// align the navigation with the TS examples
 var routes = []route{
-	{Path: "/", Title: "Hello"},
-	{Path: "/button", Title: "Button"},
-	{Path: "/counter", Title: "Counter"},
-	{Path: "/login", Title: "Login"},
-	{Path: "/showcase", Title: "Showcase"},
+    {Path: "/", Title: "Showcase"},
+    {Path: "/button", Title: "Button"},
+    {Path: "/text", Title: "Text"},
+    {Path: "/password", Title: "Password"},
+    {Path: "/number", Title: "Number"},
+    {Path: "/date", Title: "Date & Time"},
+    {Path: "/area", Title: "Textarea"},
+    {Path: "/select", Title: "Select"},
+    {Path: "/checkbox", Title: "Checkbox"},
+    {Path: "/radio", Title: "Radio"},
+    {Path: "/table", Title: "Table"},
+    {Path: "/others", Title: "Others"},
 }
 
 func main() {
 	app := ui.MakeApp("en")
 	app.Autoreload(true)
 
-	// layout builder with top menu
-	layout := func(title string, body func(*ui.Context) string) ui.Callable {
-		return func(ctx *ui.Context) string {
-			// simple navigation
-			nav := ui.Div("bg-white shadow mb-6")(
-				ui.Div("max-w-5xl mx-auto px-4 py-3 flex flex-wrap gap-2 items-center")(
-					ui.Div("flex flex-wrap gap-2")(
-						ui.Map(routes, func(r *route, _ int) string {
-							return ui.A("px-3 py-1 rounded hover:bg-gray-200",
-								ui.Href(r.Path),
-								ctx.Load(r.Path),
-							)(r.Title)
-						}),
-					),
-				),
-			)
+    // layout builder with top menu styled like TS examples
+    layout := func(title string, body func(*ui.Context) string) ui.Callable {
+        return func(ctx *ui.Context) string {
+            // nav matching t-sui/examples/main.ts
+            nav := ui.Div("bg-white shadow mb-6")(
+                ui.Div("max-w-5xl mx-auto px-4 py-2 flex items-center")(
+                    ui.Div("flex flex-nowrap gap-1")(
+                        ui.Map(routes, func(r *route, _ int) string {
+                            base := "px-2 py-1 rounded text-sm whitespace-nowrap"
+                            cls := base + " hover:bg-gray-200"
+                            if r.Path == "/" {
+                                cls = base + " bg-blue-700 text-white hover:bg-blue-600"
+                            }
+                            return ui.A(cls,
+                                ui.Href(r.Path),
+                                ctx.Load(r.Path),
+                            )(r.Title)
+                        }),
+                    ),
+                ),
+            )
 
-			content := body(ctx)
-			return app.HTML(title, "p-4 bg-gray-200 min-h-screen", nav+ui.Div("max-w-5xl mx-auto px-2")(content))
-		}
-	}
+            content := body(ctx)
+            return app.HTML(title, "bg-gray-100 min-h-screen", nav+ui.Div("max-w-5xl mx-auto px-2")(content))
+        }
+    }
 
-	// Individual example pages
-	app.Page("/", layout("Hello", pages.HelloContent))
-	app.Page("/button", layout("Button", pages.ButtonContent))
-	app.Page("/counter", layout("Counter", pages.CounterContent))
-	app.Page("/login", layout("Login", pages.LoginContent))
-	app.Page("/showcase", layout("Showcase", pages.ShowcaseContent))
+    // Individual example pages
+    app.Page("/", layout("Showcase", pages.ShowcaseContent))
+    app.Page("/button", layout("Button", pages.ButtonContent))
+    app.Page("/text", layout("Text", pages.TextContent))
+    app.Page("/password", layout("Password", pages.PasswordContent))
+    app.Page("/number", layout("Number", pages.NumberContent))
+    app.Page("/date", layout("Date & Time", pages.DateContent))
+    app.Page("/area", layout("Textarea", pages.AreaContent))
+    app.Page("/select", layout("Select", pages.SelectContent))
+    app.Page("/checkbox", layout("Checkbox", pages.CheckboxContent))
+    app.Page("/radio", layout("Radio", pages.RadioContent))
+    app.Page("/table", layout("Table", pages.TableContent))
+    app.Page("/others", layout("Others", pages.OthersContent))
 
 	app.Listen(":1422")
 }
