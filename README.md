@@ -79,12 +79,6 @@ Run the examples server:
 go run examples/main.go
 ```
 
-Or run in watch mode (auto‑restart on file changes):
-
-```bash
-./watch.sh
-```
-
 The examples include:
 - Showcase form with validations
 - Inputs: text/password/number/date/time/datetime/textarea/select/checkbox/radio
