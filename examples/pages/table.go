@@ -1,6 +1,6 @@
 package pages
 
-import "github.com/michalCapo/go-srui/ui"
+import "github.com/michalCapo/g-sui/ui"
 
 func TableContent(_ *ui.Context) string {
     table := ui.SimpleTable(4, "w-full table-auto")

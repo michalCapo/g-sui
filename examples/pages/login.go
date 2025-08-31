@@ -2,7 +2,7 @@ package pages
 
 import (
     "github.com/go-playground/validator/v10"
-    "github.com/michalCapo/go-srui/ui"
+    "github.com/michalCapo/g-sui/ui"
 )
 
 func LoginContent(ctx *ui.Context) string {
@@ -53,4 +53,3 @@ func (form *TLoginForm) Render(ctx *ui.Context, err *error) string {
         ui.Button().Submit().Color(ui.Blue).Class("rounded").Render("Login"),
     )
 }
-

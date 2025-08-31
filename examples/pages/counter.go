@@ -2,7 +2,7 @@ package pages
 
 import (
     "fmt"
-    "github.com/michalCapo/go-srui/ui"
+    "github.com/michalCapo/g-sui/ui"
 )
 
 // we want to create counter with initial count value
@@ -42,4 +42,3 @@ func (counter *TCounter) Render(ctx *ui.Context) string {
 func CounterContent(ctx *ui.Context) string {
     return ui.Div("flex flex-row gap-4")(Counter(3).Render(ctx))
 }
-

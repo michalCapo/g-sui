@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/michalCapo/go-srui/examples/pages"
-	"github.com/michalCapo/go-srui/ui"
+	"github.com/michalCapo/g-sui/examples/pages"
+	"github.com/michalCapo/g-sui/ui"
 )
 
 // simple registry of routes for menu rendering

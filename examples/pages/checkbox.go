@@ -1,6 +1,6 @@
 package pages
 
-import "github.com/michalCapo/go-srui/ui"
+import "github.com/michalCapo/g-sui/ui"
 
 func CheckboxContent(_ *ui.Context) string {
     row := func(title string, content string) string {
@@ -38,4 +38,3 @@ func CheckboxContent(_ *ui.Context) string {
         row("Sizes", sizes),
     )
 }
-

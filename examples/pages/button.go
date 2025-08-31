@@ -1,6 +1,6 @@
 package pages
 
-import "github.com/michalCapo/go-srui/ui"
+import "github.com/michalCapo/g-sui/ui"
 
 func ButtonContent(_ *ui.Context) string {
     row := func(title string, content string) string {
@@ -78,4 +78,3 @@ func ButtonContent(_ *ui.Context) string {
         row("Sizes", sizesGrid),
     )
 }
-

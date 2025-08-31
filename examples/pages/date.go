@@ -1,7 +1,7 @@
 package pages
 
 import (
-    "github.com/michalCapo/go-srui/ui"
+    "github.com/michalCapo/g-sui/ui"
     "time"
 )
 
@@ -51,4 +51,3 @@ func DateContent(_ *ui.Context) string {
         card("Behavior & attributes", behavior),
     )
 }
-

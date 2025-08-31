@@ -1,6 +1,6 @@
 package pages
 
-import "github.com/michalCapo/go-srui/ui"
+import "github.com/michalCapo/g-sui/ui"
 
 func AreaContent(_ *ui.Context) string {
     card := func(title string, body string) string {
@@ -48,4 +48,3 @@ func AreaContent(_ *ui.Context) string {
         card("Behavior & attributes", behavior),
     )
 }
-

@@ -1,6 +1,6 @@
 package pages
 
-import "github.com/michalCapo/go-srui/ui"
+import "github.com/michalCapo/g-sui/ui"
 
 func RadioContent(_ *ui.Context) string {
     card := func(title string, body string) string {
@@ -55,4 +55,3 @@ func RadioContent(_ *ui.Context) string {
         card("Disabled", disabled),
     )
 }
-

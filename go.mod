@@ -1,4 +1,4 @@
-module github.com/michalCapo/go-srui
+module github.com/michalCapo/g-sui
 
 go 1.23.0
 

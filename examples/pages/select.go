@@ -1,6 +1,6 @@
 package pages
 
-import "github.com/michalCapo/go-srui/ui"
+import "github.com/michalCapo/g-sui/ui"
 
 func SelectContent(ctx *ui.Context) string {
     row := func(title string, content string) string {

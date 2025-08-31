@@ -2,7 +2,7 @@ package pages
 
 import (
 	"github.com/go-playground/validator/v10"
-	"github.com/michalCapo/go-srui/ui"
+	"github.com/michalCapo/g-sui/ui"
 	"time"
 )
 

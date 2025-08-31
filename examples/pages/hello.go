@@ -1,7 +1,7 @@
 package pages
 
 import (
-	"github.com/michalCapo/go-srui/ui"
+	"github.com/michalCapo/g-sui/ui"
 	"time"
 )
 

@@ -1,6 +1,6 @@
 package pages
 
-import "github.com/michalCapo/go-srui/ui"
+import "github.com/michalCapo/g-sui/ui"
 
 func IconsDemo() string {
     return ui.Div("bg-white p-6 rounded-lg shadow w-full")(
