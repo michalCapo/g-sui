@@ -756,17 +756,36 @@ func (app *App) Assets(assets embed.FS, path string, maxAge time.Duration) {
 }
 
 func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
-	path = strings.TrimPrefix(path, "/")
-	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		file, err := assets.ReadFile(path)
-		if err != nil {
-			http.Error(w, "File not found", http.StatusNotFound)
-			return
-		}
+    path = strings.TrimPrefix(path, "/")
+    http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+        file, err := assets.ReadFile(path)
+        if err != nil {
+            http.Error(w, "File not found", http.StatusNotFound)
+            return
+        }
 
-		w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(int(maxAge.Seconds())))
-		w.Write(file)
-	})
+        // Set proper content type for common favicon formats.
+        // Some browsers (and Go's DetectContentType) don't reliably detect SVG,
+        // so prefer extension-based mapping for correctness.
+        switch strings.ToLower(filepath.Ext(path)) {
+        case ".svg":
+            w.Header().Set("Content-Type", "image/svg+xml")
+        case ".ico":
+            w.Header().Set("Content-Type", "image/x-icon")
+        case ".png":
+            w.Header().Set("Content-Type", "image/png")
+        case ".gif":
+            w.Header().Set("Content-Type", "image/gif")
+        case ".jpg", ".jpeg":
+            w.Header().Set("Content-Type", "image/jpeg")
+        default:
+            // Fallback to detection if unknown extension
+            w.Header().Set("Content-Type", http.DetectContentType(file))
+        }
+
+        w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(int(maxAge.Seconds())))
+        w.Write(file)
+    })
 }
 
 func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {

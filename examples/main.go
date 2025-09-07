@@ -1,9 +1,15 @@
 package main
 
 import (
+	"embed"
+	"time"
+
 	"github.com/michalCapo/g-sui/examples/pages"
 	"github.com/michalCapo/g-sui/ui"
 )
+
+//go:embed assets/*
+var assets embed.FS
 
 // simple registry of routes for menu rendering
 type route struct {
@@ -32,6 +38,8 @@ var routes = []route{
 
 func main() {
 	app := ui.MakeApp("en")
+	// Example favicon (served at /favicon.ico) and link tag
+	app.Favicon(assets, "assets/favicon.svg", 24*time.Hour)
 	app.AutoRestart(true) // enable if you want the examples to rebuild on changes
 
 	// layout builder with top menu styled like TS examples
