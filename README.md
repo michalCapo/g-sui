@@ -13,7 +13,7 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 - Server‑rendered HTML components with a small helper DSL
 - Lightweight interactivity via server actions (`Click`, `Submit`, `Send`)
 - Partial updates: re-render or replace only the target element
-- Deferred fragments with skeletons and WebSocket patching (`ctx.Defer(...)`)
+- Deferred fragments with skeletons via WebSocket patches (`ctx.Patch` + skeleton helpers)
 - Form helpers with validation (uses `go-playground/validator`)
 - A small set of UI inputs (text, password, number, date/time, select, checkbox, radio, textarea), buttons, tables, icons
 - Toast messages: `Success`, `Error`, `Info`, and an error toast with a Reload button
@@ -121,38 +121,67 @@ Refer to the `examples/` directory for practical usage and composition patterns.
 
 ## Deferred fragments (WS + Skeleton)
 
-Show a skeleton immediately, then replace it with the real content when the server finishes rendering. Use `ctx.Defer(fn)` to run a callable in the background and push a WebSocket patch upon completion.
+Show a skeleton immediately, then push server patches when background work finishes. The example below mirrors the TS version: it returns a skeleton, then replaces it after ~2s and appends controls after ~3s.
 
 ```go
-// inside a page handler
-target := ui.Target()
+package pages
 
-heavy := func(c *ui.Context) string {
-    time.Sleep(800 * time.Millisecond) // simulate work
-    return ui.Div("bg-white p-4 rounded shadow border", target)(
-        ui.Div("font-semibold")("Deferred content loaded"),
-        ui.Div("text-gray-500 text-sm")("Replaced via WS patch"),
-    )
-}
-
-// Show a component skeleton now; replace `target` via WS when ready
-placeholder := ctx.Defer(heavy).SkeletonComponent().Replace(target)
-
-return app.HTML(
-    "Deferred Demo",
-    "bg-gray-100 min-h-screen",
-    ui.Div("max-w-5xl mx-auto p-6")(
-        ui.Div("text-xl font-bold mb-2")("Deferred fragment"),
-        placeholder,
-    ),
+import (
+    "time"
+    "github.com/michalCapo/g-sui/ui"
 )
+
+// optional body payload to choose a skeleton kind
+type deferForm struct { As ui.Skeleton }
+
+// Deffered: return a skeleton now; push WS patches when ready
+func Deffered(ctx *ui.Context) string {
+    target := ui.Target()
+
+    // read preferred skeleton type from the request (optional)
+    form := deferForm{}
+    _ = ctx.Body(&form)
+
+    // replace the skeleton when the data is ready (~2s)
+    go func() {
+        time.Sleep(2 * time.Second)
+        html := ui.Div("space-y-4", target)(
+            ui.Div("bg-gray-50 dark:bg-gray-900 p-4 rounded shadow border rounded p-4")(
+                ui.Div("text-lg font-semibold")("Deferred content loaded"),
+                ui.Div("text-gray-600 text-sm")("This block replaced the skeleton via WebSocket patch."),
+            ),
+        )
+        ctx.Patch(target.Replace(), html)
+    }()
+
+    // append more controls after more work (~3s)
+    go func() {
+        time.Sleep(3 * time.Second)
+        controls := ui.Div("grid grid-cols-5 gap-4")(
+            ui.Button().Color(ui.Blue).Class("rounded text-sm").
+                Click(ctx.Call(Deffered, &deferForm{}).Replace(target)).Render("Default skeleton"),
+            ui.Button().Color(ui.Blue).Class("rounded text-sm").
+                Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonComponent}).Replace(target)).Render("Component skeleton"),
+            ui.Button().Color(ui.Blue).Class("rounded text-sm").
+                Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonList}).Replace(target)).Render("List skeleton"),
+            ui.Button().Color(ui.Blue).Class("rounded text-sm").
+                Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonPage}).Replace(target)).Render("Page skeleton"),
+            ui.Button().Color(ui.Blue).Class("rounded text-sm").
+                Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonForm}).Replace(target)).Render("Form skeleton"),
+        )
+        ctx.Patch(target.Append(), controls)
+    }()
+
+    // return chosen skeleton immediately
+    return target.Skeleton(form.As)
+}
 ```
 
 Notes:
 
-- `Skeleton(...)`, `SkeletonList(n)`, `SkeletonComponent()`, `SkeletonPage()`, and `SkeletonForm()` set the placeholder.
-- Use `.Render(target)` to swap `innerHTML`, or `.Replace(target)` to swap the whole element.
-- `.None()` runs the callable for side-effects and returns a minimal placeholder (`<!-- -->`).
+- `ctx.Patch(ts, html)` pushes server‑initiated patches to connected clients. Use `target.Render()`, `target.Replace()`, `target.Append()`, or `target.Prepend()` to describe the swap.
+- Skeleton helpers: `target.Skeleton(kind)`, `SkeletonList(n)`, `SkeletonComponent()`, `SkeletonPage()`, `SkeletonForm()`.
+- Actions: `ctx.Call(fn).Render/Replace/Append/Prepend/None()` for user‑initiated interactions.
 
 ## Development notes
 
