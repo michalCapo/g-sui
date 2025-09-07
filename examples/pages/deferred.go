@@ -11,11 +11,11 @@ type deferForm struct {
 	As ui.Skeleton
 }
 
+var target = ui.Target()
+
 // Deffered matches the TS example: returns a skeleton immediately, then
 // pushes two patches when data is ready (replace + append).
-func Deffered(ctx *ui.Context) string {
-    target := ui.Target()
-
+func DefferedComponent(ctx *ui.Context) string {
 	// read optional skeleton preference from body
 	form := deferForm{}
 	err := ctx.Body(&form)
@@ -48,45 +48,50 @@ func Deffered(ctx *ui.Context) string {
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(Deffered, &deferForm{}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &deferForm{}).Replace(target)).
 				Render("Default skeleton"),
 
 			ui.
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonComponent}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &deferForm{As: ui.SkeletonComponent}).Replace(target)).
 				Render("Component skeleton"),
 
 			ui.
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonList}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &deferForm{As: ui.SkeletonList}).Replace(target)).
 				Render("List skeleton"),
 
 			ui.
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonPage}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &deferForm{As: ui.SkeletonPage}).Replace(target)).
 				Render("Page skeleton"),
 
 			ui.
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonForm}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &deferForm{As: ui.SkeletonForm}).Replace(target)).
 				Render("Form skeleton"),
 		)
 
 		ctx.Patch(target.Append(), controls)
 	}()
 
-    // return header + the chosen skeleton immediately
-    return ui.Div("max-w-5xl mx-auto flex flex-col gap-4")(
-        ui.Div("text-2xl font-bold")("Deferred"),
-        ui.Div("text-gray-600")("Returns a skeleton immediately, then replaces the target and appends controls after a short delay."),
-        target.Skeleton(form.As),
-    )
+	// return the chosen skeleton immediately
+	return target.Skeleton(form.As)
+}
+
+func Deffered(ctx *ui.Context) string {
+
+	return ui.Div("max-w-5xl mx-auto flex flex-col gap-4")(
+		ui.Div("text-2xl font-bold")("Deferred"),
+		ui.Div("text-gray-600")("Returns a skeleton immediately, then replaces the target and appends controls after a short delay."),
+		DefferedComponent(ctx),
+	)
 }

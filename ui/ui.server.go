@@ -1210,36 +1210,6 @@ func rebuildAndExec(root string) error {
 	return syscall.Exec(tmp, args, env)
 }
 
-func (app *App) Autoreload(enable bool) {
-	if enable {
-		app.HTMLHead = append(app.HTMLHead, `
-        <script>
-            (function(){
-                if (window.__srui_live__) return;
-                window.__srui_live__ = true;
-                const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-                const socket = new WebSocket(protocol + window.location.host + '/live');
-                socket.addEventListener('close', function () {
-                    try { if (typeof __offline !== 'undefined') { __offline.show(); } } catch(_){ }
-                    setInterval(() => {
-                        fetch('/').then(() => window.location.reload()).catch(() => {});
-                    }, 2000);
-                });
-            })();
-        </script>
-    `)
-
-		http.Handle("/live", websocket.Handler(func(ws *websocket.Conn) {
-			defer ws.Close()
-
-			for {
-				time.Sleep(10 * time.Second)
-				ws.Write([]byte("ok"))
-			}
-		}))
-	}
-}
-
 func (app *App) Description(description string) {
 	app.HTMLHead = append(app.HTMLHead, `<meta name="description" content="`+description+`">`)
 }
@@ -1260,7 +1230,7 @@ func (app *App) HTML(title string, class string, body ...string) string {
 }
 
 // devErrorPage returns a minimal standalone HTML page displayed on handler panics in dev.
-// It tries to reconnect to the dev WS at /live and reloads the page when the socket opens.
+// It tries to reconnect to the app WS at /__ws and reloads the page when the socket opens.
 func devErrorPage() string {
 	return Trim(`<!DOCTYPE html>
 <html lang="en">
@@ -1286,7 +1256,7 @@ func devErrorPage() string {
         try {
           function connect(){
             var p=(location.protocol==='https:')?'wss://':'ws://';
-            var ws=new WebSocket(p+location.host+'/live');
+            var ws=new WebSocket(p+location.host+'/__ws');
             ws.onopen=function(){ try{ location.reload(); } catch(_){} };
             ws.onclose=function(){ setTimeout(connect, 1000); };
             ws.onerror=function(){ try{ ws.close(); } catch(_){} };

@@ -32,7 +32,6 @@ var routes = []route{
 
 func main() {
 	app := ui.MakeApp("en")
-	app.Autoreload(true)
 	app.AutoRestart(true) // enable if you want the examples to rebuild on changes
 
 	// layout builder with top menu styled like TS examples
