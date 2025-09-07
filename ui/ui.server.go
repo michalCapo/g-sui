@@ -62,11 +62,11 @@ func (c *CSS) Value() string {
 type Swap string
 
 const (
-    OUTLINE Swap = "outline"
-    INLINE  Swap = "inline"
-    APPEND  Swap = "append"
-    PREPEND Swap = "prepend"
-    NONE    Swap = "none"
+	OUTLINE Swap = "outline"
+	INLINE  Swap = "inline"
+	APPEND  Swap = "append"
+	PREPEND Swap = "prepend"
+	NONE    Swap = "none"
 )
 
 type ActionType string
@@ -356,21 +356,21 @@ func (ctx *Context) Post(as ActionType, swap Swap, action *Action) string {
 }
 
 type Actions struct {
-    Render  func(target Attr) string
-    Replace func(target Attr) string
-    Append  func(target Attr) string
-    Prepend func(target Attr) string
-    None    func() string
-    // AsSubmit func(target Attr, swap ...Swap) Attr
-    // AsClick  func(target Attr, swap ...Swap) Attr
+	Render  func(target Attr) string
+	Replace func(target Attr) string
+	Append  func(target Attr) string
+	Prepend func(target Attr) string
+	None    func() string
+	// AsSubmit func(target Attr, swap ...Swap) Attr
+	// AsClick  func(target Attr, swap ...Swap) Attr
 }
 
 type Submits struct {
-    Render  func(target Attr) Attr
-    Replace func(target Attr) Attr
-    Append  func(target Attr) Attr
-    Prepend func(target Attr) Attr
-    None    func() Attr
+	Render  func(target Attr) Attr
+	Replace func(target Attr) Attr
+	Append  func(target Attr) Attr
+	Prepend func(target Attr) Attr
+	None    func() Attr
 }
 
 // func swapize(swap ...Swap) Swap {
@@ -381,70 +381,70 @@ type Submits struct {
 // }
 
 func (ctx *Context) Submit(method Callable, values ...any) Submits {
-    callable := ctx.Callable(method)
+	callable := ctx.Callable(method)
 
-    return Submits{
-        Render: func(target Attr) Attr {
-            return Attr{OnSubmit: ctx.Post(FORM, INLINE, &Action{Method: *callable, Target: target, Values: values})}
-        },
-        Replace: func(target Attr) Attr {
-            return Attr{OnSubmit: ctx.Post(FORM, OUTLINE, &Action{Method: *callable, Target: target, Values: values})}
-        },
-        Append: func(target Attr) Attr {
-            return Attr{OnSubmit: ctx.Post(FORM, APPEND, &Action{Method: *callable, Target: target, Values: values})}
-        },
-        Prepend: func(target Attr) Attr {
-            return Attr{OnSubmit: ctx.Post(FORM, PREPEND, &Action{Method: *callable, Target: target, Values: values})}
-        },
-        None: func() Attr {
-            return Attr{OnSubmit: ctx.Post(FORM, NONE, &Action{Method: *callable, Values: values})}
-        },
-    }
+	return Submits{
+		Render: func(target Attr) Attr {
+			return Attr{OnSubmit: ctx.Post(FORM, INLINE, &Action{Method: *callable, Target: target, Values: values})}
+		},
+		Replace: func(target Attr) Attr {
+			return Attr{OnSubmit: ctx.Post(FORM, OUTLINE, &Action{Method: *callable, Target: target, Values: values})}
+		},
+		Append: func(target Attr) Attr {
+			return Attr{OnSubmit: ctx.Post(FORM, APPEND, &Action{Method: *callable, Target: target, Values: values})}
+		},
+		Prepend: func(target Attr) Attr {
+			return Attr{OnSubmit: ctx.Post(FORM, PREPEND, &Action{Method: *callable, Target: target, Values: values})}
+		},
+		None: func() Attr {
+			return Attr{OnSubmit: ctx.Post(FORM, NONE, &Action{Method: *callable, Values: values})}
+		},
+	}
 }
 
 func (ctx *Context) Click(method Callable, values ...any) Submits {
-    callable := ctx.Callable(method)
+	callable := ctx.Callable(method)
 
-    return Submits{
-        Render: func(target Attr) Attr {
-            return Attr{OnClick: ctx.Post(POST, INLINE, &Action{Method: *callable, Target: target, Values: values})}
-        },
-        Replace: func(target Attr) Attr {
-            return Attr{OnClick: ctx.Post(POST, OUTLINE, &Action{Method: *callable, Target: target, Values: values})}
-        },
-        Append: func(target Attr) Attr {
-            return Attr{OnClick: ctx.Post(POST, APPEND, &Action{Method: *callable, Target: target, Values: values})}
-        },
-        Prepend: func(target Attr) Attr {
-            return Attr{OnClick: ctx.Post(POST, PREPEND, &Action{Method: *callable, Target: target, Values: values})}
-        },
-        None: func() Attr {
-            return Attr{OnClick: ctx.Post(POST, NONE, &Action{Method: *callable, Values: values})}
-        },
-    }
+	return Submits{
+		Render: func(target Attr) Attr {
+			return Attr{OnClick: ctx.Post(POST, INLINE, &Action{Method: *callable, Target: target, Values: values})}
+		},
+		Replace: func(target Attr) Attr {
+			return Attr{OnClick: ctx.Post(POST, OUTLINE, &Action{Method: *callable, Target: target, Values: values})}
+		},
+		Append: func(target Attr) Attr {
+			return Attr{OnClick: ctx.Post(POST, APPEND, &Action{Method: *callable, Target: target, Values: values})}
+		},
+		Prepend: func(target Attr) Attr {
+			return Attr{OnClick: ctx.Post(POST, PREPEND, &Action{Method: *callable, Target: target, Values: values})}
+		},
+		None: func() Attr {
+			return Attr{OnClick: ctx.Post(POST, NONE, &Action{Method: *callable, Values: values})}
+		},
+	}
 }
 
 func (ctx *Context) Send(method Callable, values ...any) Actions {
-    callable := ctx.Callable(method)
+	callable := ctx.Callable(method)
 
-    return Actions{
-        Render: func(target Attr) string {
-            return ctx.Post(FORM, INLINE, &Action{Method: *callable, Target: target, Values: values})
-        },
-        Replace: func(target Attr) string {
-            return ctx.Post(FORM, OUTLINE, &Action{Method: *callable, Target: target, Values: values})
-        },
-        Append: func(target Attr) string {
-            return ctx.Post(FORM, APPEND, &Action{Method: *callable, Target: target, Values: values})
-        },
-        Prepend: func(target Attr) string {
-            return ctx.Post(FORM, PREPEND, &Action{Method: *callable, Target: target, Values: values})
-        },
-        None: func() string {
-            return ctx.Post(FORM, NONE, &Action{Method: *callable, Values: values})
-        },
-        // AsSubmit: func(target Attr, swap ...Swap) Attr {
-        // 	return Attr{OnSubmit: ctx.Post(FORM, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
+	return Actions{
+		Render: func(target Attr) string {
+			return ctx.Post(FORM, INLINE, &Action{Method: *callable, Target: target, Values: values})
+		},
+		Replace: func(target Attr) string {
+			return ctx.Post(FORM, OUTLINE, &Action{Method: *callable, Target: target, Values: values})
+		},
+		Append: func(target Attr) string {
+			return ctx.Post(FORM, APPEND, &Action{Method: *callable, Target: target, Values: values})
+		},
+		Prepend: func(target Attr) string {
+			return ctx.Post(FORM, PREPEND, &Action{Method: *callable, Target: target, Values: values})
+		},
+		None: func() string {
+			return ctx.Post(FORM, NONE, &Action{Method: *callable, Values: values})
+		},
+		// AsSubmit: func(target Attr, swap ...Swap) Attr {
+		// 	return Attr{OnSubmit: ctx.Post(FORM, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
 		// },
 		// AsClick: func(target Attr, swap ...Swap) Attr {
 		// 	return Attr{OnClick: ctx.Post(FORM, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
@@ -453,26 +453,26 @@ func (ctx *Context) Send(method Callable, values ...any) Actions {
 }
 
 func (ctx *Context) Call(method Callable, values ...any) Actions {
-    callable := ctx.Callable(method)
+	callable := ctx.Callable(method)
 
-    return Actions{
-        Render: func(target Attr) string {
-            return ctx.Post(POST, INLINE, &Action{Method: *callable, Target: target, Values: values})
-        },
-        Replace: func(target Attr) string {
-            return ctx.Post(POST, OUTLINE, &Action{Method: *callable, Target: target, Values: values})
-        },
-        Append: func(target Attr) string {
-            return ctx.Post(POST, APPEND, &Action{Method: *callable, Target: target, Values: values})
-        },
-        Prepend: func(target Attr) string {
-            return ctx.Post(POST, PREPEND, &Action{Method: *callable, Target: target, Values: values})
-        },
-        None: func() string {
-            return ctx.Post(POST, NONE, &Action{Method: *callable, Values: values})
-        },
-        // AsSubmit: func(target Attr, swap ...Swap) Attr {
-        // 	return Attr{OnSubmit: ctx.Post(POST, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
+	return Actions{
+		Render: func(target Attr) string {
+			return ctx.Post(POST, INLINE, &Action{Method: *callable, Target: target, Values: values})
+		},
+		Replace: func(target Attr) string {
+			return ctx.Post(POST, OUTLINE, &Action{Method: *callable, Target: target, Values: values})
+		},
+		Append: func(target Attr) string {
+			return ctx.Post(POST, APPEND, &Action{Method: *callable, Target: target, Values: values})
+		},
+		Prepend: func(target Attr) string {
+			return ctx.Post(POST, PREPEND, &Action{Method: *callable, Target: target, Values: values})
+		},
+		None: func() string {
+			return ctx.Post(POST, NONE, &Action{Method: *callable, Values: values})
+		},
+		// AsSubmit: func(target Attr, swap ...Swap) Attr {
+		// 	return Attr{OnSubmit: ctx.Post(POST, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
 		// },
 		// AsClick: func(target Attr, swap ...Swap) Attr {
 		// 	return Attr{OnClick: ctx.Post(POST, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
@@ -621,10 +621,18 @@ func cacheControlMiddleware(next http.Handler, maxAge time.Duration) http.Handle
 }
 
 type App struct {
-    Lanugage string
-    HTMLBody func(string) string
-    HTMLHead []string
-    DebugEnabled bool
+	Lanugage     string
+	HTMLBody     func(string) string
+	HTMLHead     []string
+	DebugEnabled bool
+	sessions     map[string]time.Time
+	sessMu       sync.Mutex
+    wsMu         sync.Mutex
+    wsClients    map[*websocket.Conn]*wsState
+}
+
+type wsState struct {
+    lastPong time.Time
 }
 
 func (app *App) Register(httpMethod string, path string, method *Callable) string {
@@ -677,17 +685,17 @@ func (app *App) Page(path string, component Callable) **Callable {
 // Debug enables or disables server debug logging.
 // When enabled, debug logs are printed with the "gsui:" prefix.
 func (app *App) Debug(enable bool) {
-    app.DebugEnabled = enable
+	app.DebugEnabled = enable
 }
 
 func (app *App) debugf(format string, args ...any) {
-    if !app.DebugEnabled {
-        return
-    }
-    if !strings.HasSuffix(format, "\n") {
-        format += "\n"
-    }
-    log.Printf("gsui: "+format, args...)
+	if !app.DebugEnabled {
+		return
+	}
+	if !strings.HasSuffix(format, "\n") {
+		format += "\n"
+	}
+	log.Printf("gsui: "+format, args...)
 }
 
 func (app *App) Action(uid string, action Callable) **Callable {
@@ -753,19 +761,37 @@ func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
 func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {
 	var sessionID string
 
-	cookie, err := r.Cookie("session_id")
-	if err != nil {
-		sessionID = RandomString(30)
-		http.SetCookie(w, &http.Cookie{
-			Name:     "session_id",
-			Value:    sessionID,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-		})
+	// Prefer tsui__sid (t-sui compatible); fallback to legacy session_id if present
+	if c, err := r.Cookie("tsui__sid"); err == nil {
+		sessionID = c.Value
+	} else if c2, err2 := r.Cookie("session_id"); err2 == nil {
+		sessionID = c2.Value
 	} else {
-		sessionID = cookie.Value
+		sessionID = RandomString(30)
+	}
+
+	// Ensure cookie is set with Lax and conditional Secure
+	if sessionID == "" {
+		sessionID = RandomString(30)
+	}
+	// Always (re)issue cookie so attributes are updated
+	http.SetCookie(w, &http.Cookie{
+		Name:     "tsui__sid",
+		Value:    sessionID,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   isSecure(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	// Track last-seen for simple session pruning in dev
+	if app != nil {
+		app.sessMu.Lock()
+		if app.sessions == nil {
+			app.sessions = make(map[string]time.Time)
+		}
+		app.sessions[sessionID] = time.Now()
+		app.sessMu.Unlock()
 	}
 
 	return &Context{
@@ -778,49 +804,53 @@ func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {
 }
 
 func (app *App) Listen(port string) {
-    log.Println("Listening on http://0.0.0.0" + port)
+	log.Println("Listening on http://0.0.0.0" + port)
 
-    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        if !strings.Contains("GET POST", r.Method) {
-            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-            return
-        }
+	// Start session sweeper in background
+	app.StartSweeper()
 
-        value := r.URL.Path
+	// Init WebSocket endpoint for patches
+	app.initWS()
 
-        if strings.Contains(strings.Join(r.Header["Upgrade"], " "), "websocket") {
-            app.debugf("upgrade request (ignored): %s %s", r.Method, value)
-            return
-        }
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains("GET POST", r.Method) {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 
-        for found, path := range stored {
-            if value == path {
-                ctx := makeContext(app, r, w)
-                w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		value := r.URL.Path
 
-                // Recover from panics inside handler calls to avoid broken fetches
-                defer func() {
-                    if rec := recover(); rec != nil {
-                        log.Println("handler panic recovered:", rec)
-                        // Enqueue an error toast to the client
-                        displayError(ctx, "Something went wrong ...")
-                        // Send minimal body with any queued scripts
-                        if len(ctx.append) > 0 {
-                            w.Write([]byte(strings.Join(ctx.append, "")))
-                        }
-                    }
-                }()
+		if strings.Contains(strings.Join(r.Header["Upgrade"], " "), "websocket") {
+			// Let explicit WS handlers handle upgrades
+			http.NotFound(w, r)
+			return
+		}
 
-                // Normal call
-                app.debugf("route %s -> %s", r.Method, path)
-                w.Write([]byte((*found)(ctx)))
-                if len(ctx.append) > 0 {
-                    w.Write([]byte(strings.Join(ctx.append, "")))
-                }
+		for found, path := range stored {
+			if value == path {
+				ctx := makeContext(app, r, w)
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-                return
-            }
-        }
+				// Recover from panics inside handler calls to avoid broken fetches
+				defer func() {
+					if rec := recover(); rec != nil {
+						log.Println("handler panic recovered:", rec)
+						// Serve a minimal error page that auto-reloads once the dev WS reconnects
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte(devErrorPage()))
+					}
+				}()
+
+				// Normal call
+				app.debugf("route %s -> %s", r.Method, path)
+				w.Write([]byte((*found)(ctx)))
+				if len(ctx.append) > 0 {
+					w.Write([]byte(strings.Join(ctx.append, "")))
+				}
+
+				return
+			}
+		}
 
 		http.Error(w, "Not found", http.StatusNotFound)
 	})
@@ -828,6 +858,99 @@ func (app *App) Listen(port string) {
 	if err := http.ListenAndServe(port, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Println("Error:", err)
 	}
+}
+
+// initWS registers the WebSocket endpoint for server-initiated patches.
+func (app *App) initWS() {
+    app.wsMu.Lock()
+    if app.wsClients == nil {
+        app.wsClients = make(map[*websocket.Conn]*wsState)
+    }
+    app.wsMu.Unlock()
+
+    http.Handle("/__ws", websocket.Handler(func(ws *websocket.Conn) {
+        // Register
+        st := &wsState{lastPong: time.Now()}
+        app.wsMu.Lock()
+        app.wsClients[ws] = st
+        app.wsMu.Unlock()
+        defer func() {
+            app.wsMu.Lock()
+            delete(app.wsClients, ws)
+            app.wsMu.Unlock()
+            _ = ws.Close()
+        }()
+
+        // Heartbeat goroutine: app-level ping and stale close
+        done := make(chan struct{})
+        go func() {
+            ticker := time.NewTicker(25 * time.Second)
+            defer ticker.Stop()
+            for {
+                select {
+                case <-ticker.C:
+                    _ = websocket.Message.Send(ws, `{"type":"ping"}`)
+                    app.wsMu.Lock()
+                    last := st.lastPong
+                    app.wsMu.Unlock()
+                    if time.Since(last) > 75*time.Second {
+                        _ = ws.Close()
+                        return
+                    }
+                case <-done:
+                    return
+                }
+            }
+        }()
+
+        // Receive loop: handle ping/pong from client
+        for {
+            var s string
+            if err := websocket.Message.Receive(ws, &s); err != nil {
+                close(done)
+                return
+            }
+            var obj map[string]any
+            if err := json.Unmarshal([]byte(s), &obj); err == nil {
+                if t, _ := obj["type"].(string); t != "" {
+                    if t == "ping" {
+                        _ = websocket.Message.Send(ws, `{"type":"pong"}`)
+                    } else if t == "pong" {
+                        app.wsMu.Lock()
+                        st.lastPong = time.Now()
+                        app.wsMu.Unlock()
+                    }
+                }
+            }
+        }
+    }))
+}
+
+// sendPatch broadcasts a patch message to all connected WS clients.
+func (app *App) sendPatch(id string, swap Swap, html string) {
+	msg := map[string]string{
+		"type": "patch",
+		"id":   id,
+		"swap": string(swap),
+		"html": Trim(html),
+	}
+	data, _ := json.Marshal(msg)
+	app.wsMu.Lock()
+	for ws := range app.wsClients {
+		go func(c *websocket.Conn) {
+			defer func() { recover() }()
+			_ = websocket.Message.Send(c, string(data))
+		}(ws)
+	}
+	app.wsMu.Unlock()
+}
+
+// Patch pushes a patch to WS clients (basic broadcast; no per-session routing).
+func (ctx *Context) Patch(target Attr, swap Swap, html string) {
+	if ctx == nil || ctx.App == nil {
+		return
+	}
+	ctx.App.sendPatch(target.ID, swap, html)
 }
 
 func (app *App) AutoRestart(enable bool) {
@@ -1020,8 +1143,8 @@ func rebuildAndExec(root string) error {
 }
 
 func (app *App) Autoreload(enable bool) {
-    if enable {
-        app.HTMLHead = append(app.HTMLHead, `
+	if enable {
+		app.HTMLHead = append(app.HTMLHead, `
         <script>
             (function(){
                 if (window.__srui_live__) return;
@@ -1066,6 +1189,46 @@ func (app *App) HTML(title string, class string, body ...string) string {
 	html = strings.ReplaceAll(html, "__body__", strings.Join(body, " "))
 
 	return Trim(html)
+}
+
+// devErrorPage returns a minimal standalone HTML page displayed on handler panics in dev.
+// It tries to reconnect to the dev WS at /live and reloads the page when the socket opens.
+func devErrorPage() string {
+	return Trim(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Something went wrong…</title>
+  <style>
+    html,body{height:100%}
+    body{margin:0;display:flex;align-items:center;justify-content:center;background:#f3f4f6;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827}
+    .card{background:#fff;box-shadow:0 10px 25px rgba(0,0,0,.08);border-radius:14px;padding:28px 32px;border:1px solid rgba(0,0,0,.06);text-align:center}
+    .title{font-size:20px;font-weight:600;margin-bottom:6px}
+    .sub{font-size:14px;color:#6b7280}
+  </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="title">Something went wrong…</div>
+      <div class="sub">Waiting for server changes. Page will refresh when ready.</div>
+    </div>
+    <script>
+      (function(){
+        try {
+          function connect(){
+            var p=(location.protocol==='https:')?'wss://':'ws://';
+            var ws=new WebSocket(p+location.host+'/live');
+            ws.onopen=function(){ try{ location.reload(); } catch(_){} };
+            ws.onclose=function(){ setTimeout(connect, 1000); };
+            ws.onerror=function(){ try{ ws.close(); } catch(_){} };
+          }
+          connect();
+        } catch(_){ /* noop */ }
+      })();
+    </script>
+  </body>
+</html>`)
 }
 
 var __post = Trim(` 
@@ -1282,6 +1445,65 @@ var __theme = Trim(`
                     });
                 }
             } catch(_){ }
+        } catch(_){ }    })();
+`)
+
+// __ws: minimal WebSocket client for receiving server-initiated patches
+var __ws = Trim(`
+    (function(){
+        try {
+            if (window.__gsuiWSInit) { return; }
+            window.__gsuiWSInit = true;
+            var appPing = 0;
+            function handlePatch(msg){
+                try {
+                    var html = String(msg.html||'');
+                    // execute inline scripts inside the html by extracting and re-inserting
+                    try {
+                        var tpl = document.createElement('template'); tpl.innerHTML = html;
+                        var scripts = tpl.content.querySelectorAll('script');
+                        for (var i=0;i<scripts.length;i++){
+                            var s=document.createElement('script'); s.textContent=scripts[i].textContent; document.body.appendChild(s);
+                        }
+                    } catch(_){ }
+                    var el = document.getElementById(String(msg.id||'')); if (!el) { return; }
+                    if (msg.swap==='inline') { el.innerHTML = html; }
+                    else if (msg.swap==='outline') { el.outerHTML = html; }
+                    else if (msg.swap==='append') { el.insertAdjacentHTML('beforeend', html); }
+                    else if (msg.swap==='prepend') { el.insertAdjacentHTML('afterbegin', html); }
+                } catch(_){ }
+            }
+            function connect(){
+                var p=(location.protocol==='https:')?'wss://':'ws://';
+                var ws = new WebSocket(p+location.host+'/__ws');
+                ws.onopen = function(){
+                    try { if (typeof __offline !== 'undefined') { __offline.hide(); } } catch(_){ }
+                    try { if (appPing) { clearInterval(appPing); appPing = 0; } } catch(_){ }
+                    try {
+                        ws.send(JSON.stringify({ type: 'ping', t: Date.now() }));
+                        appPing = setInterval(function(){
+                            try { ws.send(JSON.stringify({ type: 'ping', t: Date.now() })); } catch(_){ }
+                        }, 30000);
+                    } catch(_){ }
+                };
+                ws.onmessage = function(ev){
+                    try {
+                        var msg = JSON.parse(String(ev.data||'{}'));
+                        if (!msg || !msg.type) { return; }
+                        if (msg.type==='patch') { handlePatch(msg); }
+                        else if (msg.type==='ping') {
+                            try { ws.send(JSON.stringify({ type: 'pong', t: Date.now() })); } catch(_){ }
+                        } else if (msg.type==='pong') { /* ignore */ }
+                    } catch(_){ }
+                };
+                ws.onclose = function(){
+                    try { if (appPing) { clearInterval(appPing); appPing = 0; } } catch(_){ }
+                    try { if (typeof __offline !== 'undefined') { __offline.show(); } } catch(_){ }
+                    setTimeout(connect, 1500);
+                };
+                ws.onerror = function(){ try { ws.close(); } catch(_){ } };
+            }
+            connect();
         } catch(_){ }
     })();
 `)
@@ -1400,12 +1622,12 @@ var __error = Trim(`
 `)
 
 func MakeApp(defaultLanguage string) *App {
-    return &App{
-        Lanugage: defaultLanguage,
-        HTMLHead: []string{
-            `<meta charset="UTF-8">`,
-            `<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
-            `<style>
+	return &App{
+		Lanugage: defaultLanguage,
+		HTMLHead: []string{
+			`<meta charset="UTF-8">`,
+			`<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
+			`<style>
                 html {
                     scroll-behavior: smooth;
                 }
@@ -1431,9 +1653,9 @@ func MakeApp(defaultLanguage string) *App {
                     }
                 }
             </style>`,
-            `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
-            // Dark mode CSS overrides (after Tailwind so they take precedence)
-            `<style id="gsui-dark-overrides">
+			`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
+			// Dark mode CSS overrides (after Tailwind so they take precedence)
+			`<style id="gsui-dark-overrides">
                 html.dark{ color-scheme: dark; }
                 /* Global text color fallback */
                 .dark body { color:#e5e7eb; }
@@ -1451,12 +1673,12 @@ func MakeApp(defaultLanguage string) *App {
                 /* Hover helpers used in nav/examples */
                 .dark .hover\:bg-gray-200:hover { background-color:#374151 !important; }
             </style>`,
-            Script(__stringify, __loader, __offline, __error, __post, __submit, __load, __theme),
-        },
-        HTMLBody: func(class string) string {
-            if class == "" {
-                class = "bg-gray-200"
-            }
+			Script(__stringify, __loader, __offline, __error, __post, __submit, __load, __theme, __ws),
+		},
+		HTMLBody: func(class string) string {
+			if class == "" {
+				class = "bg-gray-200"
+			}
 
 			return fmt.Sprintf(`
 				<!DOCTYPE html>
@@ -1465,7 +1687,51 @@ func MakeApp(defaultLanguage string) *App {
 					<body id="%s" class="relative">__body__</body>
 				</html>
 			`, class, ContentID.ID)
-        },
-        DebugEnabled: false,
-    }
+		},
+		DebugEnabled: false,
+		sessions:     make(map[string]time.Time),
+	}
+}
+
+// isSecure returns true if the request is over TLS or forwarded as https
+func isSecure(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	xf := r.Header.Get("X-Forwarded-Proto")
+	if xf == "" {
+		return false
+	}
+	// Use first value if comma-separated
+	parts := strings.Split(xf, ",")
+	if len(parts) > 0 && strings.TrimSpace(strings.ToLower(parts[0])) == "https" {
+		return true
+	}
+	return false
+}
+
+// sweepSessions prunes sessions not seen for more than 60 seconds
+func (app *App) sweepSessions() {
+	cutoff := time.Now().Add(-60 * time.Second)
+	app.sessMu.Lock()
+	for k, t := range app.sessions {
+		if t.Before(cutoff) {
+			delete(app.sessions, k)
+		}
+	}
+	app.sessMu.Unlock()
+}
+
+// StartSweeper launches a background goroutine to prune inactive sessions
+func (app *App) StartSweeper() {
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			app.sweepSessions()
+		}
+	}()
 }

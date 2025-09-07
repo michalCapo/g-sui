@@ -513,10 +513,21 @@ var (
 	re  = regexp.MustCompile(`\s{4,}`)
 	re2 = regexp.MustCompile(`[\t\n]+`)
 	re3 = regexp.MustCompile(`"`)
+    // Remove comments before flattening to a single line
+    reCommentBlock = regexp.MustCompile(`(?s)/\*.*?\*/`)
+    reHtmlComment  = regexp.MustCompile(`(?s)<!--.*?-->`)
+    reLineComment  = regexp.MustCompile(`(?m)^[ \t]*//.*$`)
 )
 
 func Trim(s string) string {
-	return re.ReplaceAllString(re2.ReplaceAllString(s, ""), " ")
+	// Strip JS/TS block comments and HTML comments first
+	s = reCommentBlock.ReplaceAllString(s, "")
+	s = reHtmlComment.ReplaceAllString(s, "")
+	// Strip full-line // comments (avoid breaking inline URLs like http://)
+	s = reLineComment.ReplaceAllString(s, "")
+	// Collapse newlines/tabs, then long spaces
+	s = re2.ReplaceAllString(s, "")
+	return re.ReplaceAllString(s, " ")
 }
 
 func Normalize(s string) string {
