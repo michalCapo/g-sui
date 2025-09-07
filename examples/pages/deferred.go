@@ -33,7 +33,7 @@ func Deffered(ctx *ui.Context) string {
 		ctx.Patch(target.Replace(), html)
 	}()
 
-	// LazyMoreData: append controls after ~3s
+	// LazyMoreData: append controls after ~2s
 	go func() {
 		defer func() { recover() }()
 		time.Sleep(2100 * time.Millisecond)

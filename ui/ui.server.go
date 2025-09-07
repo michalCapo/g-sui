@@ -167,6 +167,8 @@ func (ctx *Context) Body(output any) error {
 
 		if structFieldValue.Type() != val.Type() {
 			switch item.Type {
+			case "Skeleton":
+				val = reflect.ValueOf(Skeleton(item.Value))
 			case "date":
 				t, err := time.Parse("2006-01-02", item.Value)
 				if err != nil {

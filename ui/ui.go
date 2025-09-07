@@ -366,81 +366,126 @@ const (
     SkeletonForm      Skeleton = "form"
 )
 
-// Skeleton renders a default component-style skeleton for the given target.
+// Skeleton renders a skeleton for the given target.
+// If kind is not provided or unknown, renders the Default variant
+// (three text lines), matching the TS implementation.
 func (a Attr) Skeleton(kind ...Skeleton) string {
-    k := SkeletonComponent
-    if len(kind) > 0 {
-        k = kind[0]
+    if len(kind) == 0 || string(kind[0]) == "" {
+        return a.SkeletonDefault()
     }
-    switch k {
+    switch kind[0] {
     case SkeletonList:
         return a.SkeletonList(5)
+    case SkeletonComponent:
+        return a.SkeletonComponent()
     case SkeletonPage:
         return a.SkeletonPage()
     case SkeletonForm:
         return a.SkeletonForm()
     default:
-        return a.SkeletonComponent()
+        return a.SkeletonDefault()
     }
 }
 
-// SkeletonList renders a vertical list of generic list items.
-func (a Attr) SkeletonList(count int) string {
-    if count <= 0 {
-        count = 5
-    }
-    items := make([]string, 0, count)
-    for i := 0; i < count; i++ {
-        items = append(items, Div("flex items-center gap-3")(
-            Div("h-10 w-10 bg-gray-200 rounded-full animate-pulse")(),
-            Div("flex-1 space-y-2")(
-                Div("h-3 bg-gray-200 rounded animate-pulse")(),
-                Div("h-3 bg-gray-200 rounded w-3/5 animate-pulse")(),
-            ),
-        ))
-    }
-    return Div("p-4 space-y-3", a)(strings.Join(items, " "))
-}
-
-// SkeletonComponent renders a card-like skeleton block.
-func (a Attr) SkeletonComponent() string {
-    return Div("p-4", a)(
-        Div("bg-white dark:bg-gray-900 rounded shadow border p-4 space-y-3")(
-            Div("h-4 bg-gray-200 rounded w-1/3 animate-pulse")(),
-            Div("h-3 bg-gray-200 rounded w-4/5 animate-pulse")(),
-            Div("h-3 bg-gray-200 rounded w-2/3 animate-pulse")(),
+// SkeletonDefault renders three generic text lines.
+func (a Attr) SkeletonDefault() string {
+    return Div("animate-pulse", a)(
+        Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(
+            Div("bg-gray-200 h-5 rounded w-5/6 mb-2")(),
+            Div("bg-gray-200 h-5 rounded w-2/3 mb-2")(),
+            Div("bg-gray-200 h-5 rounded w-4/6")(),
         ),
     )
 }
 
-// SkeletonPage renders a larger page-level skeleton with header and blocks.
-func (a Attr) SkeletonPage() string {
-    blocks := []string{
-        Div("h-6 bg-gray-200 rounded w-1/4 animate-pulse")(),
-        Div("h-4 bg-gray-200 rounded w-full animate-pulse")(),
-        Div("h-4 bg-gray-200 rounded w-5/6 animate-pulse")(),
-        Div("h-4 bg-gray-200 rounded w-2/3 animate-pulse")(),
+// SkeletonList renders a vertical list of generic list items (avatar + text).
+func (a Attr) SkeletonList(count int) string {
+    if count <= 0 { count = 5 }
+    items := make([]string, 0, count)
+    for i := 0; i < count; i++ {
+        row := Div("flex items-center gap-3 mb-3")(
+            Div("bg-gray-200 rounded-full h-10 w-10")(),
+            Div("flex-1")(
+                Div("bg-gray-200 h-4 rounded w-5/6 mb-2")(),
+                Div("bg-gray-200 h-4 rounded w-3/6")(),
+            ),
+        )
+        items = append(items, row)
     }
-    return Div("p-4 space-y-4", a)(strings.Join(blocks, " "))
+    return Div("animate-pulse", a)(
+        Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(strings.Join(items, "")),
+    )
 }
 
-// SkeletonForm renders a form-shaped skeleton: labels and inputs as blocks.
-func (a Attr) SkeletonForm() string {
-    row := func() string {
-        return Div("space-y-2")(
-            Div("h-3 bg-gray-200 rounded w-24 animate-pulse")(),
-            Div("h-10 bg-gray-200 rounded animate-pulse")(),
+// SkeletonComponent renders a component-sized content block.
+func (a Attr) SkeletonComponent() string {
+    return Div("animate-pulse", a)(
+        Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(
+            Div("bg-gray-200 h-6 rounded w-2/5 mb-4")(),
+            Div("bg-gray-200 h-4 rounded w-full mb-2")(),
+            Div("bg-gray-200 h-4 rounded w-5/6 mb-2")(),
+            Div("bg-gray-200 h-4 rounded w-4/6")(),
+        ),
+    )
+}
+
+// SkeletonPage renders a larger page-level skeleton with header and two cards.
+func (a Attr) SkeletonPage() string {
+    card := func() string {
+        return Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow mb-4")(
+            Div("bg-gray-200 h-5 rounded w-2/5 mb-3")(),
+            Div("bg-gray-200 h-4 rounded w-full mb-2")(),
+            Div("bg-gray-200 h-4 rounded w-5/6 mb-2")(),
+            Div("bg-gray-200 h-4 rounded w-4/6")(),
         )
     }
-    return Div("p-4 space-y-4", a)(strings.Join([]string{row(), row(), row(), row()}, " "))
+    return Div("animate-pulse", a)(
+        Div("bg-gray-200 h-8 rounded w-1/3 mb-6")(),
+        card(),
+        card(),
+    )
+}
+
+// SkeletonForm renders a form-shaped skeleton: labels, inputs, actions.
+func (a Attr) SkeletonForm() string {
+    fieldShort := func() string {
+        return Div("")(
+            Div("bg-gray-200 h-4 rounded w-3/6 mb-2")(),
+            Div("bg-gray-200 h-10 rounded w-full")(),
+        )
+    }
+    fieldArea := func() string {
+        return Div("")(
+            Div("bg-gray-200 h-4 rounded w-2/6 mb-2")(),
+            Div("bg-gray-200 h-24 rounded w-full")(),
+        )
+    }
+    actions := func() string {
+        return Div("flex justify-end gap-3 mt-6")(
+            Div("bg-gray-200 h-10 rounded w-24")(),
+            Div("bg-gray-200 h-10 rounded w-32")(),
+        )
+    }
+    return Div("animate-pulse", a)(
+        Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(
+            Div("bg-gray-200 h-6 rounded w-2/5 mb-5")(),
+            Div("grid grid-cols-1 md:grid-cols-2 gap-4")(
+                Div("")(fieldShort()),
+                Div("")(fieldShort()),
+                Div("")(fieldArea()),
+                Div("")(fieldShort()),
+            ),
+            actions(),
+        ),
+    )
 }
 
 // Convenience globals (without binding to a specific target id)
-func SkeletonDefault() string               { return Attr{}.Skeleton() }
-func SkeletonListN(count int) string        { return Attr{}.SkeletonList(count) }
-func SkeletonComponentBlock() string        { return Attr{}.SkeletonComponent() }
-func SkeletonPageBlock() string             { return Attr{}.SkeletonPage() }
-func SkeletonFormBlock() string             { return Attr{}.SkeletonForm() }
+func SkeletonDefault() string        { return Attr{}.SkeletonDefault() }
+func SkeletonListN(count int) string { return Attr{}.SkeletonList(count) }
+func SkeletonComponentBlock() string { return Attr{}.SkeletonComponent() }
+func SkeletonPageBlock() string      { return Attr{}.SkeletonPage() }
+func SkeletonFormBlock() string      { return Attr{}.SkeletonForm() }
 
 func Variable[T any](getter func(*T) string) func(item *T) Attr {
 	temp := Target()
