@@ -301,6 +301,45 @@ var Target = func() Attr {
 	return Attr{ID: "i" + RandomString(15)}
 }
 
+// ThemeSwitcher renders a small button that cycles System → Light → Dark.
+// It relies on the global setTheme(mode) provided by the server (__theme script).
+func ThemeSwitcher(css string) string {
+	id := "tsui_theme_" + RandomString(8)
+	sun := `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.8 1.42-1.42zm10.48 14.32l1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM12 4V1h-0 0 0 0v3zm0 19v-3h0 0 0 0v3zM4 12H1v0 0 0 0h3zm19 0h-3v0 0 0 0h3zM6.76 19.16l-1.79 1.8 1.41 1.41 1.8-1.79-1.42-1.42zM19.16 6.76l1.8-1.79-1.41-1.41-1.8 1.79 1.41 1.41zM12 8a4 4 0 100 8 4 4 0 000-8z"/></svg>`
+	moon := `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`
+	desktop := `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 4h18v12H3z"/><path d="M8 20h8v-2H8z"/></svg>`
+
+	btn := Div("")(
+		fmt.Sprintf(`<button id="%s" type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 shadow-sm %s">`, id, css),
+		`<span class="icon">`+desktop+`</span>`,
+		`<span class="label">Auto</span>`,
+		`</button>`,
+	)
+
+	// Escape quotes for JavaScript strings
+	moonJS := strings.ReplaceAll(moon, `"`, `\"`)
+	sunJS := strings.ReplaceAll(sun, `"`, `\"`)
+	desktopJS := strings.ReplaceAll(desktop, `"`, `\"`)
+
+	script := Script(
+		Trim(fmt.Sprintf(`(function(){
+            var btn=document.getElementById('%s'); if(!btn) return;
+            var modes=['system','light','dark'];
+            function getPref(){ try { return localStorage.getItem('theme')||'system'; } catch(_) { return 'system'; } }
+            function resolve(mode){ if(mode==='system'){ try { return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'; } catch(_) { return 'light'; } } return mode; }
+            function setMode(mode){ try { if (typeof setTheme==='function') setTheme(mode); } catch(_){} }
+            function labelFor(mode){ return mode==='system'?'Auto':(mode.charAt(0).toUpperCase()+mode.slice(1)); }
+            function iconFor(eff){ if(eff==='dark'){ return "%s"; } if(eff==='light'){ return "%s"; } return "%s"; }
+            function render(){ var pref=getPref(); var eff=resolve(pref); var i=btn.querySelector('.icon'); if(i){ i.innerHTML=iconFor(eff); } var l=btn.querySelector('.label'); if(l){ l.textContent=labelFor(pref); } }
+            render();
+            btn.addEventListener('click', function(){ var pref=getPref(); var idx=modes.indexOf(pref); var next=modes[(idx+1)%%modes.length]; setMode(next); render(); });
+            try { if (window.matchMedia){ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(){ if(getPref()==='system'){ render(); } }); } } catch(_){ }
+        })();`, id, moonJS, sunJS, desktopJS)),
+	)
+
+	return btn + script
+}
+
 func Variable[T any](getter func(*T) string) func(item *T) Attr {
 	temp := Target()
 

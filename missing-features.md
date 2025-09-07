@@ -9,6 +9,5 @@ This document lists features present in `t-sui` (TypeScript implementation) that
 - Invalid-target handling: `t-sui` notifies the server when a patch target ID is missing in the DOM and invokes the optional `clear()` callback; `g-sui` has no such mechanism.
 - Session model: `t-sui` manages per-client sessions via `tsui__sid` cookie, tracks last-seen, and prunes inactive sessions; `g-sui` sets a `session_id` cookie but does not implement WS session tracking or pruning.
 - Heartbeats: `t-sui` implements WS ping/pong heartbeats and client pings to keep sessions alive; `g-sui` has no WS heartbeat system.
-- Dark mode support: `t-sui` ships a `ThemeSwitcher` component and dark-mode friendly styling in examples; `g-sui` does not include a theme switcher or dark-mode adjustments.
 - Dev overlays: `t-sui` includes a polished loading overlay (`__loader`) and an offline overlay (`__offline`) integrated with WS reconnects; `g-sui` uses a simple text loader and a basic offline banner only for dev autoreload.
 - Dev error page: On request errors, `t-sui` serves a minimal fallback page that auto-reloads on WS reconnect; `g-sui` recovers panics to a toast but has no WS-driven error-reload page.

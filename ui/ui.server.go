@@ -1267,6 +1267,42 @@ var __load = Trim(`
     }
 `)
 
+// __theme: initialize theme and expose setTheme(mode) on window.
+// Applies html.dark class based on stored preference or system setting.
+var __theme = Trim(`
+    (function(){
+        try {
+            if (window.__gsuiThemeInit) { return; }
+            window.__gsuiThemeInit = true;
+            var doc = document.documentElement;
+            function apply(mode){
+                var m = mode;
+                if (m === 'system') {
+                    try { m = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; }
+                    catch(_) { m = 'light'; }
+                }
+                if (m === 'dark') { try { doc.classList.add('dark'); doc.style.colorScheme = 'dark'; } catch(_){} }
+                else { try { doc.classList.remove('dark'); doc.style.colorScheme = 'light'; } catch(_){} }
+            }
+            function set(mode){ try { localStorage.setItem('theme', mode); } catch(_){} apply(mode); }
+            try { (window).setTheme = set; } catch(_){}
+            try { (window).toggleTheme = function(){ var d = !!doc.classList.contains('dark'); set(d ? 'light' : 'dark'); }; } catch(_){}
+            var init = 'system';
+            try { init = localStorage.getItem('theme') || 'system'; } catch(_){}
+            apply(init);
+            try {
+                if (window.matchMedia) {
+                    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(){
+                        var s = '';
+                        try { s = localStorage.getItem('theme') || ''; } catch(_){ }
+                        if (!s || s === 'system') { apply('system'); }
+                    });
+                }
+            } catch(_){ }
+        } catch(_){ }
+    })();
+`)
+
 var ContentID = Target()
 
 // Error UI helper injected into every page
@@ -1299,35 +1335,35 @@ func MakeApp(defaultLanguage string) *App {
         HTMLHead: []string{
             `<meta charset="UTF-8">`,
             `<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
-			`<style>
-				html {
-					scroll-behavior: smooth;
-				}
-				.invalid, select:invalid, textarea:invalid, input:invalid {
-					border-bottom-width: 2px;
-					border-bottom-color: red;
-					border-bottom-style: dashed;
-				}
-				/* Fix for Safari mobile date input width overflow */
-				@media (max-width: 768px) {
-					input[type="date"] {
-						max-width: 100% !important;
-						width: 100% !important;
-						min-width: 0 !important;
-						box-sizing: border-box !important;
-						overflow: hidden !important;
-					}
-					
-					/* Ensure parent containers don't overflow */
-					input[type="date"]::-webkit-datetime-edit {
-						max-width: 100% !important;
-						overflow: hidden !important;
-					}
-				}
-			</style>`,
-			`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
-			Script(__stringify, __error, __post, __submit, __load),
-		},
+            `<style>
+                html {
+                    scroll-behavior: smooth;
+                }
+                .invalid, select:invalid, textarea:invalid, input:invalid {
+                    border-bottom-width: 2px;
+                    border-bottom-color: red;
+                    border-bottom-style: dashed;
+                }
+                /* Fix for Safari mobile date input width overflow */
+                @media (max-width: 768px) {
+                    input[type="date"] {
+                        max-width: 100% !important;
+                        width: 100% !important;
+                        min-width: 0 !important;
+                        box-sizing: border-box !important;
+                        overflow: hidden !important;
+                    }
+                    
+                    /* Ensure parent containers don't overflow */
+                    input[type="date"]::-webkit-datetime-edit {
+                        max-width: 100% !important;
+                        overflow: hidden !important;
+                    }
+                }
+            </style>`,
+            `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
+            Script(__stringify, __error, __post, __submit, __load, __theme),
+        },
         HTMLBody: func(class string) string {
             if class == "" {
                 class = "bg-gray-200"

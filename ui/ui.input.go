@@ -562,8 +562,13 @@ func ITime(name string, data ...any) *TInput {
 
 			if err == nil {
 				if timeValue, ok := tmp.Interface().(time.Time); ok {
-					value = timeValue.Format("15:04")
-					// value = fmt.Sprintf("%02d:%02d", timeValue.Hour(), timeValue.Minute())
+					// Only set value if the time is not zero
+					if !timeValue.IsZero() {
+						value = timeValue.Format("15:04")
+					} else {
+						// Set default time to 00:00 for time inputs
+						value = "00:00"
+					}
 				}
 			}
 		}
@@ -638,8 +643,10 @@ func IDateTime(name string, data ...any) *TInput {
 
 			if err == nil {
 				if timeValue, ok := tmp.Interface().(time.Time); ok {
-					// value = fmt.Sprintf("%04d-%02d-%02d %02d:%02d", timeValue.Year(), timeValue.Month(), timeValue.Day(), timeValue.Hour(), timeValue.Minute())
-					value = timeValue.Format("2006-01-02T15:04")
+					// Only set value if the time is not zero
+					if !timeValue.IsZero() {
+						value = timeValue.Format("2006-01-02T15:04")
+					}
 				}
 			}
 		}
