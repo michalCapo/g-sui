@@ -36,26 +36,27 @@ func main() {
 	app.AutoRestart(true) // enable if you want the examples to rebuild on changes
 
 	// layout builder with top menu styled like TS examples
-	layout := func(title string, body func(*ui.Context) string) ui.Callable {
-		return func(ctx *ui.Context) string {
-			nav := ui.Div("bg-white shadow mb-6")(
-				ui.Div("max-w-5xl mx-auto px-4 py-2 flex items-center gap-2")(
-					// top bar
-					ui.Div("flex flex-wrap gap-1 mt-2 md:mt-0")(
-						ui.Map(routes, func(r *route, _ int) string {
-							base := "px-2 py-1 rounded text-sm whitespace-nowrap"
-							cls := base + " hover:bg-gray-200"
-							if r.Path == "/" {
-								cls = base + " bg-blue-700 text-white hover:bg-blue-600"
-							}
+    layout := func(title string, body func(*ui.Context) string) ui.Callable {
+        return func(ctx *ui.Context) string {
+            nav := ui.Div("bg-white shadow mb-6")(
+                ui.Div("max-w-5xl mx-auto px-4 py-2 flex items-center gap-2")(
+                    // top bar
+                    ui.Div("flex flex-wrap gap-1 mt-2 md:mt-0")(
+                        ui.Map(routes, func(r *route, _ int) string {
+                            base := "px-2 py-1 rounded text-sm whitespace-nowrap"
+                            cls := base + " hover:bg-gray-200"
+                            // Highlight the currently selected route
+                            if ctx != nil && ctx.Request != nil && r.Path == ctx.Request.URL.Path {
+                                cls = base + " bg-blue-700 text-white hover:bg-blue-600"
+                            }
 
-							return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
-						}),
-					),
-					ui.Flex1,
-					ui.ThemeSwitcher(""),
-				),
-			)
+                            return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+                        }),
+                    ),
+                    ui.Flex1,
+                    ui.ThemeSwitcher(""),
+                ),
+            )
 
 			content := body(ctx)
 			return app.HTML(title, "bg-gray-100 min-h-screen", nav+ui.Div("max-w-5xl mx-auto px-2")(content))
