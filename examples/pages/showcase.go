@@ -1,9 +1,10 @@
 package pages
 
 import (
+	"time"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/michalCapo/g-sui/ui"
-	"time"
 )
 
 // Demo form showcasing inputs and validation
@@ -43,10 +44,10 @@ func (f *DemoForm) Render(ctx *ui.Context, err *error) string {
 	countries := ui.MakeOptions([]string{"", "USA", "Slovakia", "Germany", "Japan"})
 	genders := []ui.AOption{{ID: "male", Value: "Male"}, {ID: "female", Value: "Female"}, {ID: "other", Value: "Other"}}
 
-    // Full-width section (no grid), single-column form card
-    return ui.Div("w-full", demoTarget)(
-        ui.Form("flex flex-col gap-4 bg-white p-6 rounded-lg shadow w-full", demoTarget, ctx.Submit(f.Submit).Replace(demoTarget))(
-            ui.ErrorForm(err, nil),
+	// Full-width section (no grid), single-column form card
+	return ui.Div("w-full", demoTarget)(
+		ui.Form("flex flex-col gap-4 bg-white p-6 rounded-lg shadow w-full", demoTarget, ctx.Submit(f.Submit).Replace(demoTarget))(
+			ui.ErrorForm(err, nil),
 
 			ui.IText("Name", f).Required().Render("Name"),
 			ui.IEmail("Email", f).Required().Render("Email"),
@@ -81,11 +82,11 @@ func (f *DemoForm) Render(ctx *ui.Context, err *error) string {
 	)
 }
 
-func ShowcaseContent(ctx *ui.Context) string {
-    form := &DemoForm{}
-    return ui.Div("max-w-full sm:max-w-6xl mx-auto flex flex-col gap-6 w-full")(
-        ui.Div("text-3xl font-bold")("Component Showcase"),
-        ui.Div("text-gray-600")("Inputs, validation, and common field widgets."),
-        form.Render(ctx, nil),
-    )
+func Showcase(ctx *ui.Context) string {
+	form := &DemoForm{}
+	return ui.Div("max-w-full sm:max-w-6xl mx-auto flex flex-col gap-6 w-full")(
+		ui.Div("text-3xl font-bold")("Component Showcase"),
+		ui.Div("text-gray-600")("Inputs, validation, and common field widgets."),
+		form.Render(ctx, nil),
+	)
 }

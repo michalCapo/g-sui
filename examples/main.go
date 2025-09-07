@@ -36,27 +36,27 @@ func main() {
 	app.AutoRestart(true) // enable if you want the examples to rebuild on changes
 
 	// layout builder with top menu styled like TS examples
-    layout := func(title string, body func(*ui.Context) string) ui.Callable {
-        return func(ctx *ui.Context) string {
-            nav := ui.Div("bg-white shadow mb-6")(
-                ui.Div("max-w-5xl mx-auto px-4 py-2 flex items-center gap-2")(
-                    // top bar
-                    ui.Div("flex flex-wrap gap-1 mt-2 md:mt-0")(
-                        ui.Map(routes, func(r *route, _ int) string {
-                            base := "px-2 py-1 rounded text-sm whitespace-nowrap"
-                            cls := base + " hover:bg-gray-200"
-                            // Highlight the currently selected route
-                            if ctx != nil && ctx.Request != nil && r.Path == ctx.Request.URL.Path {
-                                cls = base + " bg-blue-700 text-white hover:bg-blue-600"
-                            }
+	layout := func(title string, body func(*ui.Context) string) ui.Callable {
+		return func(ctx *ui.Context) string {
+			nav := ui.Div("bg-white shadow mb-6")(
+				ui.Div("max-w-5xl mx-auto px-4 py-2 flex items-center gap-2")(
+					// top bar
+					ui.Div("flex flex-wrap gap-1 mt-2 md:mt-0")(
+						ui.Map(routes, func(r *route, _ int) string {
+							base := "px-2 py-1 rounded text-sm whitespace-nowrap"
+							cls := base + " hover:bg-gray-200"
+							// Highlight the currently selected route
+							if ctx != nil && ctx.Request != nil && r.Path == ctx.Request.URL.Path {
+								cls = base + " bg-blue-700 text-white hover:bg-blue-600"
+							}
 
-                            return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
-                        }),
-                    ),
-                    ui.Flex1,
-                    ui.ThemeSwitcher(""),
-                ),
-            )
+							return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+						}),
+					),
+					ui.Flex1,
+					ui.ThemeSwitcher(""),
+				),
+			)
 
 			content := body(ctx)
 			return app.HTML(title, "bg-gray-100 min-h-screen", nav+ui.Div("max-w-5xl mx-auto px-2")(content))
@@ -64,19 +64,19 @@ func main() {
 	}
 
 	// Individual example pages
-	app.Page("/", layout("Showcase", pages.ShowcaseContent))
-	app.Page("/button", layout("Button", pages.ButtonContent))
-	app.Page("/text", layout("Text", pages.TextContent))
-	app.Page("/password", layout("Password", pages.PasswordContent))
-	app.Page("/number", layout("Number", pages.NumberContent))
-	app.Page("/date", layout("Date & Time", pages.DateContent))
-	app.Page("/area", layout("Textarea", pages.AreaContent))
-	app.Page("/select", layout("Select", pages.SelectContent))
-	app.Page("/checkbox", layout("Checkbox", pages.CheckboxContent))
-	app.Page("/radio", layout("Radio", pages.RadioContent))
-	app.Page("/table", layout("Table", pages.TableContent))
-	app.Page("/others", layout("Others", pages.OthersContent))
-	app.Page("/append", layout("Append / Prepend", pages.AppendContent))
+	app.Page("/", layout("Showcase", pages.Showcase))
+	app.Page("/button", layout("Button", pages.Button))
+	app.Page("/text", layout("Text", pages.Text))
+	app.Page("/password", layout("Password", pages.Password))
+	app.Page("/number", layout("Number", pages.Number))
+	app.Page("/date", layout("Date & Time", pages.Date))
+	app.Page("/area", layout("Textarea", pages.Area))
+	app.Page("/select", layout("Select", pages.Select))
+	app.Page("/checkbox", layout("Checkbox", pages.Checkbox))
+	app.Page("/radio", layout("Radio", pages.Radio))
+	app.Page("/table", layout("Table", pages.Table))
+	app.Page("/others", layout("Others", pages.Others))
+	app.Page("/append", layout("Append / Prepend", pages.Append))
 	app.Page("/clock", layout("Clock", pages.Clock))
 	app.Page("/deferred", layout("Deferred", pages.Deffered))
 
