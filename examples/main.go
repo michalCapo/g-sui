@@ -27,6 +27,7 @@ var routes = []route{
     {Path: "/others", Title: "Others"},
     {Path: "/append", Title: "Append/Prepend"},
     {Path: "/clock", Title: "Clock"},
+    {Path: "/deferred", Title: "Deferred"},
 }
 
 func main() {
@@ -76,6 +77,7 @@ func main() {
     app.Page("/others", layout("Others", pages.OthersContent))
     app.Page("/append", layout("Append / Prepend", pages.AppendContent))
     app.Page("/clock", layout("Clock", pages.ClockContent))
+    app.Page("/deferred", layout("Deferred", pages.DeferredContent))
 
 	app.Listen(":1422")
 }

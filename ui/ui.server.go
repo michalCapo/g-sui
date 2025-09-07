@@ -77,11 +77,11 @@ const (
 )
 
 type Context struct {
-	App       *App
-	Request   *http.Request
-	Response  http.ResponseWriter
-	SessionID string
-	append    []string
+    App       *App
+    Request   *http.Request
+    Response  http.ResponseWriter
+    SessionID string
+    append    []string
 }
 
 type TSession struct {
@@ -490,8 +490,77 @@ func (ctx *Context) Reload() string {
 }
 
 func (ctx *Context) Redirect(href string) string {
-	// return Normalize(fmt.Sprintf("<html><!DOCTYPE html><body><script>window.location.href = '%s';</script></body></html>", href))
-	return Normalize(fmt.Sprintf("<script>window.location.href = '%s';</script>", href))
+    // return Normalize(fmt.Sprintf("<html><!DOCTYPE html><body><script>window.location.href = '%s';</script></body></html>", href))
+    return Normalize(fmt.Sprintf("<script>window.location.href = '%s';</script>", href))
+}
+
+// Deferred fragments
+//
+// ctx.Defer(fn) launches fn in a goroutine and immediately returns a skeleton.
+// When fn finishes, its HTML is patched into the provided target using the
+// chosen swap method (Render = inline, Replace = outline). None() runs fn
+// without swapping and returns a minimal placeholder (or configured skeleton).
+type deferBuilder struct {
+    ctx       *Context
+    method    Callable
+    skeleton  string
+}
+
+// Defer creates a deferred builder for the given method.
+func (ctx *Context) Defer(method Callable) *deferBuilder {
+    return &deferBuilder{ctx: ctx, method: method}
+}
+
+// Skeleton sets a custom skeleton HTML to be returned immediately.
+func (b *deferBuilder) Skeleton(html string) *deferBuilder { b.skeleton = html; return b }
+
+// Convenience skeleton presets matching helpers from ui.go
+func (b *deferBuilder) SkeletonList(count int) *deferBuilder {
+    b.skeleton = Attr{}.SkeletonList(count); return b
+}
+func (b *deferBuilder) SkeletonComponent() *deferBuilder {
+    b.skeleton = Attr{}.SkeletonComponent(); return b
+}
+func (b *deferBuilder) SkeletonPage() *deferBuilder {
+    b.skeleton = Attr{}.SkeletonPage(); return b
+}
+func (b *deferBuilder) SkeletonForm() *deferBuilder {
+    b.skeleton = Attr{}.SkeletonForm(); return b
+}
+
+// Render swaps innerHTML of the target when method completes; returns skeleton now.
+func (b *deferBuilder) Render(target Attr) string {
+    go func(ctx *Context, t Attr, m Callable) {
+        // Safeguard method execution
+        defer func() { recover() }()
+        html := m(ctx)
+        if html == "" { return }
+        ctx.Patch(t, INLINE, html)
+    }(b.ctx, target, b.method)
+
+    if b.skeleton != "" { return b.skeleton }
+    // Default to component skeleton bound to target
+    return target.SkeletonComponent()
+}
+
+// Replace swaps the element (outerHTML) when method completes; returns skeleton now.
+func (b *deferBuilder) Replace(target Attr) string {
+    go func(ctx *Context, t Attr, m Callable) {
+        defer func() { recover() }()
+        html := m(ctx)
+        if html == "" { return }
+        ctx.Patch(t, OUTLINE, html)
+    }(b.ctx, target, b.method)
+
+    if b.skeleton != "" { return b.skeleton }
+    return target.SkeletonComponent()
+}
+
+// None runs the callable for its side-effects and returns a minimal placeholder.
+func (b *deferBuilder) None() string {
+    go func(ctx *Context, m Callable) { defer func(){ recover() }(); _ = m(ctx) }(b.ctx, b.method)
+    if b.skeleton != "" { return b.skeleton }
+    return "<!-- -->"
 }
 
 func displayMessage(ctx *Context, message string, color string) {
