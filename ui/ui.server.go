@@ -77,11 +77,11 @@ const (
 )
 
 type Context struct {
-    App       *App
-    Request   *http.Request
-    Response  http.ResponseWriter
-    SessionID string
-    append    []string
+	App       *App
+	Request   *http.Request
+	Response  http.ResponseWriter
+	SessionID string
+	append    []string
 }
 
 type TSession struct {
@@ -490,8 +490,8 @@ func (ctx *Context) Reload() string {
 }
 
 func (ctx *Context) Redirect(href string) string {
-    // return Normalize(fmt.Sprintf("<html><!DOCTYPE html><body><script>window.location.href = '%s';</script></body></html>", href))
-    return Normalize(fmt.Sprintf("<script>window.location.href = '%s';</script>", href))
+	// return Normalize(fmt.Sprintf("<html><!DOCTYPE html><body><script>window.location.href = '%s';</script></body></html>", href))
+	return Normalize(fmt.Sprintf("<script>window.location.href = '%s';</script>", href))
 }
 
 // Deferred fragments
@@ -501,14 +501,14 @@ func (ctx *Context) Redirect(href string) string {
 // chosen swap method (Render = inline, Replace = outline). None() runs fn
 // without swapping and returns a minimal placeholder (or configured skeleton).
 type deferBuilder struct {
-    ctx       *Context
-    method    Callable
-    skeleton  string
+	ctx      *Context
+	method   Callable
+	skeleton string
 }
 
 // Defer creates a deferred builder for the given method.
 func (ctx *Context) Defer(method Callable) *deferBuilder {
-    return &deferBuilder{ctx: ctx, method: method}
+	return &deferBuilder{ctx: ctx, method: method}
 }
 
 // Skeleton sets a custom skeleton HTML to be returned immediately.
@@ -516,51 +516,65 @@ func (b *deferBuilder) Skeleton(html string) *deferBuilder { b.skeleton = html; 
 
 // Convenience skeleton presets matching helpers from ui.go
 func (b *deferBuilder) SkeletonList(count int) *deferBuilder {
-    b.skeleton = Attr{}.SkeletonList(count); return b
+	b.skeleton = Attr{}.SkeletonList(count)
+	return b
 }
 func (b *deferBuilder) SkeletonComponent() *deferBuilder {
-    b.skeleton = Attr{}.SkeletonComponent(); return b
+	b.skeleton = Attr{}.SkeletonComponent()
+	return b
 }
 func (b *deferBuilder) SkeletonPage() *deferBuilder {
-    b.skeleton = Attr{}.SkeletonPage(); return b
+	b.skeleton = Attr{}.SkeletonPage()
+	return b
 }
 func (b *deferBuilder) SkeletonForm() *deferBuilder {
-    b.skeleton = Attr{}.SkeletonForm(); return b
+	b.skeleton = Attr{}.SkeletonForm()
+	return b
 }
 
 // Render swaps innerHTML of the target when method completes; returns skeleton now.
 func (b *deferBuilder) Render(target Attr) string {
-    go func(ctx *Context, t Attr, m Callable) {
-        // Safeguard method execution
-        defer func() { recover() }()
-        html := m(ctx)
-        if html == "" { return }
-        ctx.Patch(t, INLINE, html)
-    }(b.ctx, target, b.method)
+	go func(ctx *Context, t Attr, m Callable) {
+		// Safeguard method execution
+		defer func() { recover() }()
+		html := m(ctx)
+		if html == "" {
+			return
+		}
+		ctx.Patch(t.Render(), html)
+	}(b.ctx, target, b.method)
 
-    if b.skeleton != "" { return b.skeleton }
-    // Default to component skeleton bound to target
-    return target.SkeletonComponent()
+	if b.skeleton != "" {
+		return b.skeleton
+	}
+	// Default to component skeleton bound to target
+	return target.SkeletonComponent()
 }
 
 // Replace swaps the element (outerHTML) when method completes; returns skeleton now.
 func (b *deferBuilder) Replace(target Attr) string {
-    go func(ctx *Context, t Attr, m Callable) {
-        defer func() { recover() }()
-        html := m(ctx)
-        if html == "" { return }
-        ctx.Patch(t, OUTLINE, html)
-    }(b.ctx, target, b.method)
+	go func(ctx *Context, t Attr, m Callable) {
+		defer func() { recover() }()
+		html := m(ctx)
+		if html == "" {
+			return
+		}
+		ctx.Patch(t.Replace(), html)
+	}(b.ctx, target, b.method)
 
-    if b.skeleton != "" { return b.skeleton }
-    return target.SkeletonComponent()
+	if b.skeleton != "" {
+		return b.skeleton
+	}
+	return target.SkeletonComponent()
 }
 
 // None runs the callable for its side-effects and returns a minimal placeholder.
 func (b *deferBuilder) None() string {
-    go func(ctx *Context, m Callable) { defer func(){ recover() }(); _ = m(ctx) }(b.ctx, b.method)
-    if b.skeleton != "" { return b.skeleton }
-    return "<!-- -->"
+	go func(ctx *Context, m Callable) { defer func() { recover() }(); _ = m(ctx) }(b.ctx, b.method)
+	if b.skeleton != "" {
+		return b.skeleton
+	}
+	return "<!-- -->"
 }
 
 func displayMessage(ctx *Context, message string, color string) {
@@ -690,24 +704,24 @@ func cacheControlMiddleware(next http.Handler, maxAge time.Duration) http.Handle
 }
 
 type App struct {
-    Lanugage     string
-    HTMLBody     func(string) string
-    HTMLHead     []string
-    DebugEnabled bool
-    sessMu       sync.Mutex
-    sessions     map[string]*sessRec
-    wsMu         sync.Mutex
-    wsClients    map[*websocket.Conn]*wsState
+	Lanugage     string
+	HTMLBody     func(string) string
+	HTMLHead     []string
+	DebugEnabled bool
+	sessMu       sync.Mutex
+	sessions     map[string]*sessRec
+	wsMu         sync.Mutex
+	wsClients    map[*websocket.Conn]*wsState
 }
 
 type sessRec struct {
-    lastSeen time.Time
-    targets  map[string]func()
+	lastSeen time.Time
+	targets  map[string]func()
 }
 
 type wsState struct {
-    lastPong time.Time
-    sid      string
+	lastPong time.Time
+	sid      string
 }
 
 func (app *App) Register(httpMethod string, path string, method *Callable) string {
@@ -859,14 +873,21 @@ func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-    // Track last-seen per session
-    if app != nil {
-        app.sessMu.Lock()
-        if app.sessions == nil { app.sessions = make(map[string]*sessRec) }
-        rec := app.sessions[sessionID]
-        if rec == nil { rec = &sessRec{lastSeen: time.Now(), targets: make(map[string]func())}; app.sessions[sessionID] = rec } else { rec.lastSeen = time.Now() }
-        app.sessMu.Unlock()
-    }
+	// Track last-seen per session
+	if app != nil {
+		app.sessMu.Lock()
+		if app.sessions == nil {
+			app.sessions = make(map[string]*sessRec)
+		}
+		rec := app.sessions[sessionID]
+		if rec == nil {
+			rec = &sessRec{lastSeen: time.Now(), targets: make(map[string]func())}
+			app.sessions[sessionID] = rec
+		} else {
+			rec.lastSeen = time.Now()
+		}
+		app.sessMu.Unlock()
+	}
 
 	return &Context{
 		App:       app,
@@ -936,94 +957,104 @@ func (app *App) Listen(port string) {
 
 // initWS registers the WebSocket endpoint for server-initiated patches.
 func (app *App) initWS() {
-    app.wsMu.Lock()
-    if app.wsClients == nil {
-        app.wsClients = make(map[*websocket.Conn]*wsState)
-    }
-    app.wsMu.Unlock()
+	app.wsMu.Lock()
+	if app.wsClients == nil {
+		app.wsClients = make(map[*websocket.Conn]*wsState)
+	}
+	app.wsMu.Unlock()
 
-    http.Handle("/__ws", websocket.Handler(func(ws *websocket.Conn) {
-        // Register
-        st := &wsState{lastPong: time.Now()}
-        // Resolve session id from handshake cookies
-        if req := ws.Request(); req != nil {
-            if c, err := req.Cookie("tsui__sid"); err == nil { st.sid = c.Value }
-        }
-        app.wsMu.Lock()
-        app.wsClients[ws] = st
-        app.wsMu.Unlock()
-        defer func() {
-            app.wsMu.Lock()
-            delete(app.wsClients, ws)
-            app.wsMu.Unlock()
-            _ = ws.Close()
-        }()
+	http.Handle("/__ws", websocket.Handler(func(ws *websocket.Conn) {
+		// Register
+		st := &wsState{lastPong: time.Now()}
+		// Resolve session id from handshake cookies
+		if req := ws.Request(); req != nil {
+			if c, err := req.Cookie("tsui__sid"); err == nil {
+				st.sid = c.Value
+			}
+		}
+		app.wsMu.Lock()
+		app.wsClients[ws] = st
+		app.wsMu.Unlock()
+		defer func() {
+			app.wsMu.Lock()
+			delete(app.wsClients, ws)
+			app.wsMu.Unlock()
+			_ = ws.Close()
+		}()
 
-        // Heartbeat goroutine: app-level ping and stale close
-        done := make(chan struct{})
-        go func() {
-            ticker := time.NewTicker(25 * time.Second)
-            defer ticker.Stop()
-            for {
-                select {
-                case <-ticker.C:
-                    _ = websocket.Message.Send(ws, `{"type":"ping"}`)
-                    // touch session last-seen
-                    if st.sid != "" {
-                        app.sessMu.Lock()
-                        if rec := app.sessions[st.sid]; rec != nil { rec.lastSeen = time.Now() }
-                        app.sessMu.Unlock()
-                    }
-                    app.wsMu.Lock()
-                    last := st.lastPong
-                    app.wsMu.Unlock()
-                    if time.Since(last) > 75*time.Second {
-                        _ = ws.Close()
-                        return
-                    }
-                case <-done:
-                    return
-                }
-            }
-        }()
+		// Heartbeat goroutine: app-level ping and stale close
+		done := make(chan struct{})
+		go func() {
+			ticker := time.NewTicker(25 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					_ = websocket.Message.Send(ws, `{"type":"ping"}`)
+					// touch session last-seen
+					if st.sid != "" {
+						app.sessMu.Lock()
+						if rec := app.sessions[st.sid]; rec != nil {
+							rec.lastSeen = time.Now()
+						}
+						app.sessMu.Unlock()
+					}
+					app.wsMu.Lock()
+					last := st.lastPong
+					app.wsMu.Unlock()
+					if time.Since(last) > 75*time.Second {
+						_ = ws.Close()
+						return
+					}
+				case <-done:
+					return
+				}
+			}
+		}()
 
-        // Receive loop: handle ping/pong from client and invalid target notices
-        for {
-            var s string
-            if err := websocket.Message.Receive(ws, &s); err != nil {
-                close(done)
-                return
-            }
-            var obj map[string]any
-            if err := json.Unmarshal([]byte(s), &obj); err == nil {
-                if t, _ := obj["type"].(string); t != "" {
-                    if t == "ping" {
-                        _ = websocket.Message.Send(ws, `{"type":"pong"}`)
-                    } else if t == "pong" {
-                        app.wsMu.Lock()
-                        st.lastPong = time.Now()
-                        app.wsMu.Unlock()
-                        if st.sid != "" {
-                            app.sessMu.Lock()
-                            if rec := app.sessions[st.sid]; rec != nil { rec.lastSeen = time.Now() }
-                            app.sessMu.Unlock()
-                        }
-                    } else if t == "invalid" {
-                        id, _ := obj["id"].(string)
-                        if id != "" && st.sid != "" {
-                            app.sessMu.Lock()
-                            if rec := app.sessions[st.sid]; rec != nil {
-                                fn := rec.targets[id]
-                                delete(rec.targets, id)
-                                app.sessMu.Unlock()
-                                if fn != nil { func(){ defer func(){ recover() }(); fn() }() }
-                            } else { app.sessMu.Unlock() }
-                        }
-                    }
-                }
-            }
-        }
-    }))
+		// Receive loop: handle ping/pong from client and invalid target notices
+		for {
+			var s string
+			if err := websocket.Message.Receive(ws, &s); err != nil {
+				close(done)
+				return
+			}
+			var obj map[string]any
+			if err := json.Unmarshal([]byte(s), &obj); err == nil {
+				if t, _ := obj["type"].(string); t != "" {
+					if t == "ping" {
+						_ = websocket.Message.Send(ws, `{"type":"pong"}`)
+					} else if t == "pong" {
+						app.wsMu.Lock()
+						st.lastPong = time.Now()
+						app.wsMu.Unlock()
+						if st.sid != "" {
+							app.sessMu.Lock()
+							if rec := app.sessions[st.sid]; rec != nil {
+								rec.lastSeen = time.Now()
+							}
+							app.sessMu.Unlock()
+						}
+					} else if t == "invalid" {
+						id, _ := obj["id"].(string)
+						if id != "" && st.sid != "" {
+							app.sessMu.Lock()
+							if rec := app.sessions[st.sid]; rec != nil {
+								fn := rec.targets[id]
+								delete(rec.targets, id)
+								app.sessMu.Unlock()
+								if fn != nil {
+									func() { defer func() { recover() }(); fn() }()
+								}
+							} else {
+								app.sessMu.Unlock()
+							}
+						}
+					}
+				}
+			}
+		}
+	}))
 }
 
 // sendPatch broadcasts a patch message to all connected WS clients.
@@ -1045,26 +1076,26 @@ func (app *App) sendPatch(id string, swap Swap, html string) {
 	app.wsMu.Unlock()
 }
 
-// Patch pushes a patch to WS clients (basic broadcast; no per-session routing).
-func (ctx *Context) Patch(target Attr, swap Swap, html string, clear ...func()) {
-    if ctx == nil || ctx.App == nil {
-        return
-    }
-    // per-session clear callback registration
-    if len(clear) > 0 && clear[0] != nil {
-        ctx.App.sessMu.Lock()
-        if ctx.App.sessions == nil { ctx.App.sessions = make(map[string]*sessRec) }
-        rec := ctx.App.sessions[ctx.SessionID]
-        if rec == nil { rec = &sessRec{lastSeen: time.Now(), targets: make(map[string]func())}; ctx.App.sessions[ctx.SessionID] = rec }
-        rec.targets[target.ID] = clear[0]
-        ctx.App.sessMu.Unlock()
-    }
-    ctx.App.sendPatch(target.ID, swap, html)
-}
-
-// PatchTo patches using a TargetSwap convenience descriptor (id+swap).
-func (ctx *Context) PatchTo(ts TargetSwap, html string, clear ...func()) {
-    ctx.Patch(Attr{ID: ts.ID}, ts.Swap, html, clear...)
+// Patch patches using a TargetSwap descriptor (id + swap) and pushes to WS clients.
+func (ctx *Context) Patch(ts TargetSwap, html string, clear ...func()) {
+	if ctx == nil || ctx.App == nil {
+		return
+	}
+	// per-session clear callback registration
+	if len(clear) > 0 && clear[0] != nil {
+		ctx.App.sessMu.Lock()
+		if ctx.App.sessions == nil {
+			ctx.App.sessions = make(map[string]*sessRec)
+		}
+		rec := ctx.App.sessions[ctx.SessionID]
+		if rec == nil {
+			rec = &sessRec{lastSeen: time.Now(), targets: make(map[string]func())}
+			ctx.App.sessions[ctx.SessionID] = rec
+		}
+		rec.targets[ts.ID] = clear[0]
+		ctx.App.sessMu.Unlock()
+	}
+	ctx.App.sendPatch(ts.ID, ts.Swap, html)
 }
 
 func (app *App) AutoRestart(enable bool) {
@@ -1840,14 +1871,14 @@ func isSecure(r *http.Request) bool {
 
 // sweepSessions prunes sessions not seen for more than 60 seconds
 func (app *App) sweepSessions() {
-    cutoff := time.Now().Add(-60 * time.Second)
-    app.sessMu.Lock()
-    for k, rec := range app.sessions {
-        if rec == nil || rec.lastSeen.Before(cutoff) {
-            delete(app.sessions, k)
-        }
-    }
-    app.sessMu.Unlock()
+	cutoff := time.Now().Add(-60 * time.Second)
+	app.sessMu.Lock()
+	for k, rec := range app.sessions {
+		if rec == nil || rec.lastSeen.Before(cutoff) {
+			delete(app.sessions, k)
+		}
+	}
+	app.sessMu.Unlock()
 }
 
 // StartSweeper launches a background goroutine to prune inactive sessions
