@@ -62,9 +62,11 @@ func (c *CSS) Value() string {
 type Swap string
 
 const (
-	OUTLINE Swap = "outline"
-	INLINE  Swap = "inline"
-	NONE    Swap = "none"
+    OUTLINE Swap = "outline"
+    INLINE  Swap = "inline"
+    APPEND  Swap = "append"
+    PREPEND Swap = "prepend"
+    NONE    Swap = "none"
 )
 
 type ActionType string
@@ -354,17 +356,21 @@ func (ctx *Context) Post(as ActionType, swap Swap, action *Action) string {
 }
 
 type Actions struct {
-	Render  func(target Attr) string
-	Replace func(target Attr) string
-	None    func() string
-	// AsSubmit func(target Attr, swap ...Swap) Attr
-	// AsClick  func(target Attr, swap ...Swap) Attr
+    Render  func(target Attr) string
+    Replace func(target Attr) string
+    Append  func(target Attr) string
+    Prepend func(target Attr) string
+    None    func() string
+    // AsSubmit func(target Attr, swap ...Swap) Attr
+    // AsClick  func(target Attr, swap ...Swap) Attr
 }
 
 type Submits struct {
-	Render  func(target Attr) Attr
-	Replace func(target Attr) Attr
-	None    func() Attr
+    Render  func(target Attr) Attr
+    Replace func(target Attr) Attr
+    Append  func(target Attr) Attr
+    Prepend func(target Attr) Attr
+    None    func() Attr
 }
 
 // func swapize(swap ...Swap) Swap {
@@ -375,52 +381,70 @@ type Submits struct {
 // }
 
 func (ctx *Context) Submit(method Callable, values ...any) Submits {
-	callable := ctx.Callable(method)
+    callable := ctx.Callable(method)
 
-	return Submits{
-		Render: func(target Attr) Attr {
-			return Attr{OnSubmit: ctx.Post(FORM, INLINE, &Action{Method: *callable, Target: target, Values: values})}
-		},
-		Replace: func(target Attr) Attr {
-			return Attr{OnSubmit: ctx.Post(FORM, OUTLINE, &Action{Method: *callable, Target: target, Values: values})}
-		},
-		None: func() Attr {
-			return Attr{OnSubmit: ctx.Post(FORM, NONE, &Action{Method: *callable, Values: values})}
-		},
-	}
+    return Submits{
+        Render: func(target Attr) Attr {
+            return Attr{OnSubmit: ctx.Post(FORM, INLINE, &Action{Method: *callable, Target: target, Values: values})}
+        },
+        Replace: func(target Attr) Attr {
+            return Attr{OnSubmit: ctx.Post(FORM, OUTLINE, &Action{Method: *callable, Target: target, Values: values})}
+        },
+        Append: func(target Attr) Attr {
+            return Attr{OnSubmit: ctx.Post(FORM, APPEND, &Action{Method: *callable, Target: target, Values: values})}
+        },
+        Prepend: func(target Attr) Attr {
+            return Attr{OnSubmit: ctx.Post(FORM, PREPEND, &Action{Method: *callable, Target: target, Values: values})}
+        },
+        None: func() Attr {
+            return Attr{OnSubmit: ctx.Post(FORM, NONE, &Action{Method: *callable, Values: values})}
+        },
+    }
 }
 
 func (ctx *Context) Click(method Callable, values ...any) Submits {
-	callable := ctx.Callable(method)
+    callable := ctx.Callable(method)
 
-	return Submits{
-		Render: func(target Attr) Attr {
-			return Attr{OnClick: ctx.Post(POST, INLINE, &Action{Method: *callable, Target: target, Values: values})}
-		},
-		Replace: func(target Attr) Attr {
-			return Attr{OnClick: ctx.Post(POST, OUTLINE, &Action{Method: *callable, Target: target, Values: values})}
-		},
-		None: func() Attr {
-			return Attr{OnClick: ctx.Post(POST, NONE, &Action{Method: *callable, Values: values})}
-		},
-	}
+    return Submits{
+        Render: func(target Attr) Attr {
+            return Attr{OnClick: ctx.Post(POST, INLINE, &Action{Method: *callable, Target: target, Values: values})}
+        },
+        Replace: func(target Attr) Attr {
+            return Attr{OnClick: ctx.Post(POST, OUTLINE, &Action{Method: *callable, Target: target, Values: values})}
+        },
+        Append: func(target Attr) Attr {
+            return Attr{OnClick: ctx.Post(POST, APPEND, &Action{Method: *callable, Target: target, Values: values})}
+        },
+        Prepend: func(target Attr) Attr {
+            return Attr{OnClick: ctx.Post(POST, PREPEND, &Action{Method: *callable, Target: target, Values: values})}
+        },
+        None: func() Attr {
+            return Attr{OnClick: ctx.Post(POST, NONE, &Action{Method: *callable, Values: values})}
+        },
+    }
 }
 
 func (ctx *Context) Send(method Callable, values ...any) Actions {
-	callable := ctx.Callable(method)
+    callable := ctx.Callable(method)
 
-	return Actions{
-		Render: func(target Attr) string {
-			return ctx.Post(FORM, INLINE, &Action{Method: *callable, Target: target, Values: values})
-		},
-		Replace: func(target Attr) string {
-			return ctx.Post(FORM, OUTLINE, &Action{Method: *callable, Target: target, Values: values})
-		},
-		None: func() string {
-			return ctx.Post(FORM, NONE, &Action{Method: *callable, Values: values})
-		},
-		// AsSubmit: func(target Attr, swap ...Swap) Attr {
-		// 	return Attr{OnSubmit: ctx.Post(FORM, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
+    return Actions{
+        Render: func(target Attr) string {
+            return ctx.Post(FORM, INLINE, &Action{Method: *callable, Target: target, Values: values})
+        },
+        Replace: func(target Attr) string {
+            return ctx.Post(FORM, OUTLINE, &Action{Method: *callable, Target: target, Values: values})
+        },
+        Append: func(target Attr) string {
+            return ctx.Post(FORM, APPEND, &Action{Method: *callable, Target: target, Values: values})
+        },
+        Prepend: func(target Attr) string {
+            return ctx.Post(FORM, PREPEND, &Action{Method: *callable, Target: target, Values: values})
+        },
+        None: func() string {
+            return ctx.Post(FORM, NONE, &Action{Method: *callable, Values: values})
+        },
+        // AsSubmit: func(target Attr, swap ...Swap) Attr {
+        // 	return Attr{OnSubmit: ctx.Post(FORM, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
 		// },
 		// AsClick: func(target Attr, swap ...Swap) Attr {
 		// 	return Attr{OnClick: ctx.Post(FORM, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
@@ -429,20 +453,26 @@ func (ctx *Context) Send(method Callable, values ...any) Actions {
 }
 
 func (ctx *Context) Call(method Callable, values ...any) Actions {
-	callable := ctx.Callable(method)
+    callable := ctx.Callable(method)
 
-	return Actions{
-		Render: func(target Attr) string {
-			return ctx.Post(POST, INLINE, &Action{Method: *callable, Target: target, Values: values})
-		},
-		Replace: func(target Attr) string {
-			return ctx.Post(POST, OUTLINE, &Action{Method: *callable, Target: target, Values: values})
-		},
-		None: func() string {
-			return ctx.Post(POST, NONE, &Action{Method: *callable, Values: values})
-		},
-		// AsSubmit: func(target Attr, swap ...Swap) Attr {
-		// 	return Attr{OnSubmit: ctx.Post(POST, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
+    return Actions{
+        Render: func(target Attr) string {
+            return ctx.Post(POST, INLINE, &Action{Method: *callable, Target: target, Values: values})
+        },
+        Replace: func(target Attr) string {
+            return ctx.Post(POST, OUTLINE, &Action{Method: *callable, Target: target, Values: values})
+        },
+        Append: func(target Attr) string {
+            return ctx.Post(POST, APPEND, &Action{Method: *callable, Target: target, Values: values})
+        },
+        Prepend: func(target Attr) string {
+            return ctx.Post(POST, PREPEND, &Action{Method: *callable, Target: target, Values: values})
+        },
+        None: func() string {
+            return ctx.Post(POST, NONE, &Action{Method: *callable, Values: values})
+        },
+        // AsSubmit: func(target Attr, swap ...Swap) Attr {
+        // 	return Attr{OnSubmit: ctx.Post(POST, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
 		// },
 		// AsClick: func(target Attr, swap ...Swap) Attr {
 		// 	return Attr{OnClick: ctx.Post(POST, swapize(swap...), &Action{Method: *method, Target: target, Values: values})}
@@ -591,9 +621,10 @@ func cacheControlMiddleware(next http.Handler, maxAge time.Duration) http.Handle
 }
 
 type App struct {
-	Lanugage string
-	HTMLBody func(string) string
-	HTMLHead []string
+    Lanugage string
+    HTMLBody func(string) string
+    HTMLHead []string
+    DebugEnabled bool
 }
 
 func (app *App) Register(httpMethod string, path string, method *Callable) string {
@@ -641,6 +672,22 @@ func (app *App) Page(path string, component Callable) **Callable {
 	mu.Unlock()
 
 	return &found
+}
+
+// Debug enables or disables server debug logging.
+// When enabled, debug logs are printed with the "gsui:" prefix.
+func (app *App) Debug(enable bool) {
+    app.DebugEnabled = enable
+}
+
+func (app *App) debugf(format string, args ...any) {
+    if !app.DebugEnabled {
+        return
+    }
+    if !strings.HasSuffix(format, "\n") {
+        format += "\n"
+    }
+    log.Printf("gsui: "+format, args...)
 }
 
 func (app *App) Action(uid string, action Callable) **Callable {
@@ -731,48 +778,49 @@ func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {
 }
 
 func (app *App) Listen(port string) {
-	log.Println("Listening on http://0.0.0.0" + port)
+    log.Println("Listening on http://0.0.0.0" + port)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains("GET POST", r.Method) {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        if !strings.Contains("GET POST", r.Method) {
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+            return
+        }
 
-		value := r.URL.Path
+        value := r.URL.Path
 
-		if strings.Contains(strings.Join(r.Header["Upgrade"], " "), "websocket") {
-			fmt.Println("a web socket")
-			return
-		}
+        if strings.Contains(strings.Join(r.Header["Upgrade"], " "), "websocket") {
+            app.debugf("upgrade request (ignored): %s %s", r.Method, value)
+            return
+        }
 
-		for found, path := range stored {
-			if value == path {
-				ctx := makeContext(app, r, w)
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+        for found, path := range stored {
+            if value == path {
+                ctx := makeContext(app, r, w)
+                w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-				// Recover from panics inside handler calls to avoid broken fetches
-				defer func() {
-					if rec := recover(); rec != nil {
-						log.Println("handler panic recovered:", rec)
-						// Enqueue an error toast to the client
-						displayError(ctx, "Something went wrong ...")
-						// Send minimal body with any queued scripts
-						if len(ctx.append) > 0 {
-							w.Write([]byte(strings.Join(ctx.append, "")))
-						}
-					}
-				}()
+                // Recover from panics inside handler calls to avoid broken fetches
+                defer func() {
+                    if rec := recover(); rec != nil {
+                        log.Println("handler panic recovered:", rec)
+                        // Enqueue an error toast to the client
+                        displayError(ctx, "Something went wrong ...")
+                        // Send minimal body with any queued scripts
+                        if len(ctx.append) > 0 {
+                            w.Write([]byte(strings.Join(ctx.append, "")))
+                        }
+                    }
+                }()
 
-				// Normal call
-				w.Write([]byte((*found)(ctx)))
-				if len(ctx.append) > 0 {
-					w.Write([]byte(strings.Join(ctx.append, "")))
-				}
+                // Normal call
+                app.debugf("route %s -> %s", r.Method, path)
+                w.Write([]byte((*found)(ctx)))
+                if len(ctx.append) > 0 {
+                    w.Write([]byte(strings.Join(ctx.append, "")))
+                }
 
-				return
-			}
-		}
+                return
+            }
+        }
 
 		http.Error(w, "Not found", http.StatusNotFound)
 	})
@@ -1059,8 +1107,12 @@ var __post = Trim(`
 				if (el != null) {
 					if (swap === "inline") {
 						el.innerHTML = html;
-					} else if(swap === "outline") {
+					} else if (swap === "outline") {
 						el.outerHTML = html;
+					} else if (swap === "append") {
+						el.insertAdjacentHTML('beforeend', html);
+					} else if (swap === "prepend") {
+						el.insertAdjacentHTML('afterbegin', html);
 					}
 				}
 			})
@@ -1166,8 +1218,12 @@ var __submit = Trim(`
 				if (el != null) {
 					if (swap === "inline") {
 						el.innerHTML = html;
-					} else if(swap === "outline") {
+					} else if (swap === "outline") {
 						el.outerHTML = html;
+					} else if (swap === "append") {
+						el.insertAdjacentHTML('beforeend', html);
+					} else if (swap === "prepend") {
+						el.insertAdjacentHTML('afterbegin', html);
 					}
 				}
 			})
@@ -1238,11 +1294,11 @@ var __error = Trim(`
 `)
 
 func MakeApp(defaultLanguage string) *App {
-	return &App{
-		Lanugage: defaultLanguage,
-		HTMLHead: []string{
-			`<meta charset="UTF-8">`,
-			`<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
+    return &App{
+        Lanugage: defaultLanguage,
+        HTMLHead: []string{
+            `<meta charset="UTF-8">`,
+            `<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
 			`<style>
 				html {
 					scroll-behavior: smooth;
@@ -1272,10 +1328,10 @@ func MakeApp(defaultLanguage string) *App {
 			`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
 			Script(__stringify, __error, __post, __submit, __load),
 		},
-		HTMLBody: func(class string) string {
-			if class == "" {
-				class = "bg-gray-200"
-			}
+        HTMLBody: func(class string) string {
+            if class == "" {
+                class = "bg-gray-200"
+            }
 
 			return fmt.Sprintf(`
 				<!DOCTYPE html>
@@ -1284,6 +1340,7 @@ func MakeApp(defaultLanguage string) *App {
 					<body id="%s" class="relative">__body__</body>
 				</html>
 			`, class, ContentID.ID)
-		},
-	}
+        },
+        DebugEnabled: false,
+    }
 }
