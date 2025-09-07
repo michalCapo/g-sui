@@ -14,7 +14,7 @@ type deferForm struct {
 // Deffered matches the TS example: returns a skeleton immediately, then
 // pushes two patches when data is ready (replace + append).
 func Deffered(ctx *ui.Context) string {
-	target := ui.Target()
+    target := ui.Target()
 
 	// read optional skeleton preference from body
 	form := deferForm{}
@@ -83,6 +83,10 @@ func Deffered(ctx *ui.Context) string {
 		ctx.Patch(target.Append(), controls)
 	}()
 
-	// return the chosen skeleton immediately
-	return target.Skeleton(form.As)
+    // return header + the chosen skeleton immediately
+    return ui.Div("max-w-5xl mx-auto flex flex-col gap-4")(
+        ui.Div("text-2xl font-bold")("Deferred"),
+        ui.Div("text-gray-600")("Returns a skeleton immediately, then replaces the target and appends controls after a short delay."),
+        target.Skeleton(form.As),
+    )
 }

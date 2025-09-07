@@ -1003,6 +1003,7 @@ func (ctx *Context) Patch(ts TargetSwap, html string, clear ...func()) {
 	if ctx == nil || ctx.App == nil {
 		return
 	}
+
 	// per-session clear callback registration
 	if len(clear) > 0 && clear[0] != nil {
 		ctx.App.sessMu.Lock()
@@ -1522,6 +1523,11 @@ var __ws = Trim(`
             if (window.__gsuiWSInit) { return; }
             window.__gsuiWSInit = true;
             var appPing = 0;
+            // Track targets we've actually seen in the DOM at least once
+            // to avoid reporting them as invalid during initial load.
+            try { if (!(window).__gsuiKnownTargets) { (window).__gsuiKnownTargets = Object.create(null); } } catch(_){}
+            function markSeen(id){ try { (window).__gsuiKnownTargets[id] = true; } catch(_){ } }
+            function wasSeen(id){ try { return !!((window).__gsuiKnownTargets && (window).__gsuiKnownTargets[id]); } catch(_){ return false; } }
             function handlePatch(msg){
                 try {
                     var html = String(msg.html||'');
@@ -1536,14 +1542,20 @@ var __ws = Trim(`
                     var id = String(msg.id||'');
                     var el = document.getElementById(id);
                     if (!el) {
-                        try {
-                            var ws2 = (window).__gsuiWS;
-                            if (ws2 && ws2.readyState === 1) {
-                                ws2.send(JSON.stringify({ type: 'invalid', id: id }));
-                            }
-                        } catch(_){ }
+                        // Only report invalid once the target was present before.
+                        // This prevents calling clear() prematurely during initial render.
+                        if (wasSeen(id)) {
+                            try {
+                                var ws2 = (window).__gsuiWS;
+                                if (ws2 && ws2.readyState === 1) {
+                                    ws2.send(JSON.stringify({ type: 'invalid', id: id }));
+                                }
+                            } catch(_){ }
+                        }
                         return;
                     }
+                    // Mark target as seen when it's present in DOM
+                    try { markSeen(id); } catch(_){ }
                     if (msg.swap==='inline') { el.innerHTML = html; }
                     else if (msg.swap==='outline') { el.outerHTML = html; }
                     else if (msg.swap==='append') { el.insertAdjacentHTML('beforeend', html); }

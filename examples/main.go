@@ -76,7 +76,7 @@ func main() {
 	app.Page("/table", layout("Table", pages.TableContent))
 	app.Page("/others", layout("Others", pages.OthersContent))
 	app.Page("/append", layout("Append / Prepend", pages.AppendContent))
-	app.Page("/clock", layout("Clock", pages.ClockContent))
+	app.Page("/clock", layout("Clock", pages.Clock))
 	app.Page("/deferred", layout("Deferred", pages.Deffered))
 
 	app.Listen(":1422")

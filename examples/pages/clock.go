@@ -7,8 +7,8 @@ import (
 	"github.com/michalCapo/g-sui/ui"
 )
 
-// ClockContent demonstrates server-initiated WS patches updating a target every second.
-func ClockContent(ctx *ui.Context) string {
+// Clock demonstrates server-initiated WS patches updating a target every second.
+func Clock(ctx *ui.Context) string {
 	target := ui.Target()
 
 	pad2 := func(n int) string {
@@ -21,13 +21,14 @@ func ClockContent(ctx *ui.Context) string {
 	clockUI := func() string {
 		t := time.Now()
 		hh, mm, ss := pad2(t.Hour()), pad2(t.Minute()), pad2(t.Second())
-		return ui.Div("font-mono text-3xl", target)(hh + ":" + mm + ":" + ss)
+		return ui.Div("font-mono text-3xl bg-white p-4 rounded", target)(hh + ":" + mm + ":" + ss)
 	}
 
 	// Start pushes a patch every second; stops automatically when the target disappears (invalid target).
-	start := func(ctx *ui.Context) string {
+	start := func(ctx *ui.Context) {
 		stop := make(chan struct{})
 		// Register clear() so the server can stop the ticker when the browser reports target id invalid.
+
 		ctx.Patch(target.Replace(), clockUI(), func() { close(stop) })
 
 		go func() {
@@ -42,17 +43,15 @@ func ClockContent(ctx *ui.Context) string {
 				}
 			}
 		}()
-		return ""
 	}
 
-	return ui.Div("max-w-5xl mx-auto p-6 flex flex-col gap-4")(
-		ui.Div("text-xl font-bold")("Live Clock (WS patches)"),
+	// Autostart live updates on initial render
+	start(ctx)
+
+	return ui.Div("max-w-5xl mx-auto flex flex-col gap-4")(
+		ui.Div("text-2xl font-bold")("Live Clock (WS patches)"),
 		ui.Div("text-gray-600")("Updates replace the target via WebSocket patches every second. Background updates stop automatically when the element disappears (invalid target)."),
 		// initial render
 		clockUI(),
-		// control
-		ui.Div("flex gap-2")(
-			ui.Button().Color(ui.Blue).Class("rounded").Click(ctx.Call(start).None()).Render("Start Live"),
-		),
 	)
 }
