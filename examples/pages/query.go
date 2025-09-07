@@ -116,11 +116,11 @@ func Query(ctx *ui.Context) string {
 	// Build collate instance
 	c := &ui.TCollate[Person]{
 		Init: &ui.TQuery{
-			Limit:  12,
+			Limit:  8,
 			Offset: 0,
 			Order:  "name asc",
 		},
-		Limit:        12,
+		Limit:        8,
 		Target:       target,
 		TargetFilter: filterTarget,
 		Database:     database,
@@ -165,11 +165,11 @@ func Query(ctx *ui.Context) string {
 			// Build a simple row card for each record
 			badges := []string{}
 			if p.Active {
-				badges = append(badges, ui.Span("px-2 py-0.5 rounded text-xs bg-green-100 text-green-700 border border-green-200")("active"))
+				badges = append(badges, ui.Span("w-20 text-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-700 border border-green-200")("active"))
 			} else {
-				badges = append(badges, ui.Span("px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 border border-gray-200")("inactive"))
+				badges = append(badges, ui.Span("w-20 text-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 border border-gray-200")("inactive"))
 			}
-			badges = append(badges, ui.Span("px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700 border border-blue-200")(p.Status))
+			badges = append(badges, ui.Span("w-20 text-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700 border border-blue-200")(p.Status))
 
 			last := "—"
 			if !p.LastLogin.IsZero() {
@@ -196,7 +196,7 @@ func Query(ctx *ui.Context) string {
 	body := ui.Div("max-w-full sm:max-w-5xl mx-auto flex flex-col gap-3")( // wrapper
 		ui.Div("text-3xl font-bold")("Query Demo"),
 		ui.Div("text-gray-600")("In-memory SQLite with 100 seeded records. Supports search, sort, filters, paging, and XLS export."),
-		c.Render(ctx, &ui.TQuery{}),
+		c.Render(ctx, &ui.TQuery{Limit: 8, Order: "name asc"}),
 	)
 
 	return body
