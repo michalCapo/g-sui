@@ -694,16 +694,20 @@ type App struct {
     HTMLBody     func(string) string
     HTMLHead     []string
     DebugEnabled bool
-    sessions     map[string]time.Time
     sessMu       sync.Mutex
+    sessions     map[string]*sessRec
     wsMu         sync.Mutex
     wsClients    map[*websocket.Conn]*wsState
-    clearMu      sync.Mutex
-    targetClear  map[string]func()
+}
+
+type sessRec struct {
+    lastSeen time.Time
+    targets  map[string]func()
 }
 
 type wsState struct {
     lastPong time.Time
+    sid      string
 }
 
 func (app *App) Register(httpMethod string, path string, method *Callable) string {
@@ -855,15 +859,14 @@ func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// Track last-seen for simple session pruning in dev
-	if app != nil {
-		app.sessMu.Lock()
-		if app.sessions == nil {
-			app.sessions = make(map[string]time.Time)
-		}
-		app.sessions[sessionID] = time.Now()
-		app.sessMu.Unlock()
-	}
+    // Track last-seen per session
+    if app != nil {
+        app.sessMu.Lock()
+        if app.sessions == nil { app.sessions = make(map[string]*sessRec) }
+        rec := app.sessions[sessionID]
+        if rec == nil { rec = &sessRec{lastSeen: time.Now(), targets: make(map[string]func())}; app.sessions[sessionID] = rec } else { rec.lastSeen = time.Now() }
+        app.sessMu.Unlock()
+    }
 
 	return &Context{
 		App:       app,
@@ -942,6 +945,10 @@ func (app *App) initWS() {
     http.Handle("/__ws", websocket.Handler(func(ws *websocket.Conn) {
         // Register
         st := &wsState{lastPong: time.Now()}
+        // Resolve session id from handshake cookies
+        if req := ws.Request(); req != nil {
+            if c, err := req.Cookie("tsui__sid"); err == nil { st.sid = c.Value }
+        }
         app.wsMu.Lock()
         app.wsClients[ws] = st
         app.wsMu.Unlock()
@@ -961,6 +968,12 @@ func (app *App) initWS() {
                 select {
                 case <-ticker.C:
                     _ = websocket.Message.Send(ws, `{"type":"ping"}`)
+                    // touch session last-seen
+                    if st.sid != "" {
+                        app.sessMu.Lock()
+                        if rec := app.sessions[st.sid]; rec != nil { rec.lastSeen = time.Now() }
+                        app.sessMu.Unlock()
+                    }
                     app.wsMu.Lock()
                     last := st.lastPong
                     app.wsMu.Unlock()
@@ -990,14 +1003,21 @@ func (app *App) initWS() {
                         app.wsMu.Lock()
                         st.lastPong = time.Now()
                         app.wsMu.Unlock()
+                        if st.sid != "" {
+                            app.sessMu.Lock()
+                            if rec := app.sessions[st.sid]; rec != nil { rec.lastSeen = time.Now() }
+                            app.sessMu.Unlock()
+                        }
                     } else if t == "invalid" {
                         id, _ := obj["id"].(string)
-                        if id != "" {
-                            app.clearMu.Lock()
-                            fn := app.targetClear[id]
-                            delete(app.targetClear, id)
-                            app.clearMu.Unlock()
-                            if fn != nil { func(){ defer func(){ recover() }(); fn() }() }
+                        if id != "" && st.sid != "" {
+                            app.sessMu.Lock()
+                            if rec := app.sessions[st.sid]; rec != nil {
+                                fn := rec.targets[id]
+                                delete(rec.targets, id)
+                                app.sessMu.Unlock()
+                                if fn != nil { func(){ defer func(){ recover() }(); fn() }() }
+                            } else { app.sessMu.Unlock() }
                         }
                     }
                 }
@@ -1030,12 +1050,14 @@ func (ctx *Context) Patch(target Attr, swap Swap, html string, clear ...func()) 
     if ctx == nil || ctx.App == nil {
         return
     }
-    // register optional clear callback for invalid target notice
+    // per-session clear callback registration
     if len(clear) > 0 && clear[0] != nil {
-        ctx.App.clearMu.Lock()
-        if ctx.App.targetClear == nil { ctx.App.targetClear = make(map[string]func()) }
-        ctx.App.targetClear[target.ID] = clear[0]
-        ctx.App.clearMu.Unlock()
+        ctx.App.sessMu.Lock()
+        if ctx.App.sessions == nil { ctx.App.sessions = make(map[string]*sessRec) }
+        rec := ctx.App.sessions[ctx.SessionID]
+        if rec == nil { rec = &sessRec{lastSeen: time.Now(), targets: make(map[string]func())}; ctx.App.sessions[ctx.SessionID] = rec }
+        rec.targets[target.ID] = clear[0]
+        ctx.App.sessMu.Unlock()
     }
     ctx.App.sendPatch(target.ID, swap, html)
 }
@@ -1787,7 +1809,7 @@ func MakeApp(defaultLanguage string) *App {
 			`, class, ContentID.ID)
 		},
 		DebugEnabled: false,
-		sessions:     make(map[string]time.Time),
+		sessions:     make(map[string]*sessRec),
 	}
 }
 
@@ -1813,14 +1835,14 @@ func isSecure(r *http.Request) bool {
 
 // sweepSessions prunes sessions not seen for more than 60 seconds
 func (app *App) sweepSessions() {
-	cutoff := time.Now().Add(-60 * time.Second)
-	app.sessMu.Lock()
-	for k, t := range app.sessions {
-		if t.Before(cutoff) {
-			delete(app.sessions, k)
-		}
-	}
-	app.sessMu.Unlock()
+    cutoff := time.Now().Add(-60 * time.Second)
+    app.sessMu.Lock()
+    for k, rec := range app.sessions {
+        if rec == nil || rec.lastSeen.Before(cutoff) {
+            delete(app.sessions, k)
+        }
+    }
+    app.sessMu.Unlock()
 }
 
 // StartSweeper launches a background goroutine to prune inactive sessions
