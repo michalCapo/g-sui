@@ -1062,6 +1062,11 @@ func (ctx *Context) Patch(target Attr, swap Swap, html string, clear ...func()) 
     ctx.App.sendPatch(target.ID, swap, html)
 }
 
+// PatchTo patches using a TargetSwap convenience descriptor (id+swap).
+func (ctx *Context) PatchTo(ts TargetSwap, html string, clear ...func()) {
+    ctx.Patch(Attr{ID: ts.ID}, ts.Swap, html, clear...)
+}
+
 func (app *App) AutoRestart(enable bool) {
 	if !enable {
 		return

@@ -27,7 +27,7 @@ func ClockContent(ctx *ui.Context) string {
     start := func(c *ui.Context) string {
         stop := make(chan struct{})
         // Register clear() so the server can stop the ticker when the browser reports target id invalid.
-        c.Patch(target, ui.OUTLINE, render(time.Now()), func() { close(stop) })
+        c.PatchTo(target.Replace(), render(time.Now()), func() { close(stop) })
         go func() {
             tick := time.NewTicker(time.Second)
             defer tick.Stop()
@@ -36,7 +36,7 @@ func ClockContent(ctx *ui.Context) string {
                 case <-stop:
                     return
                 case <-tick.C:
-                    c.Patch(target, ui.OUTLINE, render(time.Now()))
+                    c.PatchTo(target.Replace(), render(time.Now()))
                 }
             }
         }()

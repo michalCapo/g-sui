@@ -80,6 +80,12 @@ type Attr struct {
 	Readonly     bool
 }
 
+// TargetSwap pairs a target id with a swap strategy for convenient patch calls.
+type TargetSwap struct {
+    ID   string
+    Swap Swap
+}
+
 type AOption struct {
     ID    string
     Value string
@@ -298,8 +304,14 @@ var Script = func(value ...string) string {
 }
 
 var Target = func() Attr {
-	return Attr{ID: "i" + RandomString(15)}
+    return Attr{ID: "i" + RandomString(15)}
 }
+
+// Convenience helpers on targets to produce swap descriptors compatible with ctx.PatchTo.
+func (a Attr) Replace() TargetSwap { return TargetSwap{ID: a.ID, Swap: OUTLINE} }
+func (a Attr) Render() TargetSwap  { return TargetSwap{ID: a.ID, Swap: INLINE} }
+func (a Attr) Append() TargetSwap  { return TargetSwap{ID: a.ID, Swap: APPEND} }
+func (a Attr) Prepend() TargetSwap { return TargetSwap{ID: a.ID, Swap: PREPEND} }
 
 // ThemeSwitcher renders a small button that cycles System → Light → Dark.
 // It relies on the global setTheme(mode) provided by the server (__theme script).
