@@ -71,6 +71,21 @@ func main() {
 
 Run and open http://localhost:1422
 
+### Favicon (optional)
+
+If you have a favicon, serve it with caching and add a link tag:
+
+```go
+// embed your assets
+//go:embed assets/*
+var assets embed.FS
+
+app.Favicon(assets, "assets/favicon.svg", 24*time.Hour)
+app.HTMLHead = append(app.HTMLHead, `<link rel="icon" href="/favicon.ico" type="image/svg+xml">`)
+```
+
+The server sets the proper Content-Type for common favicon formats (including `image/svg+xml`).
+
 ## Examples
 
 This repo ships an example app showcasing most components and patterns.
@@ -88,7 +103,7 @@ The examples include:
 - Tables with simple helpers (including colspan and empty cells)
 - Icons helpers and Hello demo (success/info/error/crash)
 - Markdown rendering and a CAPTCHA demo
- - Navigation bar that highlights the current page based on the URL path
+- Navigation bar that highlights the current page based on the URL path
 
 ### Active navigation highlight
 
@@ -202,8 +217,7 @@ Notes:
 ## Development notes
 
 - Live status: pages include a lightweight WS client bound to `/__ws` that shows an offline banner, reconnects automatically, and reloads the page on reconnect (useful when the server restarts). The panic fallback page also auto-reloads on reconnect.
-- Autoreload: deprecated and now a no-op; kept only for backward compatibility. You can remove calls to `app.Autoreload(true)`.
-- Autorestart: `app.AutoRestart(true)` watches your main package for file changes and rebuilds + restarts the app process. Combine with Autoreload for a smooth local DX.
+- Autorestart: `app.AutoRestart(true)` watches your main package for file changes and rebuilds + restarts the app process. The built‑in WS client then reloads the page automatically on reconnect, so you get a smooth local DX without any extra setup.
 - The library favors simple strings for HTML; helpers build class names and attributes for you.
 - Validation uses `go-playground/validator`; see the login and showcase examples.
 
