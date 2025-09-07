@@ -1020,8 +1020,8 @@ func rebuildAndExec(root string) error {
 }
 
 func (app *App) Autoreload(enable bool) {
-	if enable {
-		app.HTMLHead = append(app.HTMLHead, `
+    if enable {
+        app.HTMLHead = append(app.HTMLHead, `
         <script>
             (function(){
                 if (window.__srui_live__) return;
@@ -1029,8 +1029,7 @@ func (app *App) Autoreload(enable bool) {
                 const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
                 const socket = new WebSocket(protocol + window.location.host + '/live');
                 socket.addEventListener('close', function () {
-                    document.body.innerHTML += '<div class="fixed inset-0 z-40 opacity-75 bg-gray-800"></div>';
-                    document.body.innerHTML += '<div class="fixed z-50 top-6 left-6 p-6 text-white bg-red-700 rounded border border-gray-500 uppercase font-bold">Offline</div>';
+                    try { if (typeof __offline !== 'undefined') { __offline.show(); } } catch(_){ }
                     setInterval(() => {
                         fetch('/').then(() => window.location.reload()).catch(() => {});
                     }, 2000);
@@ -1082,13 +1081,8 @@ var __post = Trim(`
 			body.push({ name, type, value });
 		}
 
-		let loader;
-		let loading = setTimeout(() => {
-			loader = document.createElement("div");
-			loader.classList = "fixed inset-0 flex gap-4 items-center justify-center z-50 bg-white opacity-75 font-bold text-3xl";
-			loader.innerHTML = "Loading ...";
-			document.body.appendChild(loader);
-		}, 100);
+
+		var L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
 
 		fetch(path, {method: "POST", body: JSON.stringify(body)})
 			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
@@ -1117,7 +1111,7 @@ var __post = Trim(`
 				}
 			})
 			.catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
-			.finally(function(){ clearTimeout(loading); if(loader){ try { document.body.removeChild(loader); } catch(_){} } });
+			.finally(function(){ try { L.stop(); } catch(_){} });
     }
 `)
 
@@ -1193,13 +1187,7 @@ var __submit = Trim(`
 			}
 		});
 
-		let loader;
-		let loading = setTimeout(() => {
-			loader = document.createElement("div");
-			loader.classList = "fixed inset-0 flex gap-4 items-center justify-center z-50 bg-white opacity-75 font-bold text-3xl";
-			loader.innerHTML = "Loading ...";
-			document.body.appendChild(loader);
-		}, 100);
+		var L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
 
 		fetch(path, {method: "POST", body: JSON.stringify(body)})
 			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
@@ -1228,7 +1216,7 @@ var __submit = Trim(`
 				}
 			})
             .catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
-            .finally(function(){ clearTimeout(loading); if(loader){ try { document.body.removeChild(loader); } catch(_){} } });
+            .finally(function(){ try { L.stop(); } catch(_){} });
     }
 `)
 
@@ -1236,13 +1224,8 @@ var __load = Trim(`
     function __load(href) {
 		event.preventDefault(); 
 
-		let loader;
-		let loading = setTimeout(() => {
-			loader = document.createElement("div");
-			loader.classList = "fixed inset-0 flex gap-4 items-center justify-center z-50 bg-white opacity-75 font-bold text-3xl";
-			loader.innerHTML = "Loading ...";
-			document.body.appendChild(loader);
-		}, 100);
+
+		var L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
 
 		fetch(href, {method: "GET"})
 			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
@@ -1263,7 +1246,7 @@ var __load = Trim(`
 				window.history.pushState({}, doc.title, href);
 			})
 			.catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
-			.finally(function(){ clearTimeout(loading); if(loader){ try { document.body.removeChild(loader); } catch(_){} } });
+			.finally(function(){ try { L.stop(); } catch(_){} });
     }
 `)
 
@@ -1300,6 +1283,93 @@ var __theme = Trim(`
                 }
             } catch(_){ }
         } catch(_){ }
+    })();
+`)
+
+// __loader: shared loading overlay with delayed show and fade-out
+var __loader = Trim(`
+    var __loader = (function(){
+        var S = { count: 0, t: 0, el: null };
+        function build() {
+            var overlay = document.createElement('div');
+            overlay.className = 'fixed inset-0 z-50 flex items-center justify-center transition-opacity opacity-0';
+            try { overlay.style.backdropFilter = 'blur(3px)'; } catch(_){}
+            try { overlay.style.webkitBackdropFilter = 'blur(3px)'; } catch(_){}
+            try { overlay.style.background = 'rgba(255,255,255,0.28)'; } catch(_){}
+            try { overlay.style.pointerEvents = 'auto'; } catch(_){}
+            var badge = document.createElement('div');
+            badge.className = 'absolute top-3 left-3 flex items-center gap-2 rounded-full px-3 py-1 text-white shadow-lg ring-1 ring-white/30';
+            badge.style.background = 'linear-gradient(135deg, #6366f1, #22d3ee)';
+            var dot = document.createElement('span');
+            dot.className = 'inline-block h-2.5 w-2.5 rounded-full bg-white/95 animate-pulse';
+            var label = document.createElement('span');
+            label.className = 'font-semibold tracking-wide';
+            label.textContent = 'Loading…';
+            var sub = document.createElement('span');
+            sub.className = 'ml-1 text-white/85 text-xs';
+            sub.textContent = 'Please wait';
+            sub.style.color = 'rgba(255,255,255,0.9)';
+            badge.appendChild(dot); badge.appendChild(label); badge.appendChild(sub);
+            overlay.appendChild(badge);
+            document.body.appendChild(overlay);
+            try { requestAnimationFrame(function(){ overlay.style.opacity = '1'; }); } catch(_){}
+            return overlay;
+        }
+        function start() {
+            S.count = S.count + 1;
+            if (S.el != null) { return { stop: stop }; }
+            if (S.t) { return { stop: stop }; }
+            S.t = setTimeout(function(){ S.t = 0; if (S.el == null) { S.el = build(); } }, 120);
+            return { stop: stop };
+        }
+        function stop() {
+            if (S.count > 0) { S.count = S.count - 1; }
+            if (S.count !== 0) { return; }
+            if (S.t) { try { clearTimeout(S.t); } catch(_){} S.t = 0; }
+            if (S.el) {
+                var el = S.el; S.el = null;
+                try { el.style.opacity = '0'; } catch(_){}
+                setTimeout(function(){ try { if (el && el.parentNode) { el.parentNode.removeChild(el); } } catch(_){} }, 160);
+            }
+        }
+        return { start: start };
+    })();
+`)
+
+// __offline: overlay shown when live WS disconnects; removed on reload
+var __offline = Trim(`
+    var __offline = (function(){
+        var el = null;
+        function show(){
+            if (document.getElementById('__offline__')) { el = document.getElementById('__offline__'); return; }
+            try { document.body.classList.add('pointer-events-none'); } catch(_){ }
+            var overlay = document.createElement('div');
+            overlay.id = '__offline__';
+            overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.zIndex = '60';
+            overlay.style.pointerEvents = 'none'; overlay.style.opacity = '0'; overlay.style.transition = 'opacity 160ms ease-out';
+            try { overlay.style.backdropFilter = 'blur(2px)'; } catch(_){ }
+            try { overlay.style.webkitBackdropFilter = 'blur(2px)'; } catch(_){ }
+            try { overlay.style.background = 'rgba(255,255,255,0.18)'; } catch(_){ }
+            var badge = document.createElement('div');
+            badge.className = 'absolute top-3 left-3 flex items-center gap-2 rounded-full px-3 py-1 text-white shadow-lg ring-1 ring-white/30';
+            badge.style.background = 'linear-gradient(135deg, #ef4444, #ec4899)';
+            var dot = document.createElement('span'); dot.className = 'inline-block h-2.5 w-2.5 rounded-full bg-white/95 animate-pulse';
+            var label = document.createElement('span'); label.className = 'font-semibold tracking-wide'; label.textContent = 'Offline'; label.style.color = '#fff';
+            var sub = document.createElement('span'); sub.className = 'ml-1 text-white/85 text-xs'; sub.textContent = 'Trying to reconnect…'; sub.style.color = 'rgba(255,255,255,0.9)';
+            badge.appendChild(dot); badge.appendChild(label); badge.appendChild(sub);
+            overlay.appendChild(badge);
+            document.body.appendChild(overlay);
+            try { requestAnimationFrame(function(){ overlay.style.opacity = '1'; }); } catch(_){ }
+            el = overlay;
+        }
+        function hide(){
+            try { document.body.classList.remove('pointer-events-none'); } catch(_){ }
+            var o = document.getElementById('__offline__'); if (!o) { el = null; return; }
+            try { o.style.opacity = '0'; } catch(_){ }
+            setTimeout(function(){ try { if (o && o.parentNode) { o.parentNode.removeChild(o); } } catch(_){} }, 150);
+            el = null;
+        }
+        return { show: show, hide: hide };
     })();
 `)
 
@@ -1381,7 +1451,7 @@ func MakeApp(defaultLanguage string) *App {
                 /* Hover helpers used in nav/examples */
                 .dark .hover\:bg-gray-200:hover { background-color:#374151 !important; }
             </style>`,
-            Script(__stringify, __error, __post, __submit, __load, __theme),
+            Script(__stringify, __loader, __offline, __error, __post, __submit, __load, __theme),
         },
         HTMLBody: func(class string) string {
             if class == "" {

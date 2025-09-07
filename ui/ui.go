@@ -81,8 +81,8 @@ type Attr struct {
 }
 
 type AOption struct {
-	ID    string
-	Value string
+    ID    string
+    Value string
 }
 
 func MakeOptions(options []string) []AOption {
@@ -294,7 +294,7 @@ var Markdown = func(css string) func(elements ...string) string {
 }
 
 var Script = func(value ...string) string {
-	return Trim(fmt.Sprintf(`<script>%s</script>`, strings.Join(value, " ")))
+    return Trim(fmt.Sprintf(`<script>%s</script>`, strings.Join(value, " ")))
 }
 
 var Target = func() Attr {
@@ -339,6 +339,96 @@ func ThemeSwitcher(css string) string {
 
 	return btn + script
 }
+
+// Skeletons
+//
+// Provides simple placeholder UIs similar to t-sui, usable while loading data.
+// These do not require WebSockets; you can render them directly or swap later.
+
+type Skeleton string
+
+const (
+    SkeletonList      Skeleton = "list"
+    SkeletonComponent Skeleton = "component"
+    SkeletonPage      Skeleton = "page"
+    SkeletonForm      Skeleton = "form"
+)
+
+// Skeleton renders a default component-style skeleton for the given target.
+func (a Attr) Skeleton(kind ...Skeleton) string {
+    k := SkeletonComponent
+    if len(kind) > 0 {
+        k = kind[0]
+    }
+    switch k {
+    case SkeletonList:
+        return a.SkeletonList(5)
+    case SkeletonPage:
+        return a.SkeletonPage()
+    case SkeletonForm:
+        return a.SkeletonForm()
+    default:
+        return a.SkeletonComponent()
+    }
+}
+
+// SkeletonList renders a vertical list of generic list items.
+func (a Attr) SkeletonList(count int) string {
+    if count <= 0 {
+        count = 5
+    }
+    items := make([]string, 0, count)
+    for i := 0; i < count; i++ {
+        items = append(items, Div("flex items-center gap-3")(
+            Div("h-10 w-10 bg-gray-200 rounded-full animate-pulse")(),
+            Div("flex-1 space-y-2")(
+                Div("h-3 bg-gray-200 rounded animate-pulse")(),
+                Div("h-3 bg-gray-200 rounded w-3/5 animate-pulse")(),
+            ),
+        ))
+    }
+    return Div("p-4 space-y-3", a)(strings.Join(items, " "))
+}
+
+// SkeletonComponent renders a card-like skeleton block.
+func (a Attr) SkeletonComponent() string {
+    return Div("p-4", a)(
+        Div("bg-white dark:bg-gray-900 rounded shadow border p-4 space-y-3")(
+            Div("h-4 bg-gray-200 rounded w-1/3 animate-pulse")(),
+            Div("h-3 bg-gray-200 rounded w-4/5 animate-pulse")(),
+            Div("h-3 bg-gray-200 rounded w-2/3 animate-pulse")(),
+        ),
+    )
+}
+
+// SkeletonPage renders a larger page-level skeleton with header and blocks.
+func (a Attr) SkeletonPage() string {
+    blocks := []string{
+        Div("h-6 bg-gray-200 rounded w-1/4 animate-pulse")(),
+        Div("h-4 bg-gray-200 rounded w-full animate-pulse")(),
+        Div("h-4 bg-gray-200 rounded w-5/6 animate-pulse")(),
+        Div("h-4 bg-gray-200 rounded w-2/3 animate-pulse")(),
+    }
+    return Div("p-4 space-y-4", a)(strings.Join(blocks, " "))
+}
+
+// SkeletonForm renders a form-shaped skeleton: labels and inputs as blocks.
+func (a Attr) SkeletonForm() string {
+    row := func() string {
+        return Div("space-y-2")(
+            Div("h-3 bg-gray-200 rounded w-24 animate-pulse")(),
+            Div("h-10 bg-gray-200 rounded animate-pulse")(),
+        )
+    }
+    return Div("p-4 space-y-4", a)(strings.Join([]string{row(), row(), row(), row()}, " "))
+}
+
+// Convenience globals (without binding to a specific target id)
+func SkeletonDefault() string               { return Attr{}.Skeleton() }
+func SkeletonListN(count int) string        { return Attr{}.SkeletonList(count) }
+func SkeletonComponentBlock() string        { return Attr{}.SkeletonComponent() }
+func SkeletonPageBlock() string             { return Attr{}.SkeletonPage() }
+func SkeletonFormBlock() string             { return Attr{}.SkeletonForm() }
 
 func Variable[T any](getter func(*T) string) func(item *T) Attr {
 	temp := Target()

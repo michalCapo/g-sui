@@ -23,8 +23,9 @@ var routes = []route{
 	{Path: "/select", Title: "Select"},
 	{Path: "/checkbox", Title: "Checkbox"},
 	{Path: "/radio", Title: "Radio"},
-	{Path: "/table", Title: "Table"},
-	{Path: "/others", Title: "Others"},
+    {Path: "/table", Title: "Table"},
+    {Path: "/others", Title: "Others"},
+    {Path: "/append", Title: "Append/Prepend"},
 }
 
 func main() {
@@ -71,7 +72,8 @@ func main() {
 	app.Page("/checkbox", layout("Checkbox", pages.CheckboxContent))
 	app.Page("/radio", layout("Radio", pages.RadioContent))
 	app.Page("/table", layout("Table", pages.TableContent))
-	app.Page("/others", layout("Others", pages.OthersContent))
+    app.Page("/others", layout("Others", pages.OthersContent))
+    app.Page("/append", layout("Append / Prepend", pages.AppendContent))
 
 	app.Listen(":1422")
 }
