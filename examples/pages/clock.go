@@ -23,23 +23,29 @@ func ClockContent(ctx *ui.Context) string {
 		return ui.Div("font-mono text-3xl", target)(hh + ":" + mm + ":" + ss)
 	}
 
-	// Start pushes a patch every second for a while.
-	start := func(c *ui.Context) string {
-		go func() {
-			tick := time.NewTicker(time.Second)
-			defer tick.Stop()
-			// Run for 5 minutes max; clients without this target id will ignore patches.
-			for i := 0; i < 300; i++ {
-				<-tick.C
-				c.Patch(target, ui.OUTLINE, render(time.Now()))
-			}
-		}()
-		return ""
-	}
+    // Start pushes a patch every second; stops automatically when the target disappears (invalid target).
+    start := func(c *ui.Context) string {
+        stop := make(chan struct{})
+        // Register clear() so the server can stop the ticker when the browser reports target id invalid.
+        c.Patch(target, ui.OUTLINE, render(time.Now()), func() { close(stop) })
+        go func() {
+            tick := time.NewTicker(time.Second)
+            defer tick.Stop()
+            for {
+                select {
+                case <-stop:
+                    return
+                case <-tick.C:
+                    c.Patch(target, ui.OUTLINE, render(time.Now()))
+                }
+            }
+        }()
+        return ""
+    }
 
 	return ui.Div("max-w-5xl mx-auto p-6 flex flex-col gap-4")(
 		ui.Div("text-xl font-bold")("Live Clock (WS patches)"),
-		ui.Div("text-gray-600")("Updates replace the target via WebSocket patches every second."),
+        ui.Div("text-gray-600")("Updates replace the target via WebSocket patches every second. Background updates stop automatically when the element disappears (invalid target)."),
 		// initial render
 		render(time.Now()),
 		// control

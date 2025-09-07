@@ -621,14 +621,16 @@ func cacheControlMiddleware(next http.Handler, maxAge time.Duration) http.Handle
 }
 
 type App struct {
-	Lanugage     string
-	HTMLBody     func(string) string
-	HTMLHead     []string
-	DebugEnabled bool
-	sessions     map[string]time.Time
-	sessMu       sync.Mutex
+    Lanugage     string
+    HTMLBody     func(string) string
+    HTMLHead     []string
+    DebugEnabled bool
+    sessions     map[string]time.Time
+    sessMu       sync.Mutex
     wsMu         sync.Mutex
     wsClients    map[*websocket.Conn]*wsState
+    clearMu      sync.Mutex
+    targetClear  map[string]func()
 }
 
 type wsState struct {
@@ -903,7 +905,7 @@ func (app *App) initWS() {
             }
         }()
 
-        // Receive loop: handle ping/pong from client
+        // Receive loop: handle ping/pong from client and invalid target notices
         for {
             var s string
             if err := websocket.Message.Receive(ws, &s); err != nil {
@@ -919,6 +921,15 @@ func (app *App) initWS() {
                         app.wsMu.Lock()
                         st.lastPong = time.Now()
                         app.wsMu.Unlock()
+                    } else if t == "invalid" {
+                        id, _ := obj["id"].(string)
+                        if id != "" {
+                            app.clearMu.Lock()
+                            fn := app.targetClear[id]
+                            delete(app.targetClear, id)
+                            app.clearMu.Unlock()
+                            if fn != nil { func(){ defer func(){ recover() }(); fn() }() }
+                        }
                     }
                 }
             }
@@ -946,11 +957,18 @@ func (app *App) sendPatch(id string, swap Swap, html string) {
 }
 
 // Patch pushes a patch to WS clients (basic broadcast; no per-session routing).
-func (ctx *Context) Patch(target Attr, swap Swap, html string) {
-	if ctx == nil || ctx.App == nil {
-		return
-	}
-	ctx.App.sendPatch(target.ID, swap, html)
+func (ctx *Context) Patch(target Attr, swap Swap, html string, clear ...func()) {
+    if ctx == nil || ctx.App == nil {
+        return
+    }
+    // register optional clear callback for invalid target notice
+    if len(clear) > 0 && clear[0] != nil {
+        ctx.App.clearMu.Lock()
+        if ctx.App.targetClear == nil { ctx.App.targetClear = make(map[string]func()) }
+        ctx.App.targetClear[target.ID] = clear[0]
+        ctx.App.clearMu.Unlock()
+    }
+    ctx.App.sendPatch(target.ID, swap, html)
 }
 
 func (app *App) AutoRestart(enable bool) {
@@ -1466,7 +1484,17 @@ var __ws = Trim(`
                             var s=document.createElement('script'); s.textContent=scripts[i].textContent; document.body.appendChild(s);
                         }
                     } catch(_){ }
-                    var el = document.getElementById(String(msg.id||'')); if (!el) { return; }
+                    var id = String(msg.id||'');
+                    var el = document.getElementById(id);
+                    if (!el) {
+                        try {
+                            var ws2 = (window).__gsuiWS;
+                            if (ws2 && ws2.readyState === 1) {
+                                ws2.send(JSON.stringify({ type: 'invalid', id: id }));
+                            }
+                        } catch(_){ }
+                        return;
+                    }
                     if (msg.swap==='inline') { el.innerHTML = html; }
                     else if (msg.swap==='outline') { el.outerHTML = html; }
                     else if (msg.swap==='append') { el.insertAdjacentHTML('beforeend', html); }
@@ -1476,6 +1504,7 @@ var __ws = Trim(`
             function connect(){
                 var p=(location.protocol==='https:')?'wss://':'ws://';
                 var ws = new WebSocket(p+location.host+'/__ws');
+                try { (window).__gsuiWS = ws; } catch(_){ }
                 ws.onopen = function(){
                     try { if (typeof __offline !== 'undefined') { __offline.hide(); } } catch(_){ }
                     try { if (appPing) { clearInterval(appPing); appPing = 0; } } catch(_){ }
