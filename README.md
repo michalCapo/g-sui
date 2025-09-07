@@ -17,7 +17,7 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 - Form helpers with validation (uses `go-playground/validator`)
 - A small set of UI inputs (text, password, number, date/time, select, checkbox, radio, textarea), buttons, tables, icons
 - Toast messages: `Success`, `Error`, `Info`, and an error toast with a Reload button
-- Built-in live status via WebSocket (`/__ws`) with an offline banner and automatic reconnect
+- Built-in live status via WebSocket (`/__ws`) with an offline banner, automatic reconnect, and auto-reload on reconnect
 - Optional dev autorestart (`app.AutoRestart(true)`) to rebuild and restart on changes
 
 ## Install
@@ -201,7 +201,7 @@ Notes:
 
 ## Development notes
 
-- Live status: pages include a lightweight WS client bound to `/__ws` that shows an offline banner and reconnects automatically. The panic fallback page auto-reloads on reconnect.
+- Live status: pages include a lightweight WS client bound to `/__ws` that shows an offline banner, reconnects automatically, and reloads the page on reconnect (useful when the server restarts). The panic fallback page also auto-reloads on reconnect.
 - Autoreload: deprecated and now a no-op; kept only for backward compatibility. You can remove calls to `app.Autoreload(true)`.
 - Autorestart: `app.AutoRestart(true)` watches your main package for file changes and rebuilds + restarts the app process. Combine with Autoreload for a smooth local DX.
 - The library favors simple strings for HTML; helpers build class names and attributes for you.

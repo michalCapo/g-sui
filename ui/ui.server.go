@@ -1493,6 +1493,8 @@ var __ws = Trim(`
             if (window.__gsuiWSInit) { return; }
             window.__gsuiWSInit = true;
             var appPing = 0;
+            // Track whether the WS has ever been closed; used to trigger a full reload once it reconnects
+            try { if (!(window).__gsuiHadClose) { (window).__gsuiHadClose = false; } } catch(_){ }
             // Track targets we've actually seen in the DOM at least once
             // to avoid reporting them as invalid during initial load.
             try { if (!(window).__gsuiKnownTargets) { (window).__gsuiKnownTargets = Object.create(null); } } catch(_){}
@@ -1539,6 +1541,8 @@ var __ws = Trim(`
                 ws.onopen = function(){
                     try { if (typeof __offline !== 'undefined') { __offline.hide(); } } catch(_){ }
                     try { if (appPing) { clearInterval(appPing); appPing = 0; } } catch(_){ }
+                    // If the socket had previously closed, we just reconnected — reload to pick up new server state/binary
+                    try { if ((window).__gsuiHadClose) { (window).__gsuiHadClose = false; try { location.reload(); return; } catch(__){} } } catch(_){ }
                     try {
                         ws.send(JSON.stringify({ type: 'ping', t: Date.now() }));
                         appPing = setInterval(function(){
@@ -1559,6 +1563,7 @@ var __ws = Trim(`
                 ws.onclose = function(){
                     try { if (appPing) { clearInterval(appPing); appPing = 0; } } catch(_){ }
                     try { if (typeof __offline !== 'undefined') { __offline.show(); } } catch(_){ }
+                    try { (window).__gsuiHadClose = true; } catch(_){ }
                     setTimeout(connect, 1500);
                 };
                 ws.onerror = function(){ try { ws.close(); } catch(_){ } };
