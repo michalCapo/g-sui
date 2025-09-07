@@ -141,8 +141,8 @@ func Query(ctx *ui.Context) string {
 	email := ui.TField{DB: "email", Field: "Email", Text: "Email"}
 	surname := ui.TField{DB: "surname", Field: "Surname", Text: "Surname", As: ui.SELECT, Options: ui.MakeOptions(lastNames)}
 	active := ui.TField{DB: "active", Field: "Active", Text: "Active", As: ui.BOOL, Bool: false}
-	lastLogin := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Has logged in", As: ui.ZERO_DATE, Bool: false}
-	neverLoggedIn := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Never logged in", As: ui.NOT_ZERO_DATE, Bool: false}
+	lastLogin := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Has logged in", As: ui.NOT_ZERO_DATE, Bool: false}
+	neverLoggedIn := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Never logged in", As: ui.ZERO_DATE, Bool: false}
 	createdAt := ui.TField{DB: "created_at", Field: "CreatedAt", Text: "Created between", As: ui.DATES}
 	status := ui.TField{DB: "status", Field: "Status", Text: "Status", As: ui.SELECT, Options: ui.MakeOptions(statuses)}
 	country := ui.TField{DB: "country", Field: "Country", Text: "Country", As: ui.SELECT, Options: ui.MakeOptions(countries)}
@@ -168,12 +168,10 @@ func Query(ctx *ui.Context) string {
 		lastLogin,
 	)
 	collate.Filter(
-		surname,
 		active,
 		lastLogin,
 		neverLoggedIn,
 		createdAt,
-		status,
 	)
 	collate.Excel(
 		surname,
