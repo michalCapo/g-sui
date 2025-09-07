@@ -171,8 +171,6 @@ type collate[T any] struct {
 	ExcelFields  []TField
 	OnRow        func(*T, int) string
 	OnExcel      func(*[]T) (string, io.Reader, error)
-	Set          func(*TQuery)
-	Get          func(*TQuery)
 }
 
 // Collate constructs a new collate with sensible defaults using the provided init query.
@@ -187,9 +185,9 @@ func Collate[T any](init *TQuery) *collate[T] {
 func (collate *collate[T]) onXLS(ctx *Context) string {
 	// Set query for all records
 	query := makeQuery(collate.Init)
-
-	if collate.Get != nil {
-		collate.Get(query)
+	err := ctx.Body(query)
+	if err != nil {
+		fmt.Println(err)
 	}
 
 	query.Limit = 1000000
@@ -270,25 +268,18 @@ func (collate *collate[T]) onXLS(ctx *Context) string {
 func (collate *collate[T]) onResize(ctx *Context) string {
 	query := makeQuery(collate.Init)
 
-	if collate.Get != nil {
-		collate.Get(query)
+	err := ctx.Body(query)
+	if err != nil {
+		fmt.Println(err)
 	}
 
-	query.Limit += query.Limit
-
-	if collate.Set != nil {
-		collate.Set(query)
-	}
+	query.Limit *= 2
 
 	return collate.ui(ctx, query)
 }
 
 func (collate *collate[T]) onSort(ctx *Context) string {
 	query := makeQuery(collate.Init)
-
-	if collate.Get != nil {
-		collate.Get(query)
-	}
 
 	body := &TQuery{}
 	err := ctx.Body(body)
@@ -298,31 +289,15 @@ func (collate *collate[T]) onSort(ctx *Context) string {
 
 	query.Order = body.Order
 
-	if collate.Set != nil {
-		collate.Set(query)
-	}
-
 	return collate.ui(ctx, query)
 }
 
 func (collate *collate[T]) onSearch(ctx *Context) string {
 	query := makeQuery(collate.Init)
 
-	if collate.Get != nil {
-		collate.Get(query)
-	}
-
-	body := &TQuery{}
-	err := ctx.Body(body)
+	err := ctx.Body(query)
 	if err != nil {
 		fmt.Println(err)
-	}
-
-	query.Search = body.Search
-	query.Filter = body.Filter
-
-	if collate.Set != nil {
-		collate.Set(query)
 	}
 
 	return collate.ui(ctx, query)
@@ -330,10 +305,6 @@ func (collate *collate[T]) onSearch(ctx *Context) string {
 
 func (collate *collate[T]) onReset(ctx *Context) string {
 	query := makeQuery(collate.Init)
-
-	if collate.Set != nil {
-		collate.Set(query)
-	}
 
 	return collate.ui(ctx, query)
 }
@@ -472,14 +443,6 @@ func (collate *collate[T]) Render(ctx *Context, database *gorm.DB) string {
 
 	// Establish base query
 	query := makeQuery(collate.Init)
-
-	if collate.Get != nil {
-		collate.Get(query)
-	}
-
-	if collate.Set != nil {
-		collate.Set(query)
-	}
 
 	return collate.ui(ctx, query)
 }
@@ -717,7 +680,7 @@ func Searching[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 		If(len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
 			return Button().
 				Color(Blue).
-				Click(ctx.Call(collate.onXLS).None()).
+				Click(ctx.Call(collate.onXLS, query).None()).
 				Render(Icon2("fa fa-download", "XLS"))
 		}),
 
@@ -816,7 +779,7 @@ func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T])
 				Class("rounded-r").
 				Color(Purple).
 				Disabled(size >= int(result.Filtered)).
-				Click(ctx.Call(collate.onResize).Replace(collate.Target)).
+				Click(ctx.Call(collate.onResize, result.Query).Replace(collate.Target)).
 				Render(
 					Div("flex gap-2 items-center")(
 						Icon("fa fa-arrow-down"), more,
