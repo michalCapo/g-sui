@@ -18,7 +18,11 @@ func Deffered(ctx *ui.Context) string {
 
 	// read optional skeleton preference from body
 	form := deferForm{}
-	_ = ctx.Body(&form)
+	err := ctx.Body(&form)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// LazyLoadData: replace after ~2s
 	go func() {
@@ -30,6 +34,7 @@ func Deffered(ctx *ui.Context) string {
 				ui.Div("text-gray-600 text-sm")("This block replaced the skeleton via WebSocket patch."),
 			),
 		)
+
 		ctx.Patch(target.Replace(), html)
 	}()
 
@@ -37,26 +42,47 @@ func Deffered(ctx *ui.Context) string {
 	go func() {
 		defer func() { recover() }()
 		time.Sleep(2100 * time.Millisecond)
-		// helpers for calls with different skeletons
-		callDefault := ctx.Call(Deffered, &deferForm{}).Replace(target)
-		callComponent := ctx.Call(Deffered, &deferForm{As: ui.SkeletonComponent}).Replace(target)
-		callList := ctx.Call(Deffered, &deferForm{As: ui.SkeletonList}).Replace(target)
-		callPage := ctx.Call(Deffered, &deferForm{As: ui.SkeletonPage}).Replace(target)
-		callForm := ctx.Call(Deffered, &deferForm{As: ui.SkeletonForm}).Replace(target)
 
 		controls := ui.Div("grid grid-cols-5 gap-4")(
-			ui.Button().Color(ui.Blue).Class("rounded text-sm").Click(callDefault).Render("Default skeleton"),
-			ui.Button().Color(ui.Blue).Class("rounded text-sm").Click(callComponent).Render("Component skeleton"),
-			ui.Button().Color(ui.Blue).Class("rounded text-sm").Click(callList).Render("List skeleton"),
-			ui.Button().Color(ui.Blue).Class("rounded text-sm").Click(callPage).Render("Page skeleton"),
-			ui.Button().Color(ui.Blue).Class("rounded text-sm").Click(callForm).Render("Form skeleton"),
+			ui.
+				Button().
+				Color(ui.Blue).
+				Class("rounded text-sm").
+				Click(ctx.Call(Deffered, &deferForm{}).Replace(target)).
+				Render("Default skeleton"),
+
+			ui.
+				Button().
+				Color(ui.Blue).
+				Class("rounded text-sm").
+				Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonComponent}).Replace(target)).
+				Render("Component skeleton"),
+
+			ui.
+				Button().
+				Color(ui.Blue).
+				Class("rounded text-sm").
+				Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonList}).Replace(target)).
+				Render("List skeleton"),
+
+			ui.
+				Button().
+				Color(ui.Blue).
+				Class("rounded text-sm").
+				Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonPage}).Replace(target)).
+				Render("Page skeleton"),
+
+			ui.
+				Button().
+				Color(ui.Blue).
+				Class("rounded text-sm").
+				Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonForm}).Replace(target)).
+				Render("Form skeleton"),
 		)
+
 		ctx.Patch(target.Append(), controls)
 	}()
 
 	// return the chosen skeleton immediately
 	return target.Skeleton(form.As)
 }
-
-// DeferredContent keeps the route stable by delegating to Deffered.
-func DeferredContent(ctx *ui.Context) string { return Deffered(ctx) }
