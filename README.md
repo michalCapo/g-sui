@@ -14,6 +14,7 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 - Lightweight interactivity via server actions (`Click`, `Submit`, `Send`)
 - Partial updates: re-render or replace only the target element
 - Deferred fragments with skeletons via WebSocket patches (`ctx.Patch` + skeleton helpers)
+- Query/Collate helper for data UIs: search, sort, filters, paging, and XLS export (works with `gorm`)
 - Form helpers with validation (uses `go-playground/validator`)
 - A small set of UI inputs (text, password, number, date/time, select, checkbox, radio, textarea), buttons, tables, icons
 - Toast messages: `Success`, `Error`, `Info`, and an error toast with a Reload button
@@ -103,6 +104,7 @@ The examples include:
 - Tables with simple helpers (including colspan and empty cells)
 - Icons helpers and Hello demo (success/info/error/crash)
 - Markdown rendering and a CAPTCHA demo
+- Query demo: in-memory SQLite + GORM with `ui.TCollate` (search, sort, filters, paging, XLS export)
 - Navigation bar that highlights the current page based on the URL path
 
 ### Active navigation highlight
@@ -132,6 +134,70 @@ Attach server actions via:
 On the server, an action has the signature `func(*ui.Context) string` and returns HTML (or an empty string if not swapping anything).
 
 Forms can use `ctx.Submit(fn).Render/Replace/None()` and `ctx.Body(out)` to bind values to a struct.
+
+## Query/Collate (search, sort, filters, paging, XLS)
+
+Build data-centric pages quickly using `ui.TCollate`. Define fields, choose which ones participate in search/sort/filter, optionally enable Excel export, and provide a row renderer. Works with `gorm` and SQLite (and other DBs).
+
+Minimal example (excerpt):
+
+```go
+type Person struct {
+    ID        uint `gorm:"primaryKey"`
+    Name      string
+    Surname   string
+    Email     string
+    Country   string
+    Status    string
+    Active    bool
+    CreatedAt time.Time
+    LastLogin time.Time // zero means "never"
+}
+
+// Recommended for SQLite: install normalize() for accent-insensitive search
+_ = ui.RegisterSQLiteNormalize(db)
+
+// Define fields
+name := ui.TField{DB: "name", Field: "Name", Text: "Name"}
+surname := ui.TField{DB: "surname", Field: "Surname", Text: "Surname"}
+email := ui.TField{DB: "email", Field: "Email", Text: "Email"}
+status := ui.TField{DB: "status", Field: "Status", Text: "Status", As: ui.SELECT, Options: ui.MakeOptions([]string{"new","active","blocked"})}
+active := ui.TField{DB: "active", Field: "Active", Text: "Active", As: ui.BOOL}
+created := ui.TField{DB: "created_at", Field: "CreatedAt", Text: "Created", As: ui.DATES}
+lastLogin := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Has logged in", As: ui.NOT_ZERO_DATE}
+neverLogin := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Never logged in", As: ui.ZERO_DATE}
+
+init := &ui.TQuery{Limit: 8, Order: "surname asc"}
+
+collate := ui.Collate[Person](init)
+collate.Search(surname, name, email, status)
+collate.Sort(surname, email, lastLogin)
+collate.Filter(active, lastLogin, neverLogin, created)
+collate.Excel(surname, name, email, status, active, created, lastLogin)
+
+// How each row renders
+collate.Row(func(p *Person, _ int) string {
+    badge := ui.Span("px-2 py-0.5 rounded text-xs border "+
+        map[bool]string{true: "bg-green-100 text-green-700 border-green-200", false: "bg-gray-100 text-gray-700 border-gray-200"}[p.Active])(
+        map[bool]string{true: "active", false: "inactive"}[p.Active],
+    )
+    return ui.Div("bg-white rounded border p-3 flex items-center justify-between")(
+        ui.Div("font-semibold")(fmt.Sprintf("%s %s", p.Surname, p.Name))+
+        ui.Div("text-sm text-gray-500 ml-2")(p.Email)+
+        badge,
+    )
+})
+
+// Render the full UI (search/sort/filters/paging/export)
+content := collate.Render(ctx, db)
+```
+
+Notes:
+
+- Use `ui.MakeOptions(slice)` to build options for `SELECT` fields quickly.
+- `ZERO_DATE` / `NOT_ZERO_DATE` are convenient filters for nullable timestamps or "never" semantics.
+- Excel export is enabled by calling `collate.Excel(...)` with the fields to include.
+- For SQLite, `ui.RegisterSQLiteNormalize(db)` installs a `normalize()` function to improve diacritics/accents-insensitive search.
 
 ## Messages and errors
 
