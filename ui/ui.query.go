@@ -161,7 +161,7 @@ type TCollateResult[T any] struct {
 }
 
 type TCollate[T any] struct {
-	init         *TQuery
+	Init         *TQuery
 	Limit        int64
 	Target       Attr
 	TargetFilter Attr
@@ -178,7 +178,7 @@ type TCollate[T any] struct {
 
 func (collate *TCollate[T]) onXLS(ctx *Context) string {
 	// Set query for all records
-	query := makeQuery(collate.init)
+	query := makeQuery(collate.Init)
 
 	if collate.Get != nil {
 		collate.Get(query)
@@ -260,7 +260,7 @@ func (collate *TCollate[T]) onXLS(ctx *Context) string {
 }
 
 func (collate *TCollate[T]) onResize(ctx *Context) string {
-	query := makeQuery(collate.init)
+	query := makeQuery(collate.Init)
 
 	if collate.Get != nil {
 		collate.Get(query)
@@ -276,7 +276,7 @@ func (collate *TCollate[T]) onResize(ctx *Context) string {
 }
 
 func (collate *TCollate[T]) onSort(ctx *Context) string {
-	query := makeQuery(collate.init)
+	query := makeQuery(collate.Init)
 
 	if collate.Get != nil {
 		collate.Get(query)
@@ -296,7 +296,7 @@ func (collate *TCollate[T]) onSort(ctx *Context) string {
 }
 
 func (collate *TCollate[T]) onSearch(ctx *Context) string {
-	query := makeQuery(collate.init)
+	query := makeQuery(collate.Init)
 
 	if collate.Get != nil {
 		collate.Get(query)
@@ -319,7 +319,7 @@ func (collate *TCollate[T]) onSearch(ctx *Context) string {
 }
 
 func (collate *TCollate[T]) onReset(ctx *Context) string {
-	query := makeQuery(collate.init)
+	query := makeQuery(collate.Init)
 
 	query.Limit = collate.Limit
 
@@ -336,7 +336,7 @@ func Collate[T any](setup CollateMethod[T]) func(*Context, *TSession, *gorm.DB) 
 	collate := &TCollate[T]{
 		Target:       Target(),
 		TargetFilter: Target(),
-		init:         &TQuery{},
+		Init:         &TQuery{},
 	}
 
 	return func(ctx *Context, session *TSession, database *gorm.DB) func() string {
@@ -348,8 +348,8 @@ func Collate[T any](setup CollateMethod[T]) func(*Context, *TSession, *gorm.DB) 
 			session.Load(query)
 		}
 
-		collate.init = setup(ctx, collate)
-		query := makeQuery(collate.init)
+		collate.Init = setup(ctx, collate)
+		query := makeQuery(collate.Init)
 
 		if collate.Get != nil {
 			collate.Get(query)
@@ -520,7 +520,7 @@ func Empty[T any](result *TCollateResult[T]) string {
 	if result.Total == 0 {
 		return Div("mt-2 py-24 rounded text-xl flex justify-center items-center bg-white rounded-lg")(
 			Div("")(
-				Div("text-black text-2xl p-4 mb-2 font-bold flex justify-center items-center")(("Nenašli sa žiadne záznamy")),
+				Div("text-black text-2xl p-4 mb-2 font-bold flex justify-center items-center")(("No records found")),
 			),
 		)
 	}
@@ -529,7 +529,7 @@ func Empty[T any](result *TCollateResult[T]) string {
 		return Div("mt-2 py-24 rounded text-xl flex justify-center items-center bg-white rounded-lg")(
 			Div("flex gap-x-px items-center justify-center text-2xl")(
 				Icon("fa fa-fw fa-exclamation-triangle text-yellow-500"),
-				Div("text-black p-4 mb-2 font-bold flex justify-center items-center")("Nenašli sa žiadne záznamy pre zvolený filter"),
+				Div("text-black p-4 mb-2 font-bold flex justify-center items-center")("No records found for the selected filter"),
 			),
 		)
 	}
@@ -623,7 +623,7 @@ func Filtering[T any](ctx *Context, collate *TCollate[T], query *TQuery) string 
 						Submit().
 						Class("flex-1 rounded-r-lg").
 						Color(Purple).
-						Render(Icon2("fa fa-fw fa-search", "Filtrovať")),
+						Render(Icon2("fa fa-fw fa-search", "Filter")),
 				),
 			),
 		),
@@ -696,7 +696,7 @@ func Searching[T any](ctx *Context, collate *TCollate[T], query *TQuery) string 
 			IText("Search", query).
 				Class("flex-1 p-1 w-72").
 				ClassInput("cursor-pointer bg-white border-gray-300 hover:border-blue-500 block w-full p-3").
-				Placeholder(ctx.Translate("Hľadať")).
+				Placeholder(ctx.Translate("Search")).
 				Render(""),
 
 			Button().

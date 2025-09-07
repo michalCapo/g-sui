@@ -13,6 +13,7 @@ require (
 	github.com/yuin/goldmark v1.7.13
 	golang.org/x/net v0.40.0
 	gorm.io/datatypes v1.2.6
+	gorm.io/driver/sqlite v1.5.7
 	gorm.io/gorm v1.30.2
 )
 

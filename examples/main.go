@@ -19,8 +19,9 @@ type route struct {
 
 // align the navigation with the TS examples
 var routes = []route{
-	{Path: "/", Title: "Showcase"},
-	{Path: "/button", Title: "Button"},
+    {Path: "/", Title: "Showcase"},
+    {Path: "/query", Title: "Query"},
+    {Path: "/button", Title: "Button"},
 	{Path: "/text", Title: "Text"},
 	{Path: "/password", Title: "Password"},
 	{Path: "/number", Title: "Number"},
@@ -71,8 +72,9 @@ func main() {
 	}
 
 	// Individual example pages
-	app.Page("/", layout("Showcase", pages.Showcase))
-	app.Page("/button", layout("Button", pages.Button))
+    app.Page("/", layout("Showcase", pages.Showcase))
+    app.Page("/query", layout("Query", pages.Query))
+    app.Page("/button", layout("Button", pages.Button))
 	app.Page("/text", layout("Text", pages.Text))
 	app.Page("/password", layout("Password", pages.Password))
 	app.Page("/number", layout("Number", pages.Number))
