@@ -89,6 +89,23 @@ The examples include:
 - Tables with simple helpers (including colspan and empty cells)
 - Icons helpers and Hello demo (success/info/error/crash)
 - Markdown rendering and a CAPTCHA demo
+ - Navigation bar that highlights the current page based on the URL path
+
+### Active navigation highlight
+
+The examples' top navigation highlights the last selected page (the current route) without any extra state. Compare each route path to `ctx.Request.URL.Path` and choose classes accordingly:
+
+```go
+// inside a layout callable
+ui.Map(routes, func(r *route, _ int) string {
+    base := "px-2 py-1 rounded text-sm whitespace-nowrap"
+    cls := base + " hover:bg-gray-200"
+    if ctx != nil && ctx.Request != nil && r.Path == ctx.Request.URL.Path {
+        cls = base + " bg-blue-700 text-white hover:bg-blue-600"
+    }
+    return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+})
+```
 
 ## Server actions and partial updates
 
