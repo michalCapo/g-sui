@@ -197,7 +197,7 @@ func Deffered(ctx *ui.Context) string {
 Notes:
 
 - `ctx.Patch(ts, html)` pushes server‑initiated patches to connected clients. Use `target.Render()`, `target.Replace()`, `target.Append()`, or `target.Prepend()` to describe the swap.
-- Skeleton helpers: `target.Skeleton(kind)`, `SkeletonList(n)`, `SkeletonComponent()`, `SkeletonPage()`, `SkeletonForm()`.
+- Skeleton helpers: `target.Skeleton(kind)`, `target.SkeletonList(n)`, `target.SkeletonComponent()`, `target.SkeletonPage()`, `target.SkeletonForm()`.
 - Actions: `ctx.Call(fn).Render/Replace/Append/Prepend/None()` for user‑initiated interactions.
 
 ## Development notes
