@@ -19,9 +19,9 @@ type route struct {
 
 // align the navigation with the TS examples
 var routes = []route{
-    {Path: "/", Title: "Showcase"},
-    {Path: "/query", Title: "Query"},
-    {Path: "/button", Title: "Button"},
+	{Path: "/", Title: "Showcase"},
+	{Path: "/query", Title: "Query"},
+	{Path: "/button", Title: "Button"},
 	{Path: "/text", Title: "Text"},
 	{Path: "/password", Title: "Password"},
 	{Path: "/number", Title: "Number"},
@@ -42,8 +42,10 @@ func main() {
 	// Example favicon (served at /favicon.ico) and link tag
 	app.Favicon(assets, "assets/favicon.svg", 24*time.Hour)
 	app.AutoRestart(true) // enable if you want the examples to rebuild on changes
+	app.HTMLHead = append(app.HTMLHead,
+		`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
+	)
 
-	// layout builder with top menu styled like TS examples
 	layout := func(title string, body func(*ui.Context) string) ui.Callable {
 		return func(ctx *ui.Context) string {
 			nav := ui.Div("bg-white shadow mb-6")(
@@ -72,9 +74,9 @@ func main() {
 	}
 
 	// Individual example pages
-    app.Page("/", layout("Showcase", pages.Showcase))
-    app.Page("/query", layout("Query", pages.Query))
-    app.Page("/button", layout("Button", pages.Button))
+	app.Page("/", layout("Showcase", pages.Showcase))
+	app.Page("/query", layout("Query", pages.Query))
+	app.Page("/button", layout("Button", pages.Button))
 	app.Page("/text", layout("Text", pages.Text))
 	app.Page("/password", layout("Password", pages.Password))
 	app.Page("/number", layout("Number", pages.Number))

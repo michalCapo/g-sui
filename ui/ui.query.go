@@ -160,23 +160,31 @@ type TCollateResult[T any] struct {
 	Query    *TQuery
 }
 
-type TCollate[T any] struct {
+type collate[T any] struct {
 	Init         *TQuery
-	Limit        int64
 	Target       Attr
 	TargetFilter Attr
 	Database     *gorm.DB
-	Search       []TField
-	Sort         []TField
-	Filter       []TField
-	Excel        []TField
+	SearchFields []TField
+	SortFields   []TField
+	FilterFields []TField
+	ExcelFields  []TField
 	OnRow        func(*T, int) string
 	OnExcel      func(*[]T) (string, io.Reader, error)
 	Set          func(*TQuery)
 	Get          func(*TQuery)
 }
 
-func (collate *TCollate[T]) onXLS(ctx *Context) string {
+// Collate constructs a new collate with sensible defaults using the provided init query.
+func Collate[T any](init *TQuery) *collate[T] {
+	return &collate[T]{
+		Init:         init,
+		Target:       Target(),
+		TargetFilter: Target(),
+	}
+}
+
+func (collate *collate[T]) onXLS(ctx *Context) string {
 	// Set query for all records
 	query := makeQuery(collate.Init)
 
@@ -202,7 +210,7 @@ func (collate *TCollate[T]) onXLS(ctx *Context) string {
 		f := excelize.NewFile()
 		defer f.Close()
 
-		for i, header := range collate.Excel {
+		for i, header := range collate.ExcelFields {
 			if header.Text == "" {
 				header.Text = header.Field
 			}
@@ -220,7 +228,7 @@ func (collate *TCollate[T]) onXLS(ctx *Context) string {
 		for rowIndex, item := range result.Data {
 			v := reflect.ValueOf(item)
 
-			for colIndex, header := range collate.Excel {
+			for colIndex, header := range collate.ExcelFields {
 				col := string(rune('A' + colIndex))
 				cell := col + strconv.Itoa(rowIndex+2)
 				value := v.FieldByName(header.Field).Interface()
@@ -259,7 +267,7 @@ func (collate *TCollate[T]) onXLS(ctx *Context) string {
 	return ""
 }
 
-func (collate *TCollate[T]) onResize(ctx *Context) string {
+func (collate *collate[T]) onResize(ctx *Context) string {
 	query := makeQuery(collate.Init)
 
 	if collate.Get != nil {
@@ -272,10 +280,10 @@ func (collate *TCollate[T]) onResize(ctx *Context) string {
 		collate.Set(query)
 	}
 
-	return collate.Render(ctx, query)
+	return collate.ui(ctx, query)
 }
 
-func (collate *TCollate[T]) onSort(ctx *Context) string {
+func (collate *collate[T]) onSort(ctx *Context) string {
 	query := makeQuery(collate.Init)
 
 	if collate.Get != nil {
@@ -290,12 +298,14 @@ func (collate *TCollate[T]) onSort(ctx *Context) string {
 
 	query.Order = body.Order
 
-	collate.Set(query)
+	if collate.Set != nil {
+		collate.Set(query)
+	}
 
-	return collate.Render(ctx, query)
+	return collate.ui(ctx, query)
 }
 
-func (collate *TCollate[T]) onSearch(ctx *Context) string {
+func (collate *collate[T]) onSearch(ctx *Context) string {
 	query := makeQuery(collate.Init)
 
 	if collate.Get != nil {
@@ -315,55 +325,33 @@ func (collate *TCollate[T]) onSearch(ctx *Context) string {
 		collate.Set(query)
 	}
 
-	return collate.Render(ctx, query)
+	return collate.ui(ctx, query)
 }
 
-func (collate *TCollate[T]) onReset(ctx *Context) string {
+func (collate *collate[T]) onReset(ctx *Context) string {
 	query := makeQuery(collate.Init)
-
-	query.Limit = collate.Limit
 
 	if collate.Set != nil {
 		collate.Set(query)
 	}
 
-	return collate.Render(ctx, query)
+	return collate.ui(ctx, query)
 }
 
-type CollateMethod[T any] = func(*Context, *TCollate[T]) *TQuery
+// Search sets searchable fields.
+func (c *collate[T]) Search(fields ...TField) { c.SearchFields = fields }
 
-func Collate[T any](setup CollateMethod[T]) func(*Context, *TSession, *gorm.DB) func() string {
-	collate := &TCollate[T]{
-		Target:       Target(),
-		TargetFilter: Target(),
-		Init:         &TQuery{},
-	}
+// Sort sets sortable fields.
+func (c *collate[T]) Sort(fields ...TField) { c.SortFields = fields }
 
-	return func(ctx *Context, session *TSession, database *gorm.DB) func() string {
-		collate.Database = database
-		collate.Set = func(query *TQuery) {
-			session.Save(query)
-		}
-		collate.Get = func(query *TQuery) {
-			session.Load(query)
-		}
+// Filter sets filterable fields.
+func (c *collate[T]) Filter(fields ...TField) { c.FilterFields = fields }
 
-		collate.Init = setup(ctx, collate)
-		query := makeQuery(collate.Init)
+// Excel sets fields to be exported to Excel.
+func (c *collate[T]) Excel(fields ...TField) { c.ExcelFields = fields }
 
-		if collate.Get != nil {
-			collate.Get(query)
-		}
-
-		if collate.Set != nil {
-			collate.Set(query)
-		}
-
-		return func() string {
-			return collate.Render(ctx, query)
-		}
-	}
-}
+// Row sets the row rendering function.
+func (c *collate[T]) Row(fn func(*T, int) string) { c.OnRow = fn }
 
 func startOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
@@ -373,7 +361,7 @@ func endOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, t.Location())
 }
 
-func (c *TCollate[T]) Load(query *TQuery) *TCollateResult[T] {
+func (c *collate[T]) Load(query *TQuery) *TCollateResult[T] {
 	result := &TCollateResult[T]{
 		Total:    0,
 		Filtered: 0,
@@ -435,7 +423,7 @@ func (c *TCollate[T]) Load(query *TQuery) *TCollateResult[T] {
 		// Normalize search term to handle accented characters
 		normalizedSearch := NormalizeForSearch(query.Search)
 
-		for _, field := range c.Search {
+		for _, field := range c.SearchFields {
 			if field.DB == "" {
 				field.DB = field.Field
 			}
@@ -477,7 +465,27 @@ func (c *TCollate[T]) Load(query *TQuery) *TCollateResult[T] {
 	return result
 }
 
-func (collate *TCollate[T]) Render(ctx *Context, query *TQuery) string {
+// Render is the public entry point used by pages. It binds the database,
+// prepares the query from Init and renders the collated UI.
+func (collate *collate[T]) Render(ctx *Context, database *gorm.DB) string {
+	collate.Database = database
+
+	// Establish base query
+	query := makeQuery(collate.Init)
+
+	if collate.Get != nil {
+		collate.Get(query)
+	}
+
+	if collate.Set != nil {
+		collate.Set(query)
+	}
+
+	return collate.ui(ctx, query)
+}
+
+// ui executes the query and renders the UI. Internal use only.
+func (collate *collate[T]) ui(ctx *Context, query *TQuery) string {
 	result := collate.Load(query)
 
 	return Div("flex flex-col gap-2 mt-2", collate.Target)(
@@ -537,8 +545,8 @@ func Empty[T any](result *TCollateResult[T]) string {
 	return ""
 }
 
-func Filtering[T any](ctx *Context, collate *TCollate[T], query *TQuery) string {
-	if len(collate.Filter) == 0 {
+func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
+	if len(collate.FilterFields) == 0 {
 		return ""
 	}
 
@@ -550,7 +558,7 @@ func Filtering[T any](ctx *Context, collate *TCollate[T], query *TQuery) string 
 			Form("flex flex-col", ctx.Submit(collate.onSearch).Replace(collate.Target))(
 				Hidden("Search", "string", query.Search),
 
-				Map2(collate.Filter, func(item TField, index int) []string {
+				Map2(collate.FilterFields, func(item TField, index int) []string {
 					if item.DB == "" {
 						item.DB = item.Field
 					}
@@ -630,8 +638,8 @@ func Filtering[T any](ctx *Context, collate *TCollate[T], query *TQuery) string 
 	)
 }
 
-func Searching[T any](ctx *Context, collate *TCollate[T], query *TQuery) string {
-	if collate.Search == nil {
+func Searching[T any](ctx *Context, collate *collate[T], query *TQuery) string {
+	if collate.SearchFields == nil {
 		return ""
 	}
 
@@ -652,7 +660,7 @@ func Searching[T any](ctx *Context, collate *TCollate[T], query *TQuery) string 
 		// 	Render(Icon("fa fa-times")),
 
 		Form("flex-1 flex bg-blue-800 rounded-l-lg", ctx.Submit(collate.onSearch).Replace(collate.Target))(
-			Map2(collate.Filter, func(item TField, index int) []string {
+			Map2(collate.FilterFields, func(item TField, index int) []string {
 				if item.DB == "" {
 					item.DB = item.Field
 				}
@@ -706,14 +714,14 @@ func Searching[T any](ctx *Context, collate *TCollate[T], query *TQuery) string 
 				Render(Icon("fa fa-fw fa-search")),
 		),
 
-		If(len(collate.Excel) > 0 || collate.OnExcel != nil, func() string {
+		If(len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
 			return Button().
 				Color(Blue).
 				Click(ctx.Call(collate.onXLS).None()).
 				Render(Icon2("fa fa-download", "XLS"))
 		}),
 
-		If(len(collate.Filter) > 0, func() string {
+		If(len(collate.FilterFields) > 0, func() string {
 			return Button().
 				Submit().
 				Class("rounded-r-lg shadow bg-white").
@@ -724,13 +732,13 @@ func Searching[T any](ctx *Context, collate *TCollate[T], query *TQuery) string 
 	)
 }
 
-func Sorting[T any](ctx *Context, collate *TCollate[T], query *TQuery) string {
-	if len(collate.Sort) == 0 {
+func Sorting[T any](ctx *Context, collate *collate[T], query *TQuery) string {
+	if len(collate.SortFields) == 0 {
 		return ""
 	}
 
 	return Div("flex gap-px")(
-		Map(collate.Sort, func(sort *TField, index int) string {
+		Map(collate.SortFields, func(sort *TField, index int) string {
 			if sort.DB == "" {
 				sort.DB = sort.Field
 			}
@@ -772,7 +780,7 @@ func Sorting[T any](ctx *Context, collate *TCollate[T], query *TQuery) string {
 	)
 }
 
-func Paging[T any](ctx *Context, collate *TCollate[T], result *TCollateResult[T]) string {
+func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T]) string {
 	if result.Filtered == 0 {
 		return Empty(result)
 	}
@@ -794,7 +802,7 @@ func Paging[T any](ctx *Context, collate *TCollate[T], result *TCollateResult[T]
 			Button().
 				Class("bg-white rounded-l").
 				Color(PurpleOutline).
-				Disabled(size == 0 || size <= int(collate.Limit)).
+				Disabled(size == 0 || size <= int(collate.Init.Limit)).
 				Click(ctx.Call(collate.onReset).Replace(collate.Target)).
 				Render(
 					Icon("fa fa-fw fa-undo"),
