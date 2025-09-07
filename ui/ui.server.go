@@ -1362,6 +1362,25 @@ func MakeApp(defaultLanguage string) *App {
                 }
             </style>`,
             `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
+            // Dark mode CSS overrides (after Tailwind so they take precedence)
+            `<style id="gsui-dark-overrides">
+                html.dark{ color-scheme: dark; }
+                /* Global text color fallback */
+                .dark body { color:#e5e7eb; }
+                /* Backgrounds: keep gray-200 for skeletons */
+                html.dark.bg-white, html.dark.bg-gray-100 { background-color:#111827 !important; }
+                .dark .bg-white, .dark .bg-gray-50, .dark .bg-gray-100 { background-color:#111827 !important; }
+                /* Text color overrides for common grays */
+                .dark .text-black, .dark .text-gray-900, .dark .text-gray-800, .dark .text-gray-700, .dark .text-gray-600, .dark .text-gray-500 { color:#e5e7eb !important; }
+                .dark .text-gray-400, .dark .text-gray-300 { color:#d1d5db !important; }
+                /* Borders */
+                .dark .border-gray-100, .dark .border-gray-200, .dark .border-gray-300 { border-color:#374151 !important; }
+                /* Inputs */
+                .dark input, .dark select, .dark textarea { color:#e5e7eb !important; background-color:#1f2937 !important; }
+                .dark input::placeholder, .dark textarea::placeholder { color:#9ca3af !important; }
+                /* Hover helpers used in nav/examples */
+                .dark .hover\:bg-gray-200:hover { background-color:#374151 !important; }
+            </style>`,
             Script(__stringify, __error, __post, __submit, __load, __theme),
         },
         HTMLBody: func(class string) string {
