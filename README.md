@@ -12,13 +12,14 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 
 - Server‑rendered HTML components with a small helper DSL
 - Lightweight interactivity via server actions (`Click`, `Submit`, `Send`)
-- Partial updates: re-render or replace only the target element
+- Partial updates: re-render, replace, append, or prepend only the target
 - Deferred fragments with skeletons via WebSocket patches (`ctx.Patch` + skeleton helpers)
 - Query/Collate helper for data UIs: search, sort, filters, paging, and XLS export (works with `gorm`)
 - Form helpers with validation (uses `go-playground/validator`)
-- A small set of UI inputs (text, password, number, date/time, select, checkbox, radio, textarea), buttons, tables, icons
+- A small set of UI inputs (text, email, phone, password, number, date/time/datetime, select, checkbox, radio, textarea), buttons, tables, icons
 - Toast messages: `Success`, `Error`, `Info`, and an error toast with a Reload button
 - Built-in live status via WebSocket (`/__ws`) with an offline banner, automatic reconnect, and auto-reload on reconnect
+- Built-in dark mode with a tiny theme switcher (`ui.ThemeSwitcher`) cycling System → Light → Dark
 - Optional dev autorestart (`app.AutoRestart(true)`) to rebuild and restart on changes
 
 ## Install
@@ -99,12 +100,14 @@ go run examples/main.go
 
 The examples include:
 - Showcase form with validations
-- Inputs: text/password/number/date/time/datetime/textarea/select/checkbox/radio
+- Inputs: text/email/phone/password/number/date/time/datetime/textarea/select/checkbox/radio
 - Buttons and color variants (solid/outline)
 - Tables with simple helpers (including colspan and empty cells)
 - Icons helpers and Hello demo (success/info/error/crash)
 - Markdown rendering and a CAPTCHA demo
 - Query demo: in-memory SQLite + GORM with `ui.TCollate` (search, sort, filters, paging, XLS export)
+- Append/Prepend demo for list updates
+- Clock demo and deferred fragments (skeleton → WS patch)
 - Navigation bar that highlights the current page based on the URL path
 
 ### Active navigation highlight
@@ -129,6 +132,8 @@ Attach server actions via:
 
 - `ctx.Call(fn).Render(target)` – replace inner HTML of `target`
 - `ctx.Call(fn).Replace(target)` – replace the element itself
+- `ctx.Call(fn).Append(target)` – insert HTML at the end of the target
+- `ctx.Call(fn).Prepend(target)` – insert HTML at the beginning of the target
 - `ctx.Call(fn).None()` – fire and forget (no swap)
 
 On the server, an action has the signature `func(*ui.Context) string` and returns HTML (or an empty string if not swapping anything).
@@ -209,12 +214,27 @@ Notes:
 ## Components (selection)
 
 - Buttons: `ui.Button().Color(...).Size(...).Class(...).Href(...).Submit().Reset().Click(...)`
-- Inputs: `ui.IText`, `ui.IPassword`, `ui.INumber`, `ui.IDate`, `ui.ITime`, `ui.IDateTime`, `ui.IArea`, `ui.ISelect`, `ui.ICheckbox`, `ui.IRadio`, `ui.IRadioButtons`
+- Inputs: `ui.IText`, `ui.IEmail`, `ui.IPhone`, `ui.IPassword`, `ui.INumber`, `ui.IDate`, `ui.ITime`, `ui.IDateTime`, `ui.IArea`, `ui.ISelect`, `ui.ICheckbox`, `ui.IRadio`, `ui.IRadioButtons`
 - Table: `ui.SimpleTable(cols, classes...)` with `Field`, `Empty`, `Class`, `Attr` (supports `colspan`)
 - Icons: `ui.Icon`, `ui.Icon2`, `ui.Icon3`, `ui.Icon4`
 - Markdown: `ui.Markdown(classes...)(content)`
 
 Refer to the `examples/` directory for practical usage and composition patterns.
+
+## Theme & Dark Mode
+
+- Built-in dark theme overrides load with `ui.MakeApp`. Use `ui.ThemeSwitcher("")` to render a compact toggle that cycles System → Light → Dark.
+- Typical placement is in your layout’s top bar:
+
+```go
+nav := ui.Div("bg-white shadow mb-6")(
+    ui.Div("max-w-5xl mx-auto px-4 py-2 flex items-center gap-2")(
+        // ... your nav links ...
+        ui.Flex1,
+        ui.ThemeSwitcher(""),
+    ),
+)
+```
 
 ## Deferred fragments (WS + Skeleton)
 
