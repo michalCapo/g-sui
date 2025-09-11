@@ -3,8 +3,15 @@ package ui
 func Icon(class string, attr ...Attr) string {
 	return Div(class, attr...)()
 }
+func IconBasic(class string, text string) string {
+	return Div("flex-1 flex items-center gap-2")(
+		Icon(class),
+		Div("text-center")(text),
+		Flex1,
+	)
+}
 
-func Icon2(class string, text string) string {
+func IconStart(class string, text string) string {
 	return Div("flex-1 flex items-center gap-2")(
 		Icon(class),
 		Flex1,
@@ -13,7 +20,16 @@ func Icon2(class string, text string) string {
 	)
 }
 
-func Icon3(class string, text string) string {
+func IconLeft(class string, text string) string {
+	return Div("flex-1 flex items-center gap-2")(
+		Flex1,
+		Icon(class),
+		Div("text-center")(text),
+		Flex1,
+	)
+}
+
+func IconRight(class string, text string) string {
 	return Div("flex-1 flex items-center gap-2")(
 		Flex1,
 		Div("text-center")(text),
@@ -21,8 +37,7 @@ func Icon3(class string, text string) string {
 		Flex1,
 	)
 }
-
-func Icon4(class string, text string) string {
+func IconEnd(class string, text string) string {
 	return Div("flex-1 flex items-center gap-2")(
 		Flex1,
 		Div("text-center")(text),

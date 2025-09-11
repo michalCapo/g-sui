@@ -594,7 +594,7 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 						Submit().
 						Class("flex-1 rounded-r-lg").
 						Color(Purple).
-						Render(Icon2("fa fa-fw fa-search", "Filter")),
+						Render(IconStart("fa fa-fw fa-search", "Filter")),
 				),
 			),
 		),
@@ -681,7 +681,7 @@ func Searching[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 			return Button().
 				Color(Blue).
 				Click(ctx.Call(collate.onXLS, query).None()).
-				Render(Icon2("fa fa-download", "XLS"))
+				Render(IconStart("fa fa-download", "XLS"))
 		}),
 
 		If(len(collate.FilterFields) > 0, func() string {
@@ -690,7 +690,7 @@ func Searching[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				Class("rounded-r-lg shadow bg-white").
 				Color(Blue).
 				Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
-				Render(Icon3("fa fa-fw fa-chevron-down", "Filter"))
+				Render(IconLeft("fa fa-fw fa-chevron-down", "Filter"))
 		}),
 	)
 }
