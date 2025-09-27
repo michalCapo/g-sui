@@ -21,7 +21,7 @@ func Clock(ctx *ui.Context) string {
 	clockUI := func() string {
 		t := time.Now()
 		hh, mm, ss := pad2(t.Hour()), pad2(t.Minute()), pad2(t.Second())
-		return ui.Div("font-mono text-3xl bg-white p-4 rounded", target)(hh + ":" + mm + ":" + ss)
+		return ui.Div("font-mono text-3xl bg-white p-4 border rounded", target)(hh + ":" + mm + ":" + ss)
 	}
 
 	// Start pushes a patch every second; stops automatically when the target disappears (invalid target).
