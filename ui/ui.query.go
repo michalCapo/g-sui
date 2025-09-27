@@ -332,6 +332,29 @@ func endOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, t.Location())
 }
 
+// validateFieldName checks if a field name is in the allowlist of configured fields
+func (c *collate[T]) validateFieldName(fieldName string) bool {
+	// Check against SearchFields
+	for _, field := range c.SearchFields {
+		if field.DB == fieldName || field.Field == fieldName {
+			return true
+		}
+	}
+	// Check against FilterFields  
+	for _, field := range c.FilterFields {
+		if field.DB == fieldName || field.Field == fieldName {
+			return true
+		}
+	}
+	// Check against SortFields
+	for _, field := range c.SortFields {
+		if field.DB == fieldName || field.Field == fieldName {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *collate[T]) Load(query *TQuery) *TCollateResult[T] {
 	result := &TCollateResult[T]{
 		Total:    0,
@@ -348,86 +371,88 @@ func (c *collate[T]) Load(query *TQuery) *TCollateResult[T] {
 		Limit(int(query.Limit)).
 		Offset(int(query.Offset))
 
-	var searchs []string
-	var filters []string
-
+	// Apply filters using parameterized queries
 	for _, filter := range query.Filter {
 		if filter.DB == "" {
 			filter.DB = filter.Field
 		}
 
+		// Validate field name against allowlist
+		if !c.validateFieldName(filter.DB) {
+			fmt.Printf("WARNING: Rejecting invalid field name: %s\n", filter.DB)
+			continue
+		}
+
 		if filter.As == BOOL && filter.Bool && filter.Condition != "" {
-			filters = append(filters, filter.DB+filter.Condition)
+			// Validate condition contains only safe operators
+			if strings.Contains(filter.Condition, " = 1") || strings.Contains(filter.Condition, " = 0") ||
+			   strings.Contains(filter.Condition, " IS NULL") || strings.Contains(filter.Condition, " IS NOT NULL") {
+				temp = temp.Where(filter.DB + filter.Condition)
+			} else {
+				fmt.Printf("WARNING: Rejecting unsafe condition: %s\n", filter.Condition)
+			}
 			continue
 		}
 
 		if filter.As == BOOL && filter.Bool {
-			filters = append(filters, filter.DB+" = 1")
+			temp = temp.Where(filter.DB + " = ?", 1)
 		}
 
 		if filter.As == ZERO_DATE && filter.Bool {
-			filters = append(filters, filter.DB+" <= '0001-01-01 00:00:00+00:00'")
+			temp = temp.Where(filter.DB + " <= ?", "0001-01-01 00:00:00+00:00")
 		}
 
 		if filter.As == NOT_ZERO_DATE && filter.Bool {
-			// temp.Where(filter.Field + " > '0001-01-01 00:00:00+00:00'")
-			filters = append(filters, filter.DB+" > '0001-01-01 00:00:00+00:00'")
+			temp = temp.Where(filter.DB + " > ?", "0001-01-01 00:00:00+00:00")
 		}
 
 		if filter.As == DATES && !filter.Dates.From.IsZero() {
-			// temp.Where(filter.Field+" BETWEEN ? AND ?", filter.Dates.From, filter.Dates.To)
-			filters = append(filters, filter.DB+" >= '"+startOfDay(filter.Dates.From).Format("2006-01-02 15:04:05")+"'")
+			temp = temp.Where(filter.DB + " >= ?", startOfDay(filter.Dates.From))
 		}
 
 		if filter.As == DATES && !filter.Dates.To.IsZero() {
-			// temp.Where(filter.Field+" BETWEEN ? AND ?", filter.Dates.Frobm, filter.Dates.To)
-
-			filters = append(filters, filter.DB+" <= '"+endOfDay(filter.Dates.To).Format("2006-01-02 15:04:05")+"'")
+			temp = temp.Where(filter.DB + " <= ?", endOfDay(filter.Dates.To))
 		}
 
 		if filter.As == SELECT && filter.Value != "" {
-			filters = append(filters, filter.DB+" = '"+filter.Value+"'")
+			temp = temp.Where(filter.DB + " = ?", filter.Value)
 		}
 	}
 
+	// Apply search using parameterized queries
 	if len(query.Search) > 0 {
 		// Normalize search term to handle accented characters
 		normalizedSearch := NormalizeForSearch(query.Search)
+
+		var searchConditions []string
+		var searchArgs []interface{}
 
 		for _, field := range c.SearchFields {
 			if field.DB == "" {
 				field.DB = field.Field
 			}
 
-			// Try custom SQLite normalize function first, with fallback to simpler approach
-			escapedSearch := strings.ReplaceAll(normalizedSearch, "'", "''")
+			// Validate field name against allowlist
+			if !c.validateFieldName(field.DB) {
+				fmt.Printf("WARNING: Rejecting invalid search field: %s\n", field.DB)
+				continue
+			}
 
-			// Primary approach: Use custom normalize function
-			// Convert field to TEXT to ensure normalize function works with all field types
-			searchCondition := "normalize(CAST(" + field.DB + " AS TEXT)) LIKE '%" + escapedSearch + "%'"
-			searchs = append(searchs, searchCondition)
+			// Primary approach: Use custom normalize function with parameterized query
+			// Note: We still need to build the CAST part as a string since it's a SQL function,
+			// but the search value is parameterized
+			searchConditions = append(searchConditions, "normalize(CAST(" + field.DB + " AS TEXT)) LIKE ?")
+			searchArgs = append(searchArgs, "%" + normalizedSearch + "%")
 
-			// Fallback approach: Simple case-insensitive search
-			// This ensures search works even if normalize function fails
-			originalSearch := strings.ToLower(query.Search)
-			escapedOriginal := strings.ReplaceAll(originalSearch, "'", "''")
-			fallbackCondition := "LOWER(CAST(" + field.DB + " AS TEXT)) LIKE '%" + escapedOriginal + "%'"
-			searchs = append(searchs, fallbackCondition)
+			// Fallback approach: Simple case-insensitive search with parameterized query
+			searchConditions = append(searchConditions, "LOWER(CAST(" + field.DB + " AS TEXT)) LIKE ?")
+			searchArgs = append(searchArgs, "%" + strings.ToLower(query.Search) + "%")
 		}
-	}
 
-	// fmt.Println("searchs", searchs)
-	// fmt.Println("filters", filters)
-
-	if len(filters) > 0 && len(searchs) > 0 {
-		whereClause := "(" + strings.Join(searchs, " OR ") + ") AND (" + strings.Join(filters, " AND ") + ")"
-		temp = temp.Where(whereClause)
-	} else if len(filters) > 0 {
-		whereClause := "(" + strings.Join(filters, " AND ") + ")"
-		temp = temp.Where(whereClause)
-	} else if len(searchs) > 0 {
-		whereClause := "(" + strings.Join(searchs, " OR ") + ")"
-		temp = temp.Where(whereClause)
+		if len(searchConditions) > 0 {
+			whereClause := "(" + strings.Join(searchConditions, " OR ") + ")"
+			temp = temp.Where(whereClause, searchArgs...)
+		}
 	}
 
 	temp.Count(&result.Filtered)

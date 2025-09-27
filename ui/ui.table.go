@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"html"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,7 +36,13 @@ func NewTable[T any](cls string) *TTable[T] {
 }
 
 func (t *TTable[T]) Head(value string, cls string) *TTable[T] {
-	t.heads = append(t.heads, fmt.Sprintf(`<th class="%s">%s</th>`, cls, value))
+	t.heads = append(t.heads, fmt.Sprintf(`<th class="%s">%s</th>`, escapeAttr(cls), html.EscapeString(value)))
+	return t
+}
+
+// HeadHTML adds a table header with raw HTML content (use with caution)
+func (t *TTable[T]) HeadHTML(value string, cls string) *TTable[T] {
+	t.heads = append(t.heads, fmt.Sprintf(`<th class="%s">%s</th>`, escapeAttr(cls), value))
 	return t
 }
 
@@ -44,6 +51,18 @@ func (t *TTable[T]) Field(slot func(item *T) string, cls string) *TTable[T] {
 		slot func(item *T) string
 		cls  string
 	}{slot, cls})
+	return t
+}
+
+// FieldText adds a table field with automatic HTML escaping for safe text content
+func (t *TTable[T]) FieldText(slot func(item *T) string, cls string) *TTable[T] {
+	safeSlot := func(item *T) string {
+		return html.EscapeString(slot(item))
+	}
+	t.slots = append(t.slots, struct {
+		slot func(item *T) string
+		cls  string
+	}{safeSlot, cls})
 	return t
 }
 
@@ -61,7 +80,7 @@ func (t *TTable[T]) Render(data []*T) string {
 	for _, row := range data {
 		rowsBuilder.WriteString("<tr>")
 		for _, slot := range t.slots {
-			rowsBuilder.WriteString(fmt.Sprintf(`<td class="%s">%s</td>`, slot.cls, slot.slot(row)))
+			rowsBuilder.WriteString(fmt.Sprintf(`<td class="%s">%s</td>`, escapeAttr(slot.cls), slot.slot(row)))
 		}
 		rowsBuilder.WriteString("</tr>")
 	}
@@ -110,10 +129,31 @@ func (t *TTableSimple) Field(value string, cls ...string) *TTableSimple {
 
 	cellClass := Classes(cls...)
 	if cellClass != "" {
-		value = fmt.Sprintf(`<div class="%s">%s</div>`, cellClass, value)
+		value = fmt.Sprintf(`<div class="%s">%s</div>`, escapeAttr(cellClass), value)
 	}
 
 	t.rows[len(t.rows)-1] = append(t.rows[len(t.rows)-1], value)
+	t.cellAttrs[len(t.cellAttrs)-1] = append(t.cellAttrs[len(t.cellAttrs)-1], "") // Initialize empty attributes for this cell
+
+	return t
+}
+
+// FieldText adds a field with automatic HTML escaping for safe text content
+func (t *TTableSimple) FieldText(value string, cls ...string) *TTableSimple {
+	if len(t.rows) == 0 || len(t.rows[len(t.rows)-1]) == t.numCols {
+		t.rows = append(t.rows, []string{})
+		t.cellAttrs = append(t.cellAttrs, []string{})
+	}
+
+	// Escape the text content for safety
+	escapedValue := html.EscapeString(value)
+	
+	cellClass := Classes(cls...)
+	if cellClass != "" {
+		escapedValue = fmt.Sprintf(`<div class="%s">%s</div>`, escapeAttr(cellClass), escapedValue)
+	}
+
+	t.rows[len(t.rows)-1] = append(t.rows[len(t.rows)-1], escapedValue)
 	t.cellAttrs[len(t.cellAttrs)-1] = append(t.cellAttrs[len(t.cellAttrs)-1], "") // Initialize empty attributes for this cell
 
 	return t

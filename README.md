@@ -300,6 +300,40 @@ Notes:
 - Skeleton helpers: `target.Skeleton(kind)`, `target.SkeletonList(n)`, `target.SkeletonComponent()`, `target.SkeletonPage()`, `target.SkeletonForm()`.
 - Actions: `ctx.Call(fn).Render/Replace/Append/Prepend/None()` for user‑initiated interactions.
 
+## Security
+
+g-sui includes built-in security measures to prevent Cross-Site Scripting (XSS) and other attacks:
+
+### Server-side Protections
+
+- **HTML Attribute Escaping**: All HTML attributes (values, classes, IDs, etc.) are automatically escaped using `html.EscapeString`
+- **JavaScript Escaping**: JavaScript code generation (URLs, IDs in event handlers) uses proper escaping to prevent injection
+- **Safe Table Methods**: Use `HeadHTML()` and `FieldText()` for explicit control over HTML vs. text content
+
+### Client-side Protections
+
+- **Content Security Policy**: Use `ctx.SetDefaultCSP()` or `ctx.SetCSP(policy)` to set restrictive CSP headers:
+
+```go
+func handler(ctx *ui.Context) string {
+    ctx.SetDefaultCSP() // Sets secure defaults
+    // Your page content...
+    return ui.Div("")("Your content")
+}
+```
+
+### Best Practices
+
+1. **Use text-safe methods** when displaying user input:
+   - Tables: `table.FieldText(func(item *T) string { return item.UserInput }, "class")`
+   - Headers: `table.Head("User Text", "class")` (automatically escaped)
+
+2. **Set CSP headers** in your handlers to prevent inline script execution
+
+3. **Validate input** server-side using `go-playground/validator` before rendering
+
+4. **Avoid raw HTML** in user-controlled content; use the component methods which handle escaping
+
 ## Development notes
 
 - Live status: pages include a lightweight WS client bound to `/__ws` that shows an offline banner, reconnects automatically, and reloads the page on reconnect (useful when the server restarts). The panic fallback page also auto-reloads on reconnect.

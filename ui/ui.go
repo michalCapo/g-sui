@@ -4,6 +4,7 @@ package ui
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"log"
 	"reflect"
 	"regexp"
@@ -101,85 +102,103 @@ func MakeOptions(options []string) []AOption {
 	return result
 }
 
+// escapeAttr escapes HTML attribute values to prevent XSS attacks
+func escapeAttr(s string) string {
+	return html.EscapeString(s)
+}
+
+// escapeJS escapes JavaScript string literals to prevent XSS attacks
+func escapeJS(s string) string {
+	// Replace dangerous characters for JavaScript string literals
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	s = strings.ReplaceAll(s, "\t", `\t`)
+	s = strings.ReplaceAll(s, "</script>", `<\/script>`)
+	return s
+}
+
 func attributes(attrs ...Attr) string {
 	var result []string
 
 	for _, attr := range attrs {
 
 		if attr.ID != "" {
-			result = append(result, fmt.Sprintf(`id="%s"`, attr.ID))
+			result = append(result, fmt.Sprintf(`id="%s"`, escapeAttr(attr.ID)))
 		}
 
 		if attr.Href != "" {
-			result = append(result, fmt.Sprintf(`href="%s"`, attr.Href))
+			result = append(result, fmt.Sprintf(`href="%s"`, escapeAttr(attr.Href)))
 		}
 
 		if attr.Alt != "" {
-			result = append(result, fmt.Sprintf(`alt="%s"`, attr.Alt))
+			result = append(result, fmt.Sprintf(`alt="%s"`, escapeAttr(attr.Alt)))
 		}
 
 		if attr.Title != "" {
-			result = append(result, fmt.Sprintf(`title="%s"`, attr.Title))
+			result = append(result, fmt.Sprintf(`title="%s"`, escapeAttr(attr.Title)))
 		}
 
 		if attr.Src != "" {
-			result = append(result, fmt.Sprintf(`src="%s"`, attr.Src))
+			result = append(result, fmt.Sprintf(`src="%s"`, escapeAttr(attr.Src)))
 		}
 
 		if attr.For != "" {
-			result = append(result, fmt.Sprintf(`for="%s"`, attr.For))
+			result = append(result, fmt.Sprintf(`for="%s"`, escapeAttr(attr.For)))
 		}
 
 		if attr.Type != "" {
-			result = append(result, fmt.Sprintf(`type="%s"`, attr.Type))
+			result = append(result, fmt.Sprintf(`type="%s"`, escapeAttr(attr.Type)))
 		}
 
 		if attr.Class != "" {
-			result = append(result, fmt.Sprintf(`class="%s"`, attr.Class))
+			result = append(result, fmt.Sprintf(`class="%s"`, escapeAttr(attr.Class)))
 		}
 
 		if attr.Style != "" {
-			result = append(result, fmt.Sprintf(`style="%s"`, attr.Style))
+			result = append(result, fmt.Sprintf(`style="%s"`, escapeAttr(attr.Style)))
 		}
 
 		if attr.OnClick != "" {
-			result = append(result, fmt.Sprintf(`onclick="%s"`, attr.OnClick))
+			result = append(result, fmt.Sprintf(`onclick="%s"`, escapeAttr(attr.OnClick)))
 		}
 
 		if attr.OnChange != "" {
-			result = append(result, fmt.Sprintf(`onchange="%s"`, attr.OnChange))
+			result = append(result, fmt.Sprintf(`onchange="%s"`, escapeAttr(attr.OnChange)))
 		}
 
 		if attr.OnSubmit != "" {
-			result = append(result, fmt.Sprintf(`onsubmit="%s"`, attr.OnSubmit))
+			result = append(result, fmt.Sprintf(`onsubmit="%s"`, escapeAttr(attr.OnSubmit)))
 		}
 
 		if attr.Value != "" {
-			result = append(result, fmt.Sprintf(`value="%s"`, attr.Value))
+			result = append(result, fmt.Sprintf(`value="%s"`, escapeAttr(attr.Value)))
 		}
 
 		if attr.Checked != "" {
-			result = append(result, fmt.Sprintf(`checked="%s"`, attr.Checked))
+			result = append(result, fmt.Sprintf(`checked="%s"`, escapeAttr(attr.Checked)))
 		}
 
 		if attr.Selected != "" {
-			result = append(result, fmt.Sprintf(`selected="%s"`, attr.Selected))
+			result = append(result, fmt.Sprintf(`selected="%s"`, escapeAttr(attr.Selected)))
 		}
 
 		if attr.Name != "" {
-			result = append(result, fmt.Sprintf(`name="%s"`, attr.Name))
+			result = append(result, fmt.Sprintf(`name="%s"`, escapeAttr(attr.Name)))
 		}
 
 		if attr.Placeholder != "" {
-			result = append(result, fmt.Sprintf(`placeholder="%s"`, attr.Placeholder))
+			result = append(result, fmt.Sprintf(`placeholder="%s"`, escapeAttr(attr.Placeholder)))
 		}
 
 		if attr.Autocomplete != "" {
-			result = append(result, fmt.Sprintf(`autocomplete="%s"`, attr.Autocomplete))
+			result = append(result, fmt.Sprintf(`autocomplete="%s"`, escapeAttr(attr.Autocomplete)))
 		}
 
 		if attr.Pattern != "" {
-			result = append(result, fmt.Sprintf(`pattern="%s"`, attr.Pattern))
+			result = append(result, fmt.Sprintf(`pattern="%s"`, escapeAttr(attr.Pattern)))
 		}
 
 		if attr.Cols != 0 {
@@ -207,19 +226,19 @@ func attributes(attrs ...Attr) string {
 		}
 
 		if attr.Step != "" {
-			result = append(result, fmt.Sprintf(`step="%s"`, attr.Step))
+			result = append(result, fmt.Sprintf(`step="%s"`, escapeAttr(attr.Step)))
 		}
 
 		if attr.Min != "" {
-			result = append(result, fmt.Sprintf(`min="%s"`, attr.Min))
+			result = append(result, fmt.Sprintf(`min="%s"`, escapeAttr(attr.Min)))
 		}
 
 		if attr.Max != "" {
-			result = append(result, fmt.Sprintf(`max="%s"`, attr.Max))
+			result = append(result, fmt.Sprintf(`max="%s"`, escapeAttr(attr.Max)))
 		}
 
 		if attr.Target != "" {
-			result = append(result, fmt.Sprintf(`target="%s"`, attr.Target))
+			result = append(result, fmt.Sprintf(`target="%s"`, escapeAttr(attr.Target)))
 		}
 
 		if attr.Required {
@@ -322,7 +341,7 @@ func ThemeSwitcher(css string) string {
 	desktop := `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 4h18v12H3z"/><path d="M8 20h8v-2H8z"/></svg>`
 
 	btn := Div("")(
-		fmt.Sprintf(`<button id="%s" type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 shadow-sm %s">`, id, css),
+		fmt.Sprintf(`<button id="%s" type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 shadow-sm %s">`, escapeAttr(id), escapeAttr(css)),
 		`<span class="icon">`+desktop+`</span>`,
 		`<span class="label">Auto</span>`,
 		`</button>`,

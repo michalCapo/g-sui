@@ -351,10 +351,10 @@ func (ctx *Context) Post(as ActionType, swap Swap, action *Action) string {
 	}
 
 	if as == FORM {
-		return Normalize(fmt.Sprintf(`__submit(event, "%s", "%s", "%s", %s) `, swap, action.Target.ID, path, values))
+		return Trim(fmt.Sprintf(`__submit(event, "%s", "%s", "%s", %s) `, escapeJS(string(swap)), escapeJS(action.Target.ID), escapeJS(path), values))
 	}
 
-	return Normalize(fmt.Sprintf(`__post(event, "%s", "%s", "%s", %s) `, swap, action.Target.ID, path, values))
+	return Trim(fmt.Sprintf(`__post(event, "%s", "%s", "%s", %s) `, escapeJS(string(swap)), escapeJS(action.Target.ID), escapeJS(path), values))
 }
 
 type Actions struct {
@@ -483,7 +483,7 @@ func (ctx *Context) Call(method Callable, values ...any) Actions {
 }
 
 func (ctx *Context) Load(href string) Attr {
-	return Attr{OnClick: Normalize(fmt.Sprintf(`__load("%s")`, href))}
+	return Attr{OnClick: Trim(fmt.Sprintf(`__load("%s")`, escapeJS(href)))}
 }
 
 func (ctx *Context) Reload() string {
@@ -493,7 +493,7 @@ func (ctx *Context) Reload() string {
 
 func (ctx *Context) Redirect(href string) string {
 	// return Normalize(fmt.Sprintf("<html><!DOCTYPE html><body><script>window.location.href = '%s';</script></body></html>", href))
-	return Normalize(fmt.Sprintf("<script>window.location.href = '%s';</script>", href))
+	return Normalize(fmt.Sprintf("<script>window.location.href = '%s';</script>", escapeJS(href)))
 }
 
 // Deferred fragments removed. The previous ctx.Defer(...) builder and helpers
@@ -561,6 +561,17 @@ func (ctx *Context) ErrorReload(message string) { displayError(ctx, message) }
 
 func (ctx *Context) Info(message string) {
 	displayMessage(ctx, message, "bg-blue-700 text-white")
+}
+
+// SetCSP sets Content Security Policy headers to help prevent XSS attacks
+func (ctx *Context) SetCSP(policy string) {
+	ctx.Response.Header().Set("Content-Security-Policy", policy)
+}
+
+// SetDefaultCSP sets a restrictive CSP that allows only same-origin scripts and styles
+func (ctx *Context) SetDefaultCSP() {
+	policy := "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:; frame-ancestors 'none';"
+	ctx.SetCSP(policy)
 }
 
 func (ctx *Context) DownloadAs(file *io.Reader, contentType string, name string) error {
@@ -756,36 +767,36 @@ func (app *App) Assets(assets embed.FS, path string, maxAge time.Duration) {
 }
 
 func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
-    path = strings.TrimPrefix(path, "/")
-    http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-        file, err := assets.ReadFile(path)
-        if err != nil {
-            http.Error(w, "File not found", http.StatusNotFound)
-            return
-        }
+	path = strings.TrimPrefix(path, "/")
+	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		file, err := assets.ReadFile(path)
+		if err != nil {
+			http.Error(w, "File not found", http.StatusNotFound)
+			return
+		}
 
-        // Set proper content type for common favicon formats.
-        // Some browsers (and Go's DetectContentType) don't reliably detect SVG,
-        // so prefer extension-based mapping for correctness.
-        switch strings.ToLower(filepath.Ext(path)) {
-        case ".svg":
-            w.Header().Set("Content-Type", "image/svg+xml")
-        case ".ico":
-            w.Header().Set("Content-Type", "image/x-icon")
-        case ".png":
-            w.Header().Set("Content-Type", "image/png")
-        case ".gif":
-            w.Header().Set("Content-Type", "image/gif")
-        case ".jpg", ".jpeg":
-            w.Header().Set("Content-Type", "image/jpeg")
-        default:
-            // Fallback to detection if unknown extension
-            w.Header().Set("Content-Type", http.DetectContentType(file))
-        }
+		// Set proper content type for common favicon formats.
+		// Some browsers (and Go's DetectContentType) don't reliably detect SVG,
+		// so prefer extension-based mapping for correctness.
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+		case ".ico":
+			w.Header().Set("Content-Type", "image/x-icon")
+		case ".png":
+			w.Header().Set("Content-Type", "image/png")
+		case ".gif":
+			w.Header().Set("Content-Type", "image/gif")
+		case ".jpg", ".jpeg":
+			w.Header().Set("Content-Type", "image/jpeg")
+		default:
+			// Fallback to detection if unknown extension
+			w.Header().Set("Content-Type", http.DetectContentType(file))
+		}
 
-        w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(int(maxAge.Seconds())))
-        w.Write(file)
-    })
+		w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(int(maxAge.Seconds())))
+		w.Write(file)
+	})
 }
 
 func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {
@@ -1057,12 +1068,25 @@ func (app *App) AutoRestart(enable bool) {
 		}
 	}
 
-	go watchAndRestart(mainDir)
+	sanitizedRoot, err := sanitizeAutoRestartRoot(mainDir)
+	if err != nil {
+		log.Println("[autorestart] refusing to watch directory:", err)
+		return
+	}
+
+	go watchAndRestart(sanitizedRoot)
 }
 
 // watchAndRestart watches the provided directory recursively for file changes
 // and rebuilds + execs the binary in-place when a change is detected.
 func watchAndRestart(root string) {
+	safeRoot, err := sanitizeAutoRestartRoot(root)
+	if err != nil {
+		log.Println("[autorestart] invalid watch root:", err)
+		return
+	}
+	root = safeRoot
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Println("[autorestart] watcher error:", err)
@@ -1077,6 +1101,13 @@ func watchAndRestart(root string) {
 				return nil // ignore traversal errors
 			}
 			if d.IsDir() {
+				resolvedPath := path
+				if evalPath, err := filepath.EvalSymlinks(path); err == nil {
+					resolvedPath = evalPath
+				}
+				if !isSubpath(root, resolvedPath) {
+					return filepath.SkipDir
+				}
 				name := d.Name()
 				if shouldSkipDir(name) {
 					return filepath.SkipDir
@@ -1132,12 +1163,26 @@ func watchAndRestart(root string) {
 			// Watch for new directories created (e.g., when adding packages)
 			if ev.Has(fsnotify.Create) {
 				if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
+					resolvedName := ev.Name
+					if evalName, err := filepath.EvalSymlinks(ev.Name); err == nil {
+						resolvedName = evalName
+					}
+					if !isSubpath(root, resolvedName) {
+						continue
+					}
 					// Add new directory and its children
 					_ = filepath.WalkDir(ev.Name, func(p string, d os.DirEntry, err error) error {
 						if err != nil {
 							return nil
 						}
 						if d.IsDir() {
+							resolvedPath := p
+							if evalPath, err := filepath.EvalSymlinks(p); err == nil {
+								resolvedPath = evalPath
+							}
+							if !isSubpath(root, resolvedPath) {
+								return filepath.SkipDir
+							}
 							if shouldSkipDir(d.Name()) {
 								return filepath.SkipDir
 							}
@@ -1197,28 +1242,120 @@ func detectMainDir() string {
 	return ""
 }
 
+func sanitizeAutoRestartRoot(root string) (string, error) {
+	if strings.TrimSpace(root) == "" {
+		return "", fmt.Errorf("empty autorestart root")
+	}
+
+	absoluteRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+
+	resolvedRoot, err := filepath.EvalSymlinks(absoluteRoot)
+	if err != nil {
+		return "", err
+	}
+
+	info, err := os.Stat(resolvedRoot)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("autorestart root %q is not a directory", resolvedRoot)
+	}
+
+	moduleRoot, err := findModuleRoot(resolvedRoot)
+	if err != nil {
+		return "", err
+	}
+
+	if !isSubpath(moduleRoot, resolvedRoot) {
+		return "", fmt.Errorf("autorestart root %q must stay within module root %q", resolvedRoot, moduleRoot)
+	}
+
+	return resolvedRoot, nil
+}
+
+func findModuleRoot(start string) (string, error) {
+	dir := start
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("go.mod not found above %q", start)
+		}
+		dir = parent
+	}
+}
+
+func isSubpath(base, target string) bool {
+	baseClean, err := filepath.Abs(base)
+	if err != nil {
+		return false
+	}
+	targetClean, err := filepath.Abs(target)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(baseClean, targetClean)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	if rel == ".." {
+		return false
+	}
+	return !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+}
+
 // rebuildAndExec builds the main package in root and re-execs into the new binary.
 func rebuildAndExec(root string) error {
-	tmp := filepath.Join(os.TempDir(), fmt.Sprintf("g-sui-%d", time.Now().UnixNano()))
-	cmd := exec.Command("go", "build", "-o", tmp)
-	cmd.Dir = root
+	safeRoot, err := sanitizeAutoRestartRoot(root)
+	if err != nil {
+		return err
+	}
+
+	tmpDir, err := os.MkdirTemp("", "g-sui-build-*")
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(tmpDir, fmt.Sprintf("g-sui-%d", time.Now().UnixNano()))
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(goBin, "build", "-o", tmp, ".")
+	cmd.Dir = safeRoot
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return err
+	}
+
+	absTmp, err := filepath.Abs(tmp)
+	if err != nil {
+		_ = os.RemoveAll(tmpDir)
 		return err
 	}
 
 	// Replace current process with the new binary
-	args := append([]string{tmp}, os.Args[1:]...)
+	args := append([]string{absTmp}, os.Args[1:]...)
 	env := os.Environ()
 
 	// Best effort: exec on Unix, spawn+exit on Windows
 	if runtime.GOOS == "windows" {
-		c := exec.Command(tmp, os.Args[1:]...)
+		c := exec.Command(absTmp, os.Args[1:]...)
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
 		c.Stdin = os.Stdin
 		if err := c.Start(); err != nil {
+			_ = os.RemoveAll(tmpDir)
 			return err
 		}
 		// Exit current process to let the new one take over
@@ -1226,7 +1363,7 @@ func rebuildAndExec(root string) error {
 		return nil
 	}
 
-	return syscall.Exec(tmp, args, env)
+	return syscall.Exec(absTmp, args, env)
 }
 
 func (app *App) Description(description string) {
