@@ -7,7 +7,7 @@ import (
 )
 
 // form used to choose skeleton type via ctx.Body
-type deferForm struct {
+type how struct {
 	As ui.Skeleton
 }
 
@@ -17,7 +17,7 @@ var target = ui.Target()
 // pushes two patches when data is ready (replace + append).
 func DefferedComponent(ctx *ui.Context) string {
 	// read optional skeleton preference from body
-	form := deferForm{}
+	form := how{}
 	err := ctx.Body(&form)
 
 	if err != nil {
@@ -48,35 +48,35 @@ func DefferedComponent(ctx *ui.Context) string {
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(DefferedComponent, &deferForm{}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &how{}).Replace(target)).
 				Render("Default skeleton"),
 
 			ui.
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(DefferedComponent, &deferForm{As: ui.SkeletonComponent}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &how{As: ui.SkeletonComponent}).Replace(target)).
 				Render("Component skeleton"),
 
 			ui.
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(DefferedComponent, &deferForm{As: ui.SkeletonList}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &how{As: ui.SkeletonList}).Replace(target)).
 				Render("List skeleton"),
 
 			ui.
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(DefferedComponent, &deferForm{As: ui.SkeletonPage}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &how{As: ui.SkeletonPage}).Replace(target)).
 				Render("Page skeleton"),
 
 			ui.
 				Button().
 				Color(ui.Blue).
 				Class("rounded text-sm").
-				Click(ctx.Call(DefferedComponent, &deferForm{As: ui.SkeletonForm}).Replace(target)).
+				Click(ctx.Call(DefferedComponent, &how{As: ui.SkeletonForm}).Replace(target)).
 				Render("Form skeleton"),
 		)
 
