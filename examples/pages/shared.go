@@ -3,15 +3,32 @@ package pages
 import "github.com/michalCapo/g-sui/ui"
 
 type someForm struct {
+	target      ui.Attr
 	Title       string
 	Description string
-	onCancel    string
-	onSubmit    ui.Attr
+	onSubmit    func(*ui.Context) string
 }
 
-func (f *someForm) Render(ctx *ui.Context, target ui.Attr) string {
+func NewForm(title string, description string) *someForm {
+	target := ui.Target()
 
-	return ui.Form("flex flex-col gap-4", target, f.onSubmit)(
+	return &someForm{
+		target:      target,
+		Title:       title,
+		Description: description,
+	}
+}
+
+func (f *someForm) OnCancel(ctx *ui.Context) string {
+	f.Title = ""
+	f.Description = ""
+
+	return f.Render(ctx)
+}
+
+func (f *someForm) Render(ctx *ui.Context) string {
+
+	return ui.Form("flex flex-col gap-4", f.target, ctx.Submit(f.onSubmit).Replace(f.target))(
 		ui.Div("")(
 			ui.Div("text-gray-600 text-sm")("Title"),
 			ui.IText("Title", f).
@@ -33,7 +50,7 @@ func (f *someForm) Render(ctx *ui.Context, target ui.Attr) string {
 				// Class("rounded text-sm").
 				Class("rounded-lg hover:text-red-700 hover:underline text-gray-400").
 				// Color(ui.Gray).
-				Click(f.onCancel).
+				Click(ctx.Call(f.OnCancel).Replace(f.target)).
 				Render("Reset"),
 
 			ui.Button().
@@ -47,63 +64,40 @@ func (f *someForm) Render(ctx *ui.Context, target ui.Attr) string {
 }
 
 func Shared(ctx *ui.Context) string {
-	target := ui.Target()
-	target2 := ui.Target()
+	form1 := NewForm(
+		"Hello",
+		"What a nice day",
+	)
+	form2 := NewForm(
+		"Next Title",
+		"Next Description",
+	)
 
-	form1 := &someForm{
-		Title:       "Hello",
-		Description: "What a nice day",
-	}
-	form2 := &someForm{
-		Title:       "Next Title",
-		Description: "Next Description",
-	}
+	form1.onSubmit = func(ctx *ui.Context) string {
+		ctx.Error("Data not stored")
 
-	onCancel := func(ctx *ui.Context) string {
-		form1.Title = ""
-		form1.Description = ""
-
-		return form1.Render(ctx, target)
+		return form1.Render(ctx)
 	}
 
-	onSubmit := func(ctx *ui.Context) string {
-		ctx.Success("Data stored")
+	form2.onSubmit = func(ctx *ui.Context) string {
+		ctx.Success("Data stored but do not shared")
 
-		return form1.Render(ctx, target)
+		return form2.Render(ctx)
 	}
-
-	onCancel2 := func(ctx *ui.Context) string {
-		form2.Title = ""
-		form2.Description = ""
-
-		return form2.Render(ctx, target2)
-	}
-
-	onSubmit2 := func(ctx *ui.Context) string {
-		ctx.Success("Data stored")
-
-		return form2.Render(ctx, target2)
-	}
-
-	form1.onCancel = ctx.Call(onCancel).Replace(target)
-	form1.onSubmit = ctx.Submit(onSubmit).Replace(target)
-
-	form2.onCancel = ctx.Call(onCancel2).Replace(target2)
-	form2.onSubmit = ctx.Submit(onSubmit2).Replace(target2)
 
 	return ui.Div("max-w-5xl mx-auto flex flex-col gap-4")(
-		ui.Div("text-2xl font-bold")("Complex"),
+		ui.Div("text-2xl font-bold")("Shared"),
 		ui.Div("text-gray-600")("Tries to mimmic real application: reused form in multiplate places"),
 
 		ui.Div("border rounded-lg p-4 bg-white dark:bg-gray-900 shadow-lg border rounded-lg")(
 			ui.Div("text-lg font-semibold")("Form 1"),
 			ui.Div("text-gray-600 text-sm mb-4")("This form is reused."),
-			form1.Render(ctx, target),
+			form1.Render(ctx),
 		),
 		ui.Div("border rounded-lg p-4 bg-white dark:bg-gray-900 shadow-lg border rounded-lg")(
 			ui.Div("text-lg font-semibold")("Form 2"),
 			ui.Div("text-gray-600 text-sm mb-4")("This form is reused."),
-			form2.Render(ctx, target2),
+			form2.Render(ctx),
 		),
 	)
 }

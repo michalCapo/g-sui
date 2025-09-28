@@ -32,6 +32,7 @@ var routes = []route{
 	{Path: "/checkbox", Title: "Checkbox"},
 	{Path: "/radio", Title: "Radio"},
 	{Path: "/table", Title: "Table"},
+	{Path: "/captcha", Title: "Captcha"},
 	{Path: "/others", Title: "Others"},
 	{Path: "/append", Title: "Append/Prepend"},
 	{Path: "/clock", Title: "Clock"},
@@ -88,6 +89,7 @@ func main() {
 	app.Page("/checkbox", layout("Checkbox", pages.Checkbox))
 	app.Page("/radio", layout("Radio", pages.Radio))
 	app.Page("/table", layout("Table", pages.Table))
+	app.Page("/captcha", layout("Captcha", pages.Captcha))
 	app.Page("/others", layout("Others", pages.Others))
 	app.Page("/append", layout("Append / Prepend", pages.Append))
 	app.Page("/clock", layout("Clock", pages.Clock))

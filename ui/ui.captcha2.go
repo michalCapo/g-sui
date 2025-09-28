@@ -47,6 +47,12 @@ func generateSecureID(prefix string) (string, error) {
 	return fmt.Sprintf("%s%x", prefix, b), nil
 }
 
+// StoreCaptchaSession manually stores a captcha session (for testing purposes)
+func StoreCaptchaSession(sessionID string, session *CaptchaSession) {
+	cleanupExpiredCaptchaSessions()
+	captchaSessions[sessionID] = session
+}
+
 // CreateCaptchaSession creates a new server-side CAPTCHA session
 func CreateCaptchaSession(sessionID string) (*CaptchaSession, error) {
 	captchaText, err := generateSecureCaptchaText(6)
