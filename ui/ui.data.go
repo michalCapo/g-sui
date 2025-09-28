@@ -340,7 +340,7 @@ func (c *collate[T]) validateFieldName(fieldName string) bool {
 			return true
 		}
 	}
-	// Check against FilterFields  
+	// Check against FilterFields
 	for _, field := range c.FilterFields {
 		if field.DB == fieldName || field.Field == fieldName {
 			return true
@@ -386,7 +386,7 @@ func (c *collate[T]) Load(query *TQuery) *TCollateResult[T] {
 		if filter.As == BOOL && filter.Bool && filter.Condition != "" {
 			// Validate condition contains only safe operators
 			if strings.Contains(filter.Condition, " = 1") || strings.Contains(filter.Condition, " = 0") ||
-			   strings.Contains(filter.Condition, " IS NULL") || strings.Contains(filter.Condition, " IS NOT NULL") {
+				strings.Contains(filter.Condition, " IS NULL") || strings.Contains(filter.Condition, " IS NOT NULL") {
 				temp = temp.Where(filter.DB + filter.Condition)
 			} else {
 				fmt.Printf("WARNING: Rejecting unsafe condition: %s\n", filter.Condition)
@@ -395,27 +395,27 @@ func (c *collate[T]) Load(query *TQuery) *TCollateResult[T] {
 		}
 
 		if filter.As == BOOL && filter.Bool {
-			temp = temp.Where(filter.DB + " = ?", 1)
+			temp = temp.Where(filter.DB+" = ?", 1)
 		}
 
 		if filter.As == ZERO_DATE && filter.Bool {
-			temp = temp.Where(filter.DB + " <= ?", "0001-01-01 00:00:00+00:00")
+			temp = temp.Where(filter.DB+" <= ?", "0001-01-01 00:00:00+00:00")
 		}
 
 		if filter.As == NOT_ZERO_DATE && filter.Bool {
-			temp = temp.Where(filter.DB + " > ?", "0001-01-01 00:00:00+00:00")
+			temp = temp.Where(filter.DB+" > ?", "0001-01-01 00:00:00+00:00")
 		}
 
 		if filter.As == DATES && !filter.Dates.From.IsZero() {
-			temp = temp.Where(filter.DB + " >= ?", startOfDay(filter.Dates.From))
+			temp = temp.Where(filter.DB+" >= ?", startOfDay(filter.Dates.From))
 		}
 
 		if filter.As == DATES && !filter.Dates.To.IsZero() {
-			temp = temp.Where(filter.DB + " <= ?", endOfDay(filter.Dates.To))
+			temp = temp.Where(filter.DB+" <= ?", endOfDay(filter.Dates.To))
 		}
 
 		if filter.As == SELECT && filter.Value != "" {
-			temp = temp.Where(filter.DB + " = ?", filter.Value)
+			temp = temp.Where(filter.DB+" = ?", filter.Value)
 		}
 	}
 
@@ -441,12 +441,12 @@ func (c *collate[T]) Load(query *TQuery) *TCollateResult[T] {
 			// Primary approach: Use custom normalize function with parameterized query
 			// Note: We still need to build the CAST part as a string since it's a SQL function,
 			// but the search value is parameterized
-			searchConditions = append(searchConditions, "normalize(CAST(" + field.DB + " AS TEXT)) LIKE ?")
-			searchArgs = append(searchArgs, "%" + normalizedSearch + "%")
+			searchConditions = append(searchConditions, "normalize(CAST("+field.DB+" AS TEXT)) LIKE ?")
+			searchArgs = append(searchArgs, "%"+normalizedSearch+"%")
 
 			// Fallback approach: Simple case-insensitive search with parameterized query
-			searchConditions = append(searchConditions, "LOWER(CAST(" + field.DB + " AS TEXT)) LIKE ?")
-			searchArgs = append(searchArgs, "%" + strings.ToLower(query.Search) + "%")
+			searchConditions = append(searchConditions, "LOWER(CAST("+field.DB+" AS TEXT)) LIKE ?")
+			searchArgs = append(searchArgs, "%"+strings.ToLower(query.Search)+"%")
 		}
 
 		if len(searchConditions) > 0 {
@@ -542,84 +542,93 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 	// ctx.Session(database, name, c.Query)
 
 	return Div("col-span-2 relative h-0 hidden z-20", collate.TargetFilter)(
-		Div("absolute top-1 right-0 rounded-lg bg-gray-100 border border-black shadow-2xl p-4")(
+		Div("absolute top-2 right-0 w-96 rounded-xl bg-white border border-gray-200 shadow-2xl p-4")(
+			// Header with title and close button
+			Div("flex items-center justify-between mb-2")(
+				Div("text-sm font-semibold text-gray-700")("Filters"),
+				Button().
+					Class("rounded-full w-9 h-9 border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center").
+					Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
+					Render(Icon("fa fa-fw fa-times")),
+			),
+
 			Form("flex flex-col", ctx.Submit(collate.onSearch).Replace(collate.Target))(
 				Hidden("Search", "string", query.Search),
 
-				Map2(collate.FilterFields, func(item TField, index int) []string {
-					if item.DB == "" {
-						item.DB = item.Field
-					}
+				// Filters content
+				Div("flex flex-col gap-2 mt-2")(
+					Map2(collate.FilterFields, func(item TField, index int) []string {
+						if item.DB == "" {
+							item.DB = item.Field
+						}
 
-					position := fmt.Sprintf("Filter[%d]", index)
+						position := fmt.Sprintf("Filter[%d]", index)
 
-					return []string{
-						Iff(item.As == ZERO_DATE)(
-							Div("flex")(
-								Hidden(position+".Field", "string", item.DB),
-								Hidden(position+".As", "uint", item.As),
-								ICheckbox(position+".Bool", query).
-									Render(item.Text),
+						return []string{
+							Iff(item.As == ZERO_DATE)(
+								Div("flex items-center")(
+									Hidden(position+".Field", "string", item.DB),
+									Hidden(position+".As", "uint", item.As),
+									ICheckbox(position+".Bool", query).Render(item.Text),
+								),
 							),
-						),
 
-						Iff(item.As == NOT_ZERO_DATE)(
-							Div("flex")(
-								Hidden(position+".Field", "string", item.DB),
-								Hidden(position+".As", "uint", item.As),
-								ICheckbox(position+".Bool", query).
-									Render(item.Text),
+							Iff(item.As == NOT_ZERO_DATE)(
+								Div("flex items-center")(
+									Hidden(position+".Field", "string", item.DB),
+									Hidden(position+".As", "uint", item.As),
+									ICheckbox(position+".Bool", query).Render(item.Text),
+								),
 							),
-						),
 
-						Iff(item.As == DATES)(
-							Label(nil).Class("text-xs mt-3 font-bold").Render(item.Text),
-							Div("flex gap-1")(
-								Hidden(position+".Field", "string", item.DB),
-								Hidden(position+".As", "uint", item.As),
-								IDate(position+".Dates.From", query).Render(""),
-								IDate(position+".Dates.To", query).Render(""),
+							Iff(item.As == DATES)(
+								Div("")(
+									Label(nil).Class("text-xs mt-1 font-bold").Render(item.Text),
+									Div("grid grid-cols-2 gap-2")(
+										Hidden(position+".Field", "string", item.DB),
+										Hidden(position+".As", "uint", item.As),
+										IDate(position+".Dates.From", query).Class("").Render("From"),
+										IDate(position+".Dates.To", query).Class("").Render("To"),
+									),
+								),
 							),
-						),
 
-						Iff(item.As == BOOL)(
-							Div("flex")(
-								Hidden(position+".Field", "string", item.DB),
-								Hidden(position+".As", "uint", item.As),
-								Hidden(position+".Condition", "string", item.Condition),
-								ICheckbox(position+".Bool", query).
-									Render(item.Text),
+							Iff(item.As == BOOL)(
+								Div("flex items-center")(
+									Hidden(position+".Field", "string", item.DB),
+									Hidden(position+".As", "uint", item.As),
+									Hidden(position+".Condition", "string", item.Condition),
+									ICheckbox(position+".Bool", query).Render(item.Text),
+								),
 							),
-						),
 
-						Iff(item.As == SELECT && len(item.Options) > 0)(
-							Div("flex")(
-								Hidden(position+".Field", "string", item.DB),
-								Hidden(position+".As", "uint", item.As),
-								ISelect(position+".Value", query).
-									Class("flex-1").
-									Options(item.Options).
-									Render(item.Text),
-								// IRadioButtons(position+".Value", query).
-								// 	Options(item.Options).
-								// 	Render(item.Text),
+							Iff(item.As == SELECT && len(item.Options) > 0)(
+								Div("")(
+									Hidden(position+".Field", "string", item.DB),
+									Hidden(position+".As", "uint", item.As),
+									ISelect(position+".Value", query).
+										Class("flex-1").
+										Options(item.Options).
+										Render(item.Text),
+								),
 							),
-						),
-					}
-				}),
+						}
+					}),
+				),
 
-				Div("flex gap-px mt-3")(
+				// Footer actions
+				Div("flex items-center justify-between mt-4 pt-3 border-t border-gray-200")(
 					Button().
-						Color(Red).
+						Color(White).
+						Class("flex items-center gap-2 rounded-full px-4 h-10 border border-gray-300 bg-white hover:bg-gray-50").
 						Click(ctx.Call(collate.onReset).Replace(collate.Target)).
-						Class("rounded-l-lg").
-						Render(Icon("fa fa-fw fa-times")),
+						Render(IconLeft("fa fa-fw fa-undo", "Reset")),
 
 					Button().
 						Submit().
-						Class("flex-1 rounded-r-lg").
+						Class("flex items-center gap-2 rounded-lg px-4 h-10").
 						Color(Purple).
-						Render(IconStart("fa fa-fw fa-search", "Filter")),
+						Render(IconLeft("fa fa-fw fa-check", "Apply")),
 				),
 			),
 		),
