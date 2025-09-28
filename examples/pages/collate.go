@@ -130,7 +130,7 @@ func initDB() (*gorm.DB, error) {
 }
 
 // Query demonstrates full ui.TCollate feature set over an in-memory DB
-func Query(ctx *ui.Context) string {
+func Collate(ctx *ui.Context) string {
 	database, err := initDB()
 	if err != nil {
 		return ui.Div("text-red-700 font-semibold bg-red-50 p-3 rounded border border-red-200")(fmt.Sprintf("DB error: %v", err))
@@ -215,7 +215,7 @@ func Query(ctx *ui.Context) string {
 
 	// Render the collate UI with search, sort, filters, paging and XLS export
 	body := ui.Div("max-w-full sm:max-w-5xl mx-auto flex flex-col gap-3")( // wrapper
-		ui.Div("text-3xl font-bold")("Query Demo"),
+		ui.Div("text-3xl font-bold")("Collate Demo"),
 		ui.Div("text-gray-600")("In-memory SQLite with 100 seeded records. Supports search, sort, filters, paging, and XLS export."),
 		collate.Render(ctx, database),
 	)
