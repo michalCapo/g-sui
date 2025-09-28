@@ -10,7 +10,7 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 
 ## Highlights
 
-- Server‑rendered HTML components with a small helper DSL
+- Server-rendered HTML components with a small helper DSL
 - Lightweight interactivity via server actions (`Click`, `Submit`, `Send`)
 - Partial updates: re-render, replace, append, or prepend only the target
 - Deferred fragments with skeletons via WebSocket patches (`ctx.Patch` + skeleton helpers)
@@ -21,6 +21,12 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 - Built-in live status via WebSocket (`/__ws`) with an offline banner, automatic reconnect, and auto-reload on reconnect
 - Built-in dark mode with a tiny theme switcher (`ui.ThemeSwitcher`) cycling System → Light → Dark
 - Optional dev autorestart (`app.AutoRestart(true)`) to rebuild and restart on changes
+
+## Lighthouse snapshot
+
+![Lighthouse scores for the example app](docs/lighthouse-scores.svg)
+
+The bundled example app scores 97 for Performance, 100 for Accessibility, 100 for Best Practices, and 90 for SEO when audited with Lighthouse. These scores come from a local run against the default demo and showcase how the server-rendered approach keeps the experience fast and accessible out of the box.
 
 ## Install
 
