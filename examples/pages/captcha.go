@@ -14,7 +14,19 @@ func Captcha(ctx *ui.Context) string {
 		ui.Div("text-gray-600")("Demonstrates the reusable CAPTCHA component with server-side validation helpers."),
 
 		ui.Div("bg-white p-4 rounded-lg shadow-md")(
-			ui.Captcha2(validated).Render(ctx),
+			ui.Div("flex flex-wrap gap-4")(
+				ui.Div("")(
+					ui.Div("text-lg font-bold mb-4")("CAPTCHA v2 Component"),
+					ui.Captcha2(validated).Render(ctx),
+				),
+
+				ui.Flex1,
+
+				ui.Div("")(
+					ui.Div("text-lg font-bold mb-4")("CAPTCHA v3 Component"),
+					ui.Captcha3(validated).Render(ctx),
+				),
+			),
 		),
 	)
 }
