@@ -221,6 +221,48 @@ Notes:
 
 Refer to the `examples/` directory for practical usage and composition patterns.
 
+## CAPTCHA components
+
+- `ui.Captcha(siteKey, solvedHTML)` renders the Google reCAPTCHA widget and swaps in the `solvedHTML` fragment once the challenge completes (falls back to a helper note if the script is missing).
+- `ui.Captcha2(onValidated)` generates an image-based challenge entirely in Go, keeps the session in memory, and optionally calls `onValidated` to stream a success fragment back through server actions.
+- `ui.Captcha3(onValidated)` renders draggable tiles that must be ordered to match the target string; uses the same session helpers as `Captcha2` and supports the optional success action.
+
+`Captcha2` and `Captcha3` expose configuration helpers such as `SessionField`, `ClientVerifiedField`, `Attempts`, and `Lifetime`, plus `AnswerField`/`ArrangementField` or `Count` to tailor the challenge. Each call to `Render(ctx)` creates a fresh session using cryptographically secure IDs.
+
+Validate the submitted form server-side with the convenience methods:
+
+```go
+func handler(ctx *ui.Context) string {
+    successAction := func(inner *ui.Context) string {
+        inner.Success("Captcha solved")
+        return ""
+    }
+    captcha := ui.Captcha3(successAction).Count(5)
+
+    if ctx.Request.Method == http.MethodPost {
+        ok, err := captcha.ValidateRequest(ctx.Request)
+        if err != nil {
+            ctx.Error(err.Error())
+            return ""
+        }
+        if !ok {
+            ctx.Error("Captcha mismatch, please try again")
+            return ""
+        }
+        // proceed with the protected action
+    }
+
+    return ui.Form("post", "/submit")(
+        captcha.Render(ctx),
+        ui.Button().Color(ui.Blue).Submit().Render("Submit"),
+    )
+}
+```
+
+Import `net/http` to use `http.MethodPost` within your handlers.
+
+For production deployments, back the shared session store with Redis or a database by swapping out the in-memory map used in `ui.Captcha2`/`ui.Captcha3`.
+
 ## Theme & Dark Mode
 
 - Built-in dark theme overrides load with `ui.MakeApp`. Use `ui.ThemeSwitcher("")` to render a compact toggle that cycles System → Light → Dark.

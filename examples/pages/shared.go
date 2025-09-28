@@ -2,31 +2,31 @@ package pages
 
 import "github.com/michalCapo/g-sui/ui"
 
-type someForm struct {
+type TemplateForm struct {
 	target      ui.Attr
 	Title       string
 	Description string
 	onSubmit    func(*ui.Context) string
 }
 
-func NewForm(title string, description string) *someForm {
+func NewTemplate(title string, description string) *TemplateForm {
 	target := ui.Target()
 
-	return &someForm{
+	return &TemplateForm{
 		target:      target,
 		Title:       title,
 		Description: description,
 	}
 }
 
-func (f *someForm) OnCancel(ctx *ui.Context) string {
+func (f *TemplateForm) OnCancel(ctx *ui.Context) string {
 	f.Title = ""
 	f.Description = ""
 
 	return f.Render(ctx)
 }
 
-func (f *someForm) Render(ctx *ui.Context) string {
+func (f *TemplateForm) Render(ctx *ui.Context) string {
 
 	return ui.Form("flex flex-col gap-4", f.target, ctx.Submit(f.onSubmit).Replace(f.target))(
 		ui.Div("")(
@@ -64,11 +64,11 @@ func (f *someForm) Render(ctx *ui.Context) string {
 }
 
 func Shared(ctx *ui.Context) string {
-	form1 := NewForm(
+	form1 := NewTemplate(
 		"Hello",
 		"What a nice day",
 	)
-	form2 := NewForm(
+	form2 := NewTemplate(
 		"Next Title",
 		"Next Description",
 	)
