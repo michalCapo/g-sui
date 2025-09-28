@@ -21,7 +21,6 @@ type route struct {
 var routes = []route{
 	{Path: "/", Title: "Showcase"},
 	{Path: "/icons", Title: "Icons"},
-	{Path: "/query", Title: "Query"},
 	{Path: "/button", Title: "Button"},
 	{Path: "/text", Title: "Text"},
 	{Path: "/password", Title: "Password"},
@@ -38,6 +37,7 @@ var routes = []route{
 	{Path: "/clock", Title: "Clock"},
 	{Path: "/deferred", Title: "Deferred"},
 	{Path: "/shared", Title: "Shared"},
+	{Path: "/query", Title: "Query"},
 }
 
 func main() {
@@ -78,7 +78,6 @@ func main() {
 	// Individual example pages
 	app.Page("/", layout("Showcase", pages.Showcase))
 	app.Page("/icons", layout("Icons", pages.IconsContent))
-	app.Page("/query", layout("Query", pages.Query))
 	app.Page("/button", layout("Button", pages.Button))
 	app.Page("/text", layout("Text", pages.Text))
 	app.Page("/password", layout("Password", pages.Password))
@@ -95,6 +94,7 @@ func main() {
 	app.Page("/clock", layout("Clock", pages.Clock))
 	app.Page("/deferred", layout("Deferred", pages.Deffered))
 	app.Page("/shared", layout("Shared", pages.Shared))
+	app.Page("/query", layout("Query", pages.Query))
 
 	app.Listen(":1422")
 }

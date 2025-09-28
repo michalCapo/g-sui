@@ -43,7 +43,7 @@ func generateSecureCaptchaText(length int) (string, error) {
 	}
 
 	result := make([]byte, length)
-	for i := range length {
+	for i := 0; i < length; i++ {
 		result[i] = chars[int(b[i])%len(chars)]
 	}
 
@@ -172,20 +172,30 @@ type Captcha2Component struct {
 	codeLength              int
 	sessionLifetime         time.Duration
 	attemptLimit            int
+	onValidated             Callable
 }
 
 // Captcha2 constructs a configurable CAPTCHA component with built-in session
 // storage and validation helpers. Each call to Render() creates a new
 // challenge and stores it in the in-memory session map.
-func Captcha2() *Captcha2Component {
-	return &Captcha2Component{
+func Captcha2(onValidated Callable) *Captcha2Component {
+	component := &Captcha2Component{
 		answerFieldName:         "captcha_answer",
 		sessionFieldName:        "captcha_session",
 		clientVerifiedFieldName: "captcha_client_verified",
 		codeLength:              defaultCaptchaLength,
 		sessionLifetime:         defaultCaptchaLifetime,
 		attemptLimit:            defaultCaptchaAttempts,
+		onValidated:             onValidated,
 	}
+
+	if component.onValidated == nil {
+		component.onValidated = func(*Context) string {
+			return Div("text-green-600")("Captcha validated successfully!")
+		}
+	}
+
+	return component
 }
 
 // AnswerField sets the form field used for the user-supplied CAPTCHA answer.
@@ -278,7 +288,7 @@ func (c *Captcha2Component) attemptLimitValue() int {
 	return c.attemptLimit
 }
 
-func (c *Captcha2Component) Render() string {
+func (c *Captcha2Component) Render(ctx *Context) string {
 	if c == nil {
 		return renderCaptchaError("Captcha component not initialised")
 	}
@@ -293,11 +303,11 @@ func (c *Captcha2Component) Render() string {
 		return renderCaptchaError("Error generating CAPTCHA. Please refresh the page and try again.")
 	}
 
-	canvasID, err := generateSecureID("captchaCanvas_")
+	rootID, err := generateSecureID("captchaRoot_")
 	if err != nil {
 		return renderCaptchaError("Error generating CAPTCHA IDs")
 	}
-	inputID, err := generateSecureID("captchaInput_")
+	canvasID, err := generateSecureID("captchaCanvas_")
 	if err != nil {
 		return renderCaptchaError("Error generating CAPTCHA IDs")
 	}
@@ -305,25 +315,61 @@ func (c *Captcha2Component) Render() string {
 	if err != nil {
 		return renderCaptchaError("Error generating CAPTCHA IDs")
 	}
+	containerID, err := generateSecureID("captchaContainer_")
+	if err != nil {
+		return renderCaptchaError("Error generating CAPTCHA IDs")
+	}
+
+	successPath := ""
+	if ctx != nil && ctx.App != nil && c.onValidated != nil {
+		if callable := ctx.Callable(c.onValidated); callable != nil {
+			if path, ok := stored[*callable]; ok {
+				successPath = path
+			}
+		}
+	}
+
+	defaultSuccess := Div("text-green-600")("Captcha validated successfully!")
 
 	text := escapeJS(session.Text)
 
-	return Div("", Attr{Style: "display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; width: 100%;"})(
-		Canvas("", Attr{ID: canvasID, Style: "border: 1px solid #ccc; width: 100%; max-width: 320px; height: 96px;"})(),
-		Input("w-full sm:w-auto flex-1 min-w-0", Attr{ID: inputID, Type: "text", Name: c.AnswerFieldName(), Placeholder: "Enter text from image", Required: true, Autocomplete: "off"}),
-		Input("", Attr{Type: "hidden", Name: c.SessionFieldName(), Value: sessionID}),
-		Input("", Attr{ID: hiddenFieldID, Type: "hidden", Name: c.ClientVerifiedFieldName(), Value: "false"}),
+	return Div("flex flex-col items-start gap-3 w-full", Attr{ID: rootID})(
+		Div("flex flex-col gap-3 w-72", Attr{ID: containerID})(
+			Canvas("", Attr{ID: canvasID, Style: "border: 1px solid #ccc; width: 100%; max-width: 320px; height: 96px;"})(),
+
+			IText(c.AnswerFieldName()).
+				Class("w-full").
+				ClassLabel("text-sm text-gray-700").
+				ClassInput("w-full").
+				Autocomplete("off").
+				Required().
+				Render("Enter text from image"),
+		),
+		Hidden(c.SessionFieldName(), "string", sessionID),
+		Hidden(c.ClientVerifiedFieldName(), "bool", "false", Attr{ID: hiddenFieldID}),
 		Script(fmt.Sprintf(`
             setTimeout(function() {
+                var root = document.getElementById('%s');
                 var canvas = document.getElementById('%s');
                 if (!canvas) { return; }
                 var ctx = canvas.getContext('2d');
                 if (!ctx) { return; }
-                var input = document.getElementById('%s');
+                var input = document.querySelector('input[name="%s"]');
                 var hiddenField = document.getElementById('%s');
+                var container = document.getElementById('%s');
                 var captchaText = '%s';
+                var successPath = '%s';
+                var defaultSuccess = '%s';
+                var solved = false;
+
+                function injectSuccess(html) {
+                    if (!root) { return; }
+                    var output = (html && html.trim()) ? html : defaultSuccess;
+                    root.innerHTML = output;
+                }
 
                 function sizeCanvas() {
+                    if (solved) { return; }
                     var ratio = window.devicePixelRatio || 1;
                     var displayWidth = Math.min(320, canvas.clientWidth || 320);
                     var displayHeight = 96;
@@ -335,6 +381,7 @@ func (c *Captcha2Component) Render() string {
                 }
 
                 function drawCaptcha() {
+                    if (solved) { return; }
                     sizeCanvas();
                     var w = canvas.clientWidth || 320;
                     var h = canvas.clientHeight || 96;
@@ -368,10 +415,27 @@ func (c *Captcha2Component) Render() string {
                 }
 
                 function validateCaptcha() {
+                    if (solved) { return; }
                     if (!input) { return; }
                     if (input.value.toLowerCase() === captchaText.toLowerCase()) {
                         if (hiddenField) { hiddenField.value = 'true'; }
                         input.style.borderColor = 'green';
+                        solved = true;
+                        if (input) { input.removeEventListener('input', validateCaptcha); }
+                        window.removeEventListener('resize', drawCaptcha);
+                        if (successPath) {
+                            fetch(successPath, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: '[]'
+                            })
+                                .then(function(resp) { if (!resp.ok) { throw new Error('HTTP ' + resp.status); } return resp.text(); })
+                                .then(injectSuccess)
+                                .catch(function() { injectSuccess(defaultSuccess); });
+                        } else {
+                            injectSuccess(defaultSuccess);
+                        }
                     } else {
                         if (hiddenField) { hiddenField.value = 'false'; }
                         input.style.borderColor = 'red';
@@ -385,7 +449,7 @@ func (c *Captcha2Component) Render() string {
                 drawCaptcha();
                 window.addEventListener('resize', drawCaptcha);
             }, 300);
-        `, canvasID, inputID, hiddenFieldID, text)),
+        `, rootID, canvasID, escapeJS(c.AnswerFieldName()), hiddenFieldID, containerID, text, escapeJS(successPath), escapeJS(defaultSuccess))),
 	)
 }
 
