@@ -739,56 +739,187 @@ func Print(value any) string {
 	return fmt.Sprintf("%+v", value)
 }
 
+// validateFieldAccess checks if a field path is safe to access
+func validateFieldAccess(path string) error {
+	if len(path) > 256 {
+		return fmt.Errorf("field path too long: %d characters", len(path))
+	}
+	
+	// Check for dangerous patterns
+	dangerousPatterns := []string{
+		"os.", "exec.", "syscall.", "runtime.", "unsafe.", "reflect.",
+		"__", // Double underscores often indicate private fields
+	}
+	
+	pathLower := strings.ToLower(path)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(pathLower, pattern) {
+			return fmt.Errorf("potentially unsafe field path: contains '%s'", pattern)
+		}
+	}
+	
+	// Validate each part of the path
+	parts := strings.Split(path, ".")
+	for _, part := range parts {
+		if strings.Contains(part, "[") && strings.Contains(part, "]") {
+			// Extract field name from slice notation
+			fieldName := part[:strings.Index(part, "[")]
+			if fieldName != "" && !isValidFieldName(fieldName) {
+				return fmt.Errorf("invalid field name in slice notation: %s", fieldName)
+			}
+		} else if !isValidFieldName(part) {
+			return fmt.Errorf("invalid field name: %s", part)
+		}
+	}
+	
+	return nil
+}
+
+// isValidFieldName checks if a field name is safe
+func isValidFieldName(name string) bool {
+	if name == "" {
+		return false
+	}
+	
+	// Must start with letter or underscore
+	if !((name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= 'a' && name[0] <= 'z') || name[0] == '_') {
+		return false
+	}
+	
+	// Rest can be letters, numbers, or underscores
+	for i := 1; i < len(name); i++ {
+		c := name[i]
+		if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+			return false
+		}
+	}
+	
+	return true
+}
+
 func PathValue(obj any, path string) (*reflect.Value, error) {
+	// Validate field access safety
+	if err := validateFieldAccess(path); err != nil {
+		return nil, fmt.Errorf("unsafe field access: %w", err)
+	}
+	
 	parts := strings.Split(path, ".")
 	current := reflect.ValueOf(obj)
+	
+	// Ensure we have a valid starting value
+	if !current.IsValid() {
+		return nil, fmt.Errorf("invalid starting object")
+	}
 
-	for _, part := range parts {
+	for partIndex, part := range parts {
 		// Handle slice index notation
 		if strings.Contains(part, "[") && strings.Contains(part, "]") {
 			fieldName := part[:strings.Index(part, "[")]
 			indexStr := part[strings.Index(part, "[")+1 : strings.Index(part, "]")]
 			indexVal, err := strconv.Atoi(indexStr)
 			if err != nil {
-				fmt.Println(err)
-				return nil, err
+				return nil, fmt.Errorf("invalid slice index '%s' in part %d: %w", indexStr, partIndex, err)
+			}
+			
+			// Bounds check for slice index
+			if indexVal < 0 || indexVal > 10000 { // Reasonable upper bound
+				return nil, fmt.Errorf("slice index out of reasonable bounds: %d", indexVal)
 			}
 
-			current = current.Elem().FieldByName(fieldName)
-			if !current.IsValid() || current.Kind() != reflect.Slice {
-				fmt.Printf("invalid slice field: %s", fieldName)
-				return nil, err
-			}
-
-			for current.Len() <= indexVal {
-				elemType := current.Type().Elem()
-
-				if elemType.Kind() == reflect.Pointer {
-					newElem := reflect.New(elemType.Elem())
-					current.Set(reflect.Append(current, newElem))
-				} else {
-					newElem := reflect.New(elemType).Elem()
-					current.Set(reflect.Append(current, newElem))
-				}
-			}
-
-			current = current.Index(indexVal)
-
-			// fmt.Printf("current: %v\n", current)
-		} else {
+			// Safely navigate to the field
 			if current.Kind() == reflect.Pointer {
+				if current.IsNil() {
+					return nil, fmt.Errorf("nil pointer encountered at part %d", partIndex)
+				}
 				current = current.Elem()
 			}
 
-			current = current.FieldByName(part)
+			if !current.IsValid() {
+				return nil, fmt.Errorf("invalid value at part %d", partIndex)
+			}
+
+			// Get the slice field
+			if fieldName != "" {
+				current = current.FieldByName(fieldName)
+				if !current.IsValid() {
+					return nil, fmt.Errorf("field '%s' not found at part %d", fieldName, partIndex)
+				}
+			}
+
+			if current.Kind() != reflect.Slice {
+				return nil, fmt.Errorf("field '%s' is not a slice at part %d", fieldName, partIndex)
+			}
+
+			// Safely expand slice if needed
+			for current.Len() <= indexVal {
+				elemType := current.Type().Elem()
+				
+				// Prevent infinite growth
+				if current.Len() > 1000 {
+					return nil, fmt.Errorf("slice grew too large, potential memory exhaustion attack")
+				}
+
+				var newElem reflect.Value
+				if elemType.Kind() == reflect.Pointer {
+					newElem = reflect.New(elemType.Elem())
+				} else {
+					newElem = reflect.New(elemType).Elem()
+				}
+				
+				// Check if we can actually append
+				if !current.CanSet() {
+					return nil, fmt.Errorf("cannot modify slice at part %d", partIndex)
+				}
+				
+				current.Set(reflect.Append(current, newElem))
+			}
+
+			// Access the slice element safely
+			if indexVal >= current.Len() {
+				return nil, fmt.Errorf("slice index %d out of bounds (length %d)", indexVal, current.Len())
+			}
+			current = current.Index(indexVal)
+
+		} else {
+			// Handle regular field access
+			if current.Kind() == reflect.Pointer {
+				if current.IsNil() {
+					return nil, fmt.Errorf("nil pointer encountered at part %d: %s", partIndex, part)
+				}
+				current = current.Elem()
+			}
+
+			if !current.IsValid() {
+				return nil, fmt.Errorf("invalid value at part %d: %s", partIndex, part)
+			}
+
+			// Check if the field exists and is accessible
+			if current.Kind() != reflect.Struct {
+				return nil, fmt.Errorf("cannot access field '%s' on non-struct type %s at part %d", part, current.Type(), partIndex)
+			}
+
+			fieldValue := current.FieldByName(part)
+			if !fieldValue.IsValid() {
+				return nil, fmt.Errorf("field '%s' not found at part %d", part, partIndex)
+			}
+
+			// Check if field is exported (accessible)
+			field, found := current.Type().FieldByName(part)
+			if !found {
+				return nil, fmt.Errorf("field '%s' metadata not found at part %d", part, partIndex)
+			}
+			
+			// Prevent access to unexported fields as a security measure
+			if !field.IsExported() {
+				return nil, fmt.Errorf("cannot access unexported field '%s' at part %d", part, partIndex)
+			}
+
+			current = fieldValue
 		}
 
+		// Final validation of current value
 		if !current.IsValid() {
-			err := fmt.Errorf("invalid path segment: %s", part)
-
-			fmt.Println(err)
-
-			return nil, err
+			return nil, fmt.Errorf("invalid field value after accessing part %d: %s", partIndex, part)
 		}
 	}
 

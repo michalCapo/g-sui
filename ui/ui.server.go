@@ -138,28 +138,130 @@ func (ctx *Context) Session(db *gorm.DB, name string) *TSession {
 	}
 }
 
-func (ctx *Context) Body(output any) error {
-	body, err := io.ReadAll(ctx.Request.Body)
-	if err != nil {
+// Maximum input size limits for security
+const (
+	MaxBodySize      = 10 * 1024 * 1024 // 10MB max request body
+	MaxFieldNameLen  = 256              // Max field name length
+	MaxFieldValueLen = 1024 * 1024      // 1MB max field value
+	MaxFieldCount    = 1000             // Max number of fields
+)
+
+// validateInputSafety performs comprehensive input validation
+func validateInputSafety(data []BodyItem) error {
+	if len(data) > MaxFieldCount {
+		return fmt.Errorf("too many fields: %d exceeds maximum of %d", len(data), MaxFieldCount)
+	}
+
+	for i, item := range data {
+		// Validate field name length and content
+		if len(item.Name) > MaxFieldNameLen {
+			return fmt.Errorf("field name too long at index %d: %d exceeds maximum of %d", i, len(item.Name), MaxFieldNameLen)
+		}
+
+		if item.Name == "" {
+			return fmt.Errorf("empty field name at index %d", i)
+		}
+
+		// Validate field name contains only safe characters
+		for _, r := range item.Name {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '[' || r == ']' || r == '_') {
+				return fmt.Errorf("unsafe character in field name at index %d: '%c'", i, r)
+			}
+		}
+
+		// Validate field value length
+		if len(item.Value) > MaxFieldValueLen {
+			return fmt.Errorf("field value too long at index %d: %d exceeds maximum of %d", i, len(item.Value), MaxFieldValueLen)
+		}
+
+		// Validate type field
+		if len(item.Type) > 64 {
+			return fmt.Errorf("field type too long at index %d: %d exceeds maximum of 64", i, len(item.Type))
+		}
+	}
+
+	return nil
+}
+
+// validateNumericInput validates numeric input with bounds checking
+func validateNumericInput(value string, inputType string) error {
+	switch inputType {
+	case "int":
+		cleanedValue := strings.ReplaceAll(value, "_", "")
+		if len(cleanedValue) > 20 { // Prevent overflow attacks
+			return fmt.Errorf("integer value too long: %d characters", len(cleanedValue))
+		}
+		_, err := strconv.ParseInt(cleanedValue, 10, 64)
 		return err
+
+	case "int64":
+		cleanedValue := strings.ReplaceAll(value, "_", "")
+		if len(cleanedValue) > 20 {
+			return fmt.Errorf("int64 value too long: %d characters", len(cleanedValue))
+		}
+		_, err := strconv.ParseInt(cleanedValue, 10, 64)
+		return err
+
+	case "uint":
+		cleanedValue := strings.ReplaceAll(value, "_", "")
+		if len(cleanedValue) > 20 {
+			return fmt.Errorf("uint value too long: %d characters", len(cleanedValue))
+		}
+		_, err := strconv.ParseUint(cleanedValue, 10, 64)
+		return err
+
+	case "number":
+		cleanedValue := strings.ReplaceAll(value, "_", "")
+		if len(cleanedValue) > 20 {
+			return fmt.Errorf("number value too long: %d characters", len(cleanedValue))
+		}
+		_, err := strconv.Atoi(cleanedValue)
+		return err
+
+	case "decimal", "float64":
+		cleanedValue := strings.ReplaceAll(value, "_", "")
+		if len(cleanedValue) > 50 { // Allow longer decimals but still bounded
+			return fmt.Errorf("decimal value too long: %d characters", len(cleanedValue))
+		}
+		_, err := strconv.ParseFloat(cleanedValue, 64)
+		return err
+	}
+
+	return nil
+}
+func (ctx *Context) Body(output any) error {
+	body, err := io.ReadAll(io.LimitReader(ctx.Request.Body, MaxBodySize))
+	if err != nil {
+		return fmt.Errorf("failed to read request body: %w", err)
+	}
+
+	// Check if body was truncated due to size limit
+	if len(body) >= MaxBodySize {
+		return fmt.Errorf("request body too large: exceeds %d bytes", MaxBodySize)
 	}
 
 	var data []BodyItem
 	if len(body) > 0 {
 		err = json.Unmarshal(body, &data)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to parse JSON body: %w", err)
 		}
 	}
 
-	for _, item := range data {
+	// Validate input safety
+	if err := validateInputSafety(data); err != nil {
+		return fmt.Errorf("input validation failed: %w", err)
+	}
+
+	for i, item := range data {
 		structFieldValue, err := PathValue(output, item.Name)
 		if err != nil {
-			fmt.Println("Error getting field", item.Name, err)
+			fmt.Printf("Warning: Error getting field %s at index %d: %v\n", item.Name, i, err)
 			continue
 		}
 
 		if !structFieldValue.CanSet() {
+			fmt.Printf("Warning: Cannot set field %s at index %d\n", item.Name, i)
 			continue
 		}
 
@@ -169,10 +271,15 @@ func (ctx *Context) Body(output any) error {
 			switch item.Type {
 			case "Skeleton":
 				val = reflect.ValueOf(Skeleton(item.Value))
+
 			case "date":
+				if len(item.Value) > 10 { // Basic length check for date format
+					fmt.Printf("Warning: Date value too long at index %d\n", i)
+					continue
+				}
 				t, err := time.Parse("2006-01-02", item.Value)
 				if err != nil {
-					fmt.Println("Error parsing date", err)
+					fmt.Printf("Warning: Error parsing date at index %d: %v\n", i, err)
 					continue
 				}
 				if structFieldValue.Type() == reflect.TypeOf(gorm.DeletedAt{}) {
@@ -182,90 +289,80 @@ func (ctx *Context) Body(output any) error {
 				}
 
 			case "bool", "checkbox":
+				if item.Value != "true" && item.Value != "false" {
+					fmt.Printf("Warning: Invalid boolean value at index %d: %s\n", i, item.Value)
+					continue
+				}
 				val = reflect.ValueOf(item.Value == "true")
 
 			case "radio", "string":
 				val = reflect.ValueOf(item.Value)
 
 			case "time":
+				if len(item.Value) > 5 { // Basic length check for time format HH:MM
+					fmt.Printf("Warning: Time value too long at index %d\n", i)
+					continue
+				}
 				t, err := time.Parse("15:04", item.Value)
 				if err != nil {
-					fmt.Println("Error parsing time", err)
+					fmt.Printf("Warning: Error parsing time at index %d: %v\n", i, err)
 					continue
 				}
 				val = reflect.ValueOf(t)
 
 			case "Time":
+				if len(item.Value) > 50 { // Extended length check for full timestamp
+					fmt.Printf("Warning: Timestamp value too long at index %d\n", i)
+					continue
+				}
 				t, err := time.Parse("2006-01-02 15:04:05 -0700 UTC", item.Value)
 				if err != nil {
-					fmt.Println("Error parsing time", err)
+					fmt.Printf("Warning: Error parsing timestamp at index %d: %v\n", i, err)
+					continue
 				}
 				val = reflect.ValueOf(t)
 
-			case "uint":
-				cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-				n, err := strconv.ParseUint(cleanedValue, 10, 64)
-				if err != nil {
-					fmt.Println("Error parsing number", err)
+			case "uint", "int", "int64", "number", "decimal", "float64":
+				// Validate numeric input with bounds checking
+				if err := validateNumericInput(item.Value, item.Type); err != nil {
+					fmt.Printf("Warning: Invalid numeric value at index %d: %v\n", i, err)
 					continue
 				}
-				val = reflect.ValueOf(uint(n))
 
-			case "int":
-				cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-				n, err := strconv.ParseInt(cleanedValue, 10, 64)
-				if err != nil {
-					fmt.Println("Error parsing number", err)
-					continue
+				switch item.Type {
+				case "uint":
+					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
+					n, _ := strconv.ParseUint(cleanedValue, 10, 64) // Already validated above
+					val = reflect.ValueOf(uint(n))
+				case "int":
+					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
+					n, _ := strconv.ParseInt(cleanedValue, 10, 64)
+					val = reflect.ValueOf(int(n))
+				case "int64":
+					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
+					n, _ := strconv.ParseInt(cleanedValue, 10, 64)
+					val = reflect.ValueOf(int64(n))
+				case "number":
+					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
+					n, _ := strconv.Atoi(cleanedValue)
+					val = reflect.ValueOf(n)
+				case "decimal", "float64":
+					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
+					f, _ := strconv.ParseFloat(cleanedValue, 64)
+					val = reflect.ValueOf(f)
 				}
-				val = reflect.ValueOf(int(n))
-
-			case "int64":
-				cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-				n, err := strconv.ParseInt(cleanedValue, 10, 64)
-				if err != nil {
-					fmt.Println("Error parsing number", err)
-					continue
-				}
-				val = reflect.ValueOf(int64(n))
-
-			case "number":
-				cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-				n, err := strconv.Atoi(cleanedValue)
-				if err != nil {
-					fmt.Println("Error parsing number", err)
-					continue
-				}
-				val = reflect.ValueOf(n)
-
-			case "decimal":
-				cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-				f, err := strconv.ParseFloat(cleanedValue, 64)
-				if err != nil {
-					fmt.Println("Error parsing decimal", err)
-					continue
-				}
-				val = reflect.ValueOf(f)
-
-			case "float64":
-				cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-				f, err := strconv.ParseFloat(cleanedValue, 64)
-				if err != nil {
-					fmt.Println("Error parsing float64", err)
-					continue
-				}
-				val = reflect.ValueOf(f)
 
 			case "datetime-local":
+				if len(item.Value) > 16 { // Basic length check for datetime-local format
+					fmt.Printf("Warning: DateTime value too long at index %d\n", i)
+					continue
+				}
 				t, err := time.Parse("2006-01-02T15:04", item.Value)
 				if err != nil {
-					fmt.Println("Error parsing datetime-local", err)
+					fmt.Printf("Warning: Error parsing datetime-local at index %d: %v\n", i, err)
 					continue
 				}
 				val = reflect.ValueOf(t)
-
-			// case "text":
-			// 	val = reflect.ValueOf(item.Value)
 
 			case "":
 				continue
@@ -274,13 +371,17 @@ func (ctx *Context) Body(output any) error {
 				continue
 
 			default:
-				fmt.Println("Skipping (name;type;value):", item.Name, ";", item.Type, ";", item.Value)
+				fmt.Printf("Warning: Unknown field type at index %d: %s\n", i, item.Type)
 				continue
 			}
 		}
 
-		// fmt.Println("Setting", item.Name, "to", item.Value)
-		structFieldValue.Set(val)
+		// Safe reflection assignment with error handling
+		if val.IsValid() && val.Type().ConvertibleTo(structFieldValue.Type()) {
+			structFieldValue.Set(val.Convert(structFieldValue.Type()))
+		} else if val.IsValid() {
+			fmt.Printf("Warning: Cannot convert %s to %s for field %s\n", val.Type(), structFieldValue.Type(), item.Name)
+		}
 	}
 
 	return nil
@@ -563,15 +664,78 @@ func (ctx *Context) Info(message string) {
 	displayMessage(ctx, message, "bg-blue-700 text-white")
 }
 
-// SetCSP sets Content Security Policy headers to help prevent XSS attacks
-func (ctx *Context) SetCSP(policy string) {
-	ctx.Response.Header().Set("Content-Security-Policy", policy)
+// SetSecurityHeaders sets comprehensive security headers
+func (ctx *Context) SetSecurityHeaders() {
+	headers := ctx.Response.Header()
+	
+	// Content Security Policy (if not already set)
+	if headers.Get("Content-Security-Policy") == "" {
+		ctx.SetDefaultCSP()
+	}
+	
+	// HTTP Strict Transport Security - enforce HTTPS
+	headers.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+	
+	// X-Frame-Options - prevent clickjacking
+	headers.Set("X-Frame-Options", "DENY")
+	
+	// X-Content-Type-Options - prevent MIME type sniffing
+	headers.Set("X-Content-Type-Options", "nosniff")
+	
+	// X-XSS-Protection - legacy XSS protection for older browsers
+	headers.Set("X-XSS-Protection", "1; mode=block")
+	
+	// Referrer Policy - control referrer information
+	headers.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	
+	// Permissions Policy - restrict dangerous browser features
+	headers.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
 }
 
-// SetDefaultCSP sets a restrictive CSP that allows only same-origin scripts and styles
-func (ctx *Context) SetDefaultCSP() {
-	policy := "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:; frame-ancestors 'none';"
-	ctx.SetCSP(policy)
+// SetCustomSecurityHeaders allows fine-grained control over security headers
+func (ctx *Context) SetCustomSecurityHeaders(options SecurityHeaderOptions) {
+	headers := ctx.Response.Header()
+	
+	if options.CSP != "" {
+		headers.Set("Content-Security-Policy", options.CSP)
+	}
+	
+	if options.HSTS != "" {
+		headers.Set("Strict-Transport-Security", options.HSTS)
+	} else if options.EnableHSTS {
+		headers.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+	}
+	
+	if options.FrameOptions != "" {
+		headers.Set("X-Frame-Options", options.FrameOptions)
+	}
+	
+	if options.ContentTypeOptions {
+		headers.Set("X-Content-Type-Options", "nosniff")
+	}
+	
+	if options.XSSProtection != "" {
+		headers.Set("X-XSS-Protection", options.XSSProtection)
+	}
+	
+	if options.ReferrerPolicy != "" {
+		headers.Set("Referrer-Policy", options.ReferrerPolicy)
+	}
+	
+	if options.PermissionsPolicy != "" {
+		headers.Set("Permissions-Policy", options.PermissionsPolicy)
+	}
+}
+
+type SecurityHeaderOptions struct {
+	CSP                string
+	HSTS               string
+	EnableHSTS         bool
+	FrameOptions       string
+	ContentTypeOptions bool
+	XSSProtection      string
+	ReferrerPolicy     string
+	PermissionsPolicy  string
 }
 
 func (ctx *Context) DownloadAs(file *io.Reader, contentType string, name string) error {
@@ -612,18 +776,80 @@ func (ctx *Context) Translate(message string, val ...any) string {
 	return fmt.Sprintf(message, val...)
 }
 
+// RandomString generates a cryptographically secure random string
 func RandomString(n ...int) string {
-	if len(n) == 0 {
-		return RandomString(20)
+	length := 20
+	if len(n) > 0 && n[0] > 0 {
+		length = n[0]
 	}
 
-	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz")
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	b := make([]rune, n[0])
-	for i := range b {
-		b[i] = letters[r.Intn(len(letters))]
+	// Use base64 encoding for efficiency and URL safety
+	// We need 3/4 * length bytes to get length characters after base64 encoding
+	byteLength := ((length * 3) + 3) / 4
+
+	b := make([]byte, byteLength)
+	_, err := rand.Read(b)
+	if err != nil {
+		// Fallback to timestamp-based generation if crypto/rand fails
+		// This is not ideal but ensures the function doesn't panic
+		fmt.Printf("Warning: crypto/rand failed (%v), falling back to time-based generation\n", err)
+		return fmt.Sprintf("fallback_%d_%d", time.Now().UnixNano(), length)
 	}
-	return string(b)
+
+	// Encode to base64 and trim to exact length
+	encoded := base64.URLEncoding.EncodeToString(b)
+	if len(encoded) > length {
+		encoded = encoded[:length]
+	}
+
+	// Replace any remaining padding characters with alphanumeric
+	encoded = strings.ReplaceAll(encoded, "=", "X")
+	encoded = strings.ReplaceAll(encoded, "-", "Y")
+	encoded = strings.ReplaceAll(encoded, "_", "Z")
+
+	return encoded
+}
+
+// SetCSP sets Content Security Policy headers to help prevent XSS attacks
+func (ctx *Context) SetCSP(policy string) {
+	ctx.Response.Header().Set("Content-Security-Policy", policy)
+}
+
+// SetDefaultCSP sets a restrictive CSP that allows only same-origin scripts and styles
+func (ctx *Context) SetDefaultCSP() {
+	policy := "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:; frame-ancestors 'none';"
+	ctx.SetCSP(policy)
+}
+
+// securityHeadersMiddleware adds comprehensive security headers to all responses
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add security headers before processing the request
+		headers := w.Header()
+		
+		// HTTP Strict Transport Security - enforce HTTPS
+		if isSecure(r) {
+			headers.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+		}
+		
+		// X-Frame-Options - prevent clickjacking
+		headers.Set("X-Frame-Options", "DENY")
+		
+		// X-Content-Type-Options - prevent MIME type sniffing
+		headers.Set("X-Content-Type-Options", "nosniff")
+		
+		// X-XSS-Protection - legacy XSS protection for older browsers
+		headers.Set("X-XSS-Protection", "1; mode=block")
+		
+		// Referrer Policy - control referrer information
+		headers.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		
+		// Permissions Policy - restrict dangerous browser features
+		headers.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+		
+		// Call the next handler
+		next.ServeHTTP(w, r)
+	})
 }
 
 func cacheControlMiddleware(next http.Handler, maxAge time.Duration) http.Handler {
@@ -859,7 +1085,8 @@ func (app *App) Listen(port string) {
 	// Init WebSocket endpoint for patches
 	app.initWS()
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// Wrap the main handler with security headers middleware
+	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains("GET POST", r.Method) {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -901,6 +1128,9 @@ func (app *App) Listen(port string) {
 
 		http.Error(w, "Not found", http.StatusNotFound)
 	})
+
+	// Apply security headers middleware
+	http.Handle("/", securityHeadersMiddleware(mainHandler))
 
 	if err := http.ListenAndServe(port, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Println("Error:", err)

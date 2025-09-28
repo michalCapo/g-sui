@@ -1,45 +1,155 @@
 package ui
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
+// CaptchaSession stores server-side CAPTCHA information
+type CaptchaSession struct {
+	Text      string
+	CreatedAt time.Time
+	Attempts  int
+	Solved    bool
 }
 
-// Captcha2 creates a client-side JavaScript CAPTCHA.
+// Global CAPTCHA session store (in production, use Redis or database)
+var captchaSessions = make(map[string]*CaptchaSession)
+
+// generateSecureCaptchaText creates a cryptographically secure random CAPTCHA text
+func generateSecureCaptchaText(length int) (string, error) {
+	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	
+	b := make([]byte, length)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate secure random bytes: %w", err)
+	}
+
+	result := make([]byte, length)
+	for i := 0; i < length; i++ {
+		result[i] = chars[int(b[i])%len(chars)]
+	}
+
+	return string(result), nil
+}
+
+// generateSecureID creates a cryptographically secure ID with the given prefix
+func generateSecureID(prefix string) (string, error) {
+	b := make([]byte, 8) // 64 bits of entropy
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate secure ID: %w", err)
+	}
+	
+	return fmt.Sprintf("%s%x", prefix, b), nil
+}
+
+// CreateCaptchaSession creates a new server-side CAPTCHA session
+func CreateCaptchaSession(sessionID string) (*CaptchaSession, error) {
+	captchaText, err := generateSecureCaptchaText(6)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate CAPTCHA text: %w", err)
+	}
+
+	session := &CaptchaSession{
+		Text:      captchaText,
+		CreatedAt: time.Now(),
+		Attempts:  0,
+		Solved:    false,
+	}
+
+	// Clean up old sessions
+	cleanupExpiredCaptchaSessions()
+
+	captchaSessions[sessionID] = session
+	return session, nil
+}
+
+// ValidateCaptcha validates a CAPTCHA answer against the server-side session
+func ValidateCaptcha(sessionID, answer string) (bool, error) {
+	session, exists := captchaSessions[sessionID]
+	if !exists {
+		return false, fmt.Errorf("CAPTCHA session not found")
+	}
+
+	// Check if session is expired (5 minutes)
+	if time.Since(session.CreatedAt) > 5*time.Minute {
+		delete(captchaSessions, sessionID)
+		return false, fmt.Errorf("CAPTCHA session expired")
+	}
+
+	// Check attempt limit (prevent brute force)
+	session.Attempts++
+	if session.Attempts > 3 {
+		delete(captchaSessions, sessionID)
+		return false, fmt.Errorf("too many CAPTCHA attempts")
+	}
+
+	// Already solved
+	if session.Solved {
+		return true, nil
+	}
+
+	// Check answer (case insensitive)
+	if strings.ToLower(strings.TrimSpace(answer)) == strings.ToLower(session.Text) {
+		session.Solved = true
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// cleanupExpiredCaptchaSessions removes expired sessions
+func cleanupExpiredCaptchaSessions() {
+	now := time.Now()
+	for id, session := range captchaSessions {
+		if now.Sub(session.CreatedAt) > 10*time.Minute {
+			delete(captchaSessions, id)
+		}
+	}
+}
+
+// Captcha2 creates a client-side JavaScript CAPTCHA with server-side validation support.
 // It returns HTML containing a canvas for the CAPTCHA image, an input field,
 // and inline JavaScript to handle the CAPTCHA logic.
 //
-// IMPORTANT: This is a client-side CAPTCHA and is NOT secure on its own.
-// You MUST implement server-side validation to verify the 'js_captcha_verified' field.
-func Captcha2() string {
-	const captchaLength = 6
-	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+// IMPORTANT: This now includes server-side validation support.
+// Use ValidateCaptcha() server-side to verify the CAPTCHA solution.
+func Captcha2(sessionID string) string {
+	// Create server-side CAPTCHA session
+	session, err := CreateCaptchaSession(sessionID)
+	if err != nil {
+		return Div("text-red-600 bg-red-50 p-2 border border-red-200 rounded")(
+			"Error generating CAPTCHA. Please refresh the page and try again.",
+		)
+	}
 
-    b := strings.Builder{}
-    b.Grow(captchaLength)
-    for i := 0; i < captchaLength; i++ {
-        b.WriteByte(chars[rand.Intn(len(chars))])
-    }
-
-    captchaText := b.String()
-
-	canvasID := fmt.Sprintf("captchaCanvas_%d", time.Now().UnixNano())
-	inputID := fmt.Sprintf("captchaInput_%d", time.Now().UnixNano())
-	hiddenFieldID := fmt.Sprintf("captchaVerified_%d", time.Now().UnixNano())
+	// Generate cryptographically secure IDs for HTML elements
+	canvasID, err := generateSecureID("captchaCanvas_")
+	if err != nil {
+		return Div("text-red-600")("Error generating CAPTCHA IDs")
+	}
+	inputID, err := generateSecureID("captchaInput_")
+	if err != nil {
+		return Div("text-red-600")("Error generating CAPTCHA IDs")
+	}
+	hiddenFieldID, err := generateSecureID("captchaVerified_")
+	if err != nil {
+		return Div("text-red-600")("Error generating CAPTCHA IDs")
+	}
 
     return Div("", Attr{Style: "display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; width: 100%;"})(
         // Responsive canvas: width 100% up to a max; height via CSS, real pixel size set in JS
         Canvas("", Attr{ID: canvasID, Style: "border: 1px solid #ccc; width: 100%; max-width: 320px; height: 96px;"})(),
         // Text input becomes full-width on narrow screens
-        Input("w-full sm:w-auto flex-1 min-w-0", Attr{ID: inputID, Type: "text", Name: "js_captcha_answer", Placeholder: "Enter text from image", Required: true, Autocomplete: "off"}),
-        // Hidden verification field
-        Input("", Attr{ID: hiddenFieldID, Type: "hidden", Name: "js_captcha_verified", Value: "false"}),
+        Input("w-full sm:w-auto flex-1 min-w-0", Attr{ID: inputID, Type: "text", Name: "captcha_answer", Placeholder: "Enter text from image", Required: true, Autocomplete: "off"}),
+        // Hidden session ID for server-side validation
+        Input("", Attr{Type: "hidden", Name: "captcha_session", Value: sessionID}),
+        // Hidden verification field (client-side indicator only)
+        Input("", Attr{ID: hiddenFieldID, Type: "hidden", Name: "captcha_client_verified", Value: "false"}),
         Script(fmt.Sprintf(`
         setTimeout(function() {
             const canvas = document.getElementById('%s');
@@ -93,6 +203,8 @@ func Captcha2() string {
             }
 
             function validateCaptcha() {
+				// Client-side validation for immediate feedback only
+				// Server-side validation is required for security
 				if (input.value.toLowerCase() === captchaText.toLowerCase()) {
 					hiddenField.value = 'true';
 					input.style.borderColor = 'green';
@@ -106,6 +218,37 @@ func Captcha2() string {
             drawCaptcha();
             window.addEventListener('resize', drawCaptcha);
         }, 300);
-        `, canvasID, inputID, hiddenFieldID, captchaText)),
+        `, canvasID, inputID, hiddenFieldID, session.Text)),
     )
+}
+
+// SimpleCaptcha creates a simple server-side validated CAPTCHA without canvas
+func SimpleCaptcha(sessionID string) string {
+	session, err := CreateCaptchaSession(sessionID)
+	if err != nil {
+		return Div("text-red-600 bg-red-50 p-2 border border-red-200 rounded")(
+			"Error generating CAPTCHA. Please refresh the page and try again.",
+		)
+	}
+
+	return Div("flex items-center gap-4 p-4 bg-gray-50 rounded border")(
+		Div("text-lg font-mono bg-gray-200 px-4 py-2 rounded border-2 border-dashed select-none")(
+			session.Text,
+		),
+		Input("flex-1", Attr{
+			Type:        "text", 
+			Name:        "captcha_answer", 
+			Placeholder: "Enter the code above", 
+			Required:    true, 
+			Autocomplete: "off",
+		}),
+		Input("", Attr{Type: "hidden", Name: "captcha_session", Value: sessionID}),
+	)
+}
+
+// Legacy function for backward compatibility - now uses server-side validation
+func Captcha2Legacy() string {
+	// Generate a unique session ID for this CAPTCHA
+	sessionID := RandomString(16)
+	return Captcha2(sessionID)
 }
