@@ -667,27 +667,27 @@ func (ctx *Context) Info(message string) {
 // SetSecurityHeaders sets comprehensive security headers
 func (ctx *Context) SetSecurityHeaders() {
 	headers := ctx.Response.Header()
-	
+
 	// Content Security Policy (if not already set)
 	if headers.Get("Content-Security-Policy") == "" {
 		ctx.SetDefaultCSP()
 	}
-	
+
 	// HTTP Strict Transport Security - enforce HTTPS
 	headers.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
-	
+
 	// X-Frame-Options - prevent clickjacking
 	headers.Set("X-Frame-Options", "DENY")
-	
+
 	// X-Content-Type-Options - prevent MIME type sniffing
 	headers.Set("X-Content-Type-Options", "nosniff")
-	
+
 	// X-XSS-Protection - legacy XSS protection for older browsers
 	headers.Set("X-XSS-Protection", "1; mode=block")
-	
+
 	// Referrer Policy - control referrer information
 	headers.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-	
+
 	// Permissions Policy - restrict dangerous browser features
 	headers.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
 }
@@ -695,33 +695,33 @@ func (ctx *Context) SetSecurityHeaders() {
 // SetCustomSecurityHeaders allows fine-grained control over security headers
 func (ctx *Context) SetCustomSecurityHeaders(options SecurityHeaderOptions) {
 	headers := ctx.Response.Header()
-	
+
 	if options.CSP != "" {
 		headers.Set("Content-Security-Policy", options.CSP)
 	}
-	
+
 	if options.HSTS != "" {
 		headers.Set("Strict-Transport-Security", options.HSTS)
 	} else if options.EnableHSTS {
 		headers.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 	}
-	
+
 	if options.FrameOptions != "" {
 		headers.Set("X-Frame-Options", options.FrameOptions)
 	}
-	
+
 	if options.ContentTypeOptions {
 		headers.Set("X-Content-Type-Options", "nosniff")
 	}
-	
+
 	if options.XSSProtection != "" {
 		headers.Set("X-XSS-Protection", options.XSSProtection)
 	}
-	
+
 	if options.ReferrerPolicy != "" {
 		headers.Set("Referrer-Policy", options.ReferrerPolicy)
 	}
-	
+
 	if options.PermissionsPolicy != "" {
 		headers.Set("Permissions-Policy", options.PermissionsPolicy)
 	}
@@ -826,27 +826,27 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Add security headers before processing the request
 		headers := w.Header()
-		
+
 		// HTTP Strict Transport Security - enforce HTTPS
 		if isSecure(r) {
 			headers.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 		}
-		
+
 		// X-Frame-Options - prevent clickjacking
 		headers.Set("X-Frame-Options", "DENY")
-		
+
 		// X-Content-Type-Options - prevent MIME type sniffing
 		headers.Set("X-Content-Type-Options", "nosniff")
-		
+
 		// X-XSS-Protection - legacy XSS protection for older browsers
 		headers.Set("X-XSS-Protection", "1; mode=block")
-		
+
 		// Referrer Policy - control referrer information
 		headers.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		
+
 		// Permissions Policy - restrict dangerous browser features
 		headers.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
-		
+
 		// Call the next handler
 		next.ServeHTTP(w, r)
 	})
@@ -2110,9 +2110,9 @@ func MakeApp(defaultLanguage string) *App {
                 html.dark{ color-scheme: dark; }
                 /* Global text color fallback */
                 .dark body { color:#e5e7eb; }
-                /* Backgrounds: keep gray-200 for skeletons */
-                html.dark.bg-white, html.dark.bg-gray-100 { background-color:#111827 !important; }
-                .dark .bg-white, .dark .bg-gray-50, .dark .bg-gray-100 { background-color:#111827 !important; }
+                /* Backgrounds */
+                html.dark.bg-white, html.dark.bg-gray-100, html.dark.bg-gray-200 { background-color:#111827 !important; }
+                .dark .bg-white, .dark .bg-gray-50, .dark .bg-gray-100, .dark .bg-gray-200 { background-color:#111827 !important; }
                 /* Text color overrides for common grays */
                 .dark .text-black, .dark .text-gray-900, .dark .text-gray-800, .dark .text-gray-700, .dark .text-gray-600, .dark .text-gray-500 { color:#e5e7eb !important; }
                 .dark .text-gray-400, .dark .text-gray-300 { color:#d1d5db !important; }
