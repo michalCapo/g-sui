@@ -50,7 +50,7 @@ func main() {
 
 	layout := func(title string, body func(*ui.Context) string) ui.Callable {
 		return func(ctx *ui.Context) string {
-			nav := ui.Div("bg-white shadow mb-6")(
+			nav := ui.Div("bg-white shadow")(
 				ui.Div("max-w-5xl mx-auto px-4 py-2 flex items-center gap-2")(
 					// top bar
 					ui.Div("flex flex-wrap gap-1 mt-2 md:mt-0")(
@@ -71,7 +71,7 @@ func main() {
 			)
 
 			content := body(ctx)
-			return app.HTML(title, "bg-gray-100 min-h-screen", nav+ui.Div("max-w-5xl mx-auto px-2")(content))
+			return app.HTML(title, "bg-gray-200 min-h-screen", nav+ui.Div("max-w-5xl mx-auto px-2 py-8")(content))
 		}
 	}
 

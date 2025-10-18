@@ -3,9 +3,9 @@ package pages
 import "github.com/michalCapo/g-sui/ui"
 
 func Icons() string {
-	icon := ui.Div("flex items-center gap-3 border rounded p-4")
+	icon := ui.Div("flex items-center gap-3 border rounded p-4 bg-white rounded-lg border-gray-300")
 
-	return ui.Div("bg-white rounded-lg shadow w-full")(
+	return ui.Div("")(
 		ui.Div("flex flex-col gap-3")(
 			icon(
 				ui.IconBasic("w-6 h-6 bg-gray-400 rounded", "Basic icon"),
