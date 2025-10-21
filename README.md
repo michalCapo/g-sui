@@ -8,6 +8,8 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 
 ---
 
+Need the quick project map for tools or onboarding? Check out [`ai.md`](ai.md) for an LLM-friendly overview.
+
 ## Highlights
 
 - Server-rendered HTML components with a small helper DSL
