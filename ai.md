@@ -1,420 +1,1445 @@
-# g-sui Agent Guide
+# g-sui LLM Reference
 
-## Mission & Scope
-`g-sui` (Go Server-Rendered UI) is a comprehensive framework for building interactive, server-rendered web applications in Go. It provides an ergonomic HTML DSL, server actions, WebSocket-based real-time updates, and powerful data management helpers. The framework enables building modern, interactive dashboards and UIs without requiring client-side JavaScript frameworks or SPAs. This repository contains the core `ui` package plus a feature-rich example app demonstrating all components, patterns, and capabilities.
+> Server-rendered UI framework for Go. All logic runs server-side; minimal client JS.
 
-## Core Philosophy
-- **Server-first**: All logic runs on the server; minimal client JavaScript
-- **Progressive enhancement**: Works without JavaScript, enhanced with WebSockets
-- **Type-safe**: Leverages Go's type system for safety and IDE support
-- **Performance**: Server-rendered HTML achieves excellent Lighthouse scores (97 Performance, 100 Accessibility)
-- **Developer experience**: Hot reload, clear APIs, comprehensive examples
+## Quick Start
 
-## Architecture Snapshot
-
-### Application Lifecycle
-- **Initialization**: `ui.MakeApp(locale)` constructs an `*ui.App` instance
-- **Routing**: Register pages with `app.Page(path, layout(title, body), handler)` where handlers are `Callable` functions
-- **Server**: Start HTTP/WebSocket server with `app.Listen(addr)` - automatically sets up `/__ws` endpoint
-- **Development**: `app.AutoRestart(true)` enables file watching (fsnotify) that rebuilds and restarts on changes
-- **Assets**: Serve static files with `app.Assets(fs, path)` and favicons with `app.Favicon(fs, path, cacheDuration)`
-
-### Request Context
-Each request receives a `*ui.Context` providing:
-- **HTTP**: `ctx.Request` and `ctx.Response` for raw HTTP access
-- **Session**: `ctx.Session(db, name)` returns GORM-backed JSON session storage with `.Load()`/`.Save()` methods
-- **User feedback**: `ctx.Success(msg)`, `ctx.Error(msg)`, `ctx.Info(msg)`, `ctx.ErrorReload(msg)` for toast notifications
-- **Navigation**: `ctx.Load(href)` for SPA-like navigation, `ctx.Reload()`, `ctx.Redirect(url)` for page changes
-- **Security**: `ctx.SetDefaultCSP()` or `ctx.SetCSP(policy)` for Content Security Policy headers
-- **IP**: `ctx.IP()` returns client IP address
-- **Body parsing**: `ctx.Body(&struct)` hydrates structs from form/JSON submissions with automatic validation
-
-### Rendering Model
-- **Callables**: UI is built through `type Callable func(*ui.Context) string` functions that return HTML strings
-- **Component DSL**: Chainable builders like `ui.Div(class)(children...)`, `ui.Button().Color(ui.Blue).Click(...)`
-- **Styling**: Components emit Tailwind CSS-friendly classes; CSS constants (`ui.Blue`, `ui.INPUT`, etc.) ensure consistency
-- **Markdown**: `ui.Markdown(classes...)(content)` renders markdown via Goldmark
-- **Control flow**: `ui.Map`, `ui.For`, `ui.If`, `ui.Iff`, `ui.Or` for templating logic
-
-### Interactivity & Server Actions
-- **Action binding**: `ctx.Call(handler, payload?)` creates action descriptors
-- **Swap strategies**: `.Render(target)` replaces inner HTML, `.Replace(target)` replaces element, `.Append(target)` adds to end, `.Prepend(target)` adds to start, `.None()` fire-and-forget
-- **Event types**: Actions attach to `Click`, `Submit`, `Send` events
-- **Shortcuts**: `ctx.Click`, `ctx.Submit`, `ctx.Send`, `ctx.Post` provide convenient wrappers
-
-### Real-Time Updates (WebSocket)
-- **Endpoint**: Built-in WebSocket server at `/__ws` (auto-initialized)
-- **Server-initiated**: `ctx.Patch(targetSwap, html, clear?)` pushes updates to all connected clients
-- **Client features**: Automatic reconnect, offline banner, auto-reload on reconnect after server restart
-- **Heartbeat**: 25-second ping/pong keeps connections alive; stale connections closed after 75 seconds
-- **Deferred fragments**: Return skeleton immediately, then `ctx.Patch` real content when ready (from goroutines)
-
-### Forms & Validation
-- **Integration**: Uses `go-playground/validator` for struct validation
-- **Input safety**: Automatic validation of field names, values, lengths (MaxBodySize: 10MB, MaxFieldNameLen: 256, MaxFieldValueLen: 1MB, MaxFieldCount: 1000)
-- **Error binding**: Inputs support `.Error(&err)` to display validation errors
-- **Type-specific**: Inputs have type-specific validation (dates, numbers, emails, etc.)
-
-### Data Management (Query/Collate)
-- **Purpose**: Build data-centric UIs with search, sort, filters, pagination, and Excel export
-- **GORM integration**: Works seamlessly with GORM and any SQL database
-- **Features**: 
-  - Search across multiple fields with accent-insensitive matching
-  - Sort by multiple fields
-  - Filter by various field types (text, select, boolean, dates, zero/not-zero dates)
-  - Pagination with configurable page size
-  - Excel export via `excelize` library
-- **SQLite support**: `ui.RegisterSQLiteNormalize(db)` adds `normalize()` function for better search
-
-### Security Features
-- **XSS prevention**: All HTML attributes automatically escaped via `html.EscapeString`
-- **JS injection prevention**: JavaScript strings properly escaped in generated code
-- **CSP**: Content Security Policy support via `ctx.SetDefaultCSP()` or custom policies
-- **Input validation**: Comprehensive bounds checking, character validation, length limits
-- **Field access safety**: `PathValue()` validates field paths to prevent unsafe reflection access
-- **CAPTCHA**: Three variants (`ui.Captcha`, `ui.Captcha2`, `ui.Captcha3`) with rate-limiting and session management
-
-### Theming & Styling
-- **Dark mode**: Built-in dark theme support with automatic system preference detection
-- **Theme switcher**: `ui.ThemeSwitcher(css)` renders compact toggle cycling System → Light → Dark
-- **CSS constants**: Predefined color schemes (`ui.Blue`, `ui.Green`, `ui.Red`, etc.) and component styles
-- **Responsive**: Tailwind CSS classes enable responsive design patterns
-
-## Repository Layout
-- `ui/` — Core library: rendering DSL, component definitions (buttons, inputs, tables, icons), server runtime (`ui.server.go`), captcha variants, query helpers, toast utilities, and swap constants.
-- `examples/` — Showcase application:
-  - `main.go` bootstraps routes, navigation, assets, autoreload, and theme switcher.
-  - `pages/` contains focused demos (forms, inputs, append/prepend, deferred patches, collate/XLS, captcha, shared state, etc.).
-  - `assets/` holds example static files (favicon, etc.).
-  - `examples` (binary) is a previously built example executable; safe to ignore/remove when packaging.
-- `docs/` — Ancillary docs (e.g., Lighthouse screenshot).
-- `README.md` — In-depth introduction, usage samples, security guidelines, and component walkthrough.
-- `go.mod`/`go.sum` — Go 1.23 module, listing dependencies like `fsnotify`, `validator`, `gorm`, `excelize`, `goldmark`, and `golang.org/x/net/websocket`.
-
-## Key APIs & Patterns
-- **Page registration**: `app.Page(path, layout(title, body), handler)`; layouts typically build nav bars and include `ui.ThemeSwitcher`.
-- **Component DSL**: Chainable builders such as `ui.Div(class)(children...)`, `ui.Button().Color(ui.Blue).Click(...)`, `ui.Input().Type("email")`.
-- **Actions**: `ctx.Call(handler, payload?).Render(target)` for synchronous responses; `.Replace/.Append/.Prepend/.None` adjust swap behavior. For long-running work, return a skeleton immediately, then `ctx.Patch` new HTML asynchronously.
-- **Targets**: `target := ui.Target()` yields a unique ID. Use `target.Render()`, `target.Replace()`, `target.Append()`, `target.Skeleton(kind)` to manage placeholder and updates.
-- **Forms**: Compose with `ui.Form`, `ui.Input`, `ui.Checkbox`, etc. Tie validation errors to fields via returned error structures. Examples in `examples/pages/login.go` and `showcase.go`.
-- **Tables**: `ui.Table` helpers render headers, rows, empty states, and allow `FieldText` vs `FieldHTML` for safe output.
-- **Data flows**: `ui.TCollate` orchestrates search/sort/paging. Combine with SQLite or real DB using GORM. Export spreadsheets via `ui.XLS` helpers (see `collate.go`).
-- **Sessions**: `ctx.Session(db, name)` persists JSON blobs keyed by session ID in `_session` table. Works with any GORM-backed database.
-- **Captcha**: `ui.Captcha` (in-memory) and `ui.Captcha2/3` (shared store) rate-limit and validate forms; integrate with `ui.Form` actions.
-
-## Component Toolkit
-
-### Layout & HTML Primitives
-- **Containers**: `ui.Div`, `ui.Span`, `ui.P` for block/inline elements
-- **Links**: `ui.A(class, attrs...)(content)` with `ui.Href(url)` attribute helper
-- **Forms**: `ui.Form(method, action)(children...)` with automatic CSRF handling
-- **Lists**: `ui.List`, `ui.ListItem` for semantic lists
-- **Media**: `ui.Img(attrs...)`, `ui.Canvas(attrs...)` for images and canvas
-- **Control flow**: `ui.Map(slice, func)`, `ui.For(from, to, func)`, `ui.If(cond, func)`, `ui.Iff(cond)`, `ui.Or(cond, trueFunc, falseFunc)`
-- **Content**: `ui.Markdown(classes...)(content)` for markdown rendering, `ui.Script(code...)` for inline scripts
-- **Utilities**: `ui.Flex1` for flex-grow spacer, `ui.Space` for non-breaking space
-
-### Buttons
-- **Builder**: `ui.Button()` returns fluent builder
-- **Types**: `.Submit()`, `.Reset()` for form buttons
-- **Colors**: `.Color(ui.Blue|ui.Green|ui.Red|ui.Yellow|ui.Purple|ui.Gray|ui.White)` with outline variants (`ui.BlueOutline`, etc.)
-- **Sizes**: `.Size(ui.XS|ui.SM|ui.MD|ui.ST|ui.LG|ui.XL)`
-- **Actions**: `.Click(ctx.Call(...))` for click handlers
-- **Navigation**: `.Href(url)` for link-style buttons
-- **Styling**: `.Class(classes...)` for custom CSS classes
-
-### Labels
-- **Builder**: `ui.Label(target).Required(true).Class(...)` 
-- **Features**: Automatic required asterisk, accessible `for` attribute binding
-- **Styling**: Customizable classes for label and required indicator
-
-### Input Components (All support fluent API)
-- **Text inputs**: 
-  - `ui.IText(name, data?)` - standard text input
-  - `ui.IEmail(name, data?)` - email with validation and autocomplete
-  - `ui.IPhone(name, data?)` - phone with pattern validation (+country code)
-  - `ui.IPassword(name, data?)` - password input
-- **Numeric**: `ui.INumber(name, data?)` with `.Numbers(min, max, step)` for range validation
-- **Dates**: 
-  - `ui.IDate(name, data?)` - date picker with `.Dates(min, max)` for range
-  - `ui.ITime(name, data?)` - time picker
-  - `ui.IDateTime(name, data?)` - datetime picker
-- **Text area**: `ui.IArea(name, data?)` with `.Rows(count)` for multi-line text
-- **Select**: `ui.ISelect(name, options, data?)` with `ui.MakeOptions([]string)` helper
-- **Checkbox**: `ui.ICheckbox(name, data?)` for boolean inputs
-- **Radio**: 
-  - `ui.IRadio(name, value, data?)` for single radio button
-  - `ui.IRadioButtons(name, options, data?)` for radio group
-- **Display**: `ui.IValue(attrs...)` for read-only value display
-
-**Common input methods** (available on all inputs):
-- `.Placeholder(text)`, `.Required(bool?)`, `.Disabled(bool?)`, `.Readonly(bool?)`
-- `.Class(classes...)`, `.ClassInput(classes...)`, `.ClassLabel(classes...)`
-- `.Value(text)`, `.Pattern(regex)`, `.Autocomplete(value)`
-- `.Change(action)`, `.Click(action)` for event handlers
-- `.Error(&err)` for validation error binding
-- `.If(visible)` for conditional rendering
-- `.Format(format)` for value formatting
-
-### Tables
-- **Simple table**: `ui.SimpleTable(cols, classes...)` with methods:
-  - `.Field(func(item) string, classes...)` for data cells
-  - `.Head(text, classes...)` for header cells (auto-escaped)
-  - `.HeadHTML(html, classes...)` for HTML headers
-  - `.FieldText(func(item) string, classes...)` for safe text cells
-  - `.Empty(message)` for empty state
-  - `.Class(rowClasses...)` for row styling
-  - `.Attr(attrs...)` for row attributes (supports `colspan`)
-- **Advanced**: `ui.Table` for more complex scenarios with typed rows
-
-### Icons
-- **FontAwesome**: `ui.Icon`, `ui.Icon2`, `ui.Icon3`, `ui.Icon4` helpers for FontAwesome icon markup
-- **Positioning**: Variants support different positioning classes
-
-### Skeletons (Loading Placeholders)
-- **Target-based**: `target.Skeleton(kind)` where `kind` is `ui.SkeletonList`, `ui.SkeletonComponent`, `ui.SkeletonPage`, `ui.SkeletonForm`, or default
-- **Standalone**: `ui.SkeletonDefault()`, `ui.SkeletonListN(count)`, `ui.SkeletonComponentBlock()`, `ui.SkeletonPageBlock()`, `ui.SkeletonFormBlock()`
-- **Usage**: Return skeleton immediately, then replace with `ctx.Patch` when data ready
-
-### CAPTCHA Components
-- **ui.Captcha**: Google reCAPTCHA integration - `ui.Captcha(siteKey, solvedHTML)` renders widget, swaps in HTML when solved
-- **ui.Captcha2**: Image-based challenge entirely in Go - `ui.Captcha2(onValidated)` with configurable:
-  - `.SessionField(name)`, `.ClientVerifiedField(name)`, `.AnswerField(name)`
-  - `.Attempts(max)`, `.Lifetime(duration)`
-  - `.ValidateRequest(req)` for server-side validation
-- **ui.Captcha3**: Draggable tile ordering challenge - `ui.Captcha3(onValidated)` with:
-  - `.Count(tiles)` for number of tiles
-  - `.ArrangementField(name)` for submission field
-  - Same session/validation config as Captcha2
-- **Session storage**: In-memory by default; can be swapped for Redis/DB backing
-
-### Query/Collate (Data Management)
-- **Initialization**: `collate := ui.Collate[Type](&ui.TQuery{Limit: 10, Order: "field asc"})`
-- **Field definition**: `ui.TField{DB: "column", Field: "StructField", Text: "Label", As: ui.SELECT|ui.BOOL|ui.DATES|ui.ZERO_DATE|ui.NOT_ZERO_DATE, Options: ui.MakeOptions([]string)}`
-- **Configuration**:
-  - `.Search(fields...)` - fields searchable via search box
-  - `.Sort(fields...)` - fields available for sorting
-  - `.Filter(fields...)` - fields available as filters
-  - `.Excel(fields...)` - fields included in Excel export
-- **Rendering**: `collate.Render(ctx, db)` returns complete UI (search, sort, filters, pagination, export button)
-- **Row rendering**: `.Row(func(item *Type, index int) string)` defines how each row displays
-- **Results**: `collate.Load(query)` returns `*TCollateResult[Type]` with `.Items`, `.Total`, `.Page`, `.Pages`
-- **Helpers**: `ui.Empty(result)`, `ui.Filtering(ctx, collate, query)`, `ui.Searching(ctx, collate, query)`, `ui.Sorting(ctx, collate, query)`, `ui.Paging(ctx, collate, result)`
-- **Search normalization**: `ui.NormalizeForSearch(text)` and `ui.RegisterSQLiteNormalize(db)` for accent-insensitive search
-
-## Development Workflow
-- **Run the showcase**: `go run examples/main.go` → visit `http://localhost:1422`.
-- **Autoreload**: Uncomment `app.AutoRestart(true)` in the example or your app to enable rebuild-on-change (uses `fsnotify` + `go build` under the hood; requires exec permissions).
-- **Build**: `go build ./...` validates compilation (library + examples).
-- **Tests**: There are no dedicated test packages yet. `go test ./...` is the default entry point once tests are added; ensure the Go build cache directory is writable in your environment.
-- **Lint/format**: The project relies on `gofmt` (standard gofmt on save). No extra linters configured.
-- **Dependencies**: Managed with Go modules; `go mod tidy` keeps the tree clean. No additional toolchain beyond Go 1.23+, though examples rely on SQLite for the collate demo (the code seeds an in-memory DB).
-
-## Contributing Tips
-- Favor composition-friendly callables (`func(ctx *ui.Context) string`) and keep side effects inside actions or goroutines guarded by `ctx.Patch`.
-- Reuse shared CSS constants (e.g., `ui.Blue`, `ui.INPUT`) to maintain visual consistency.
-- Escape or sanitize user-provided data unless explicitly rendered via trusted helpers (`HeadHTML`, etc.).
-- When adding new real-time sections, wrap long-running work in goroutines and `ctx.Patch` results instead of blocking handlers.
-- Update the example app to demonstrate new primitives; it doubles as documentation and regression coverage.
-
-## Context Helpers (Detailed API)
-
-### Request & Session Management
-- **HTTP access**: `ctx.Request` (*http.Request), `ctx.Response` (http.ResponseWriter)
-- **Client info**: `ctx.IP()` returns client IP address
-- **Session storage**: `ctx.Session(db *gorm.DB, name string) *TSession` returns session helper:
-  - `.Load(data any)` - loads JSON data from session into struct
-  - `.Save(output any)` - saves struct as JSON to session
-  - Sessions stored in `_session` table (auto-created by GORM)
-
-### Body Parsing & Validation
-- **Hydration**: `ctx.Body(&payload)` parses form/JSON into struct with automatic validation
-- **Safety**: Automatic validation of:
-  - Field count (max 1000)
-  - Field name length (max 256 chars) and character safety
-  - Field value length (max 1MB)
-  - Body size (max 10MB)
-  - Numeric bounds checking
-- **Path access**: `ui.PathValue(obj, "field.path")` safely accesses nested struct fields with validation
-
-### Server Actions & Events
-- **Action creation**: `ctx.Call(handler Callable, payload ...any)` creates action descriptor
-- **Swap strategies**:
-  - `.Render(target)` - replaces innerHTML of target element
-  - `.Replace(target)` - replaces entire target element
-  - `.Append(target)` - appends HTML to end of target
-  - `.Prepend(target)` - prepends HTML to start of target
-  - `.None()` - executes without DOM update (fire-and-forget)
-- **Shortcuts**: 
-  - `ctx.Click(handler, payload?)` - click action with default swap
-  - `ctx.Submit(handler, payload?)` - form submit action
-  - `ctx.Send(handler, payload?)` - generic send action
-  - `ctx.Post(handler, payload?)` - POST action
-
-### Navigation
-- **SPA-like**: `ctx.Load(href)` returns attributes for client-side navigation (no full page reload)
-- **Reload**: `ctx.Reload()` returns JavaScript to reload current page
-- **Redirect**: `ctx.Redirect(url)` returns JavaScript to navigate to URL
-
-### Real-Time Updates (WebSocket)
-- **Patch**: `ctx.Patch(targetSwap TargetSwap, html string, clear ...func())` pushes update to all connected clients
-- **Target swap**: Use `target.Render()`, `target.Replace()`, `target.Append()`, `target.Prepend()` to create TargetSwap
-- **Clear callbacks**: Optional `clear` functions called if target element not found in DOM
-- **Connection management**: Automatic reconnect, heartbeat (25s ping), stale connection cleanup (75s timeout)
-
-### User Feedback (Toasts)
-- **Success**: `ctx.Success(message string)` - green success toast
-- **Error**: `ctx.Error(message string)` - red error toast
-- **Info**: `ctx.Info(message string)` - blue info toast
-- **Error with reload**: `ctx.ErrorReload(message string)` - error toast with reload button
-
-### File Downloads
-- **Stream**: `ctx.DownloadAs(filename string, contentType string, content []byte)` streams file to client
-
-### Internationalization
-- **Translation**: `ctx.Translate(key string) string` resolves i18n strings (locale set in `ui.MakeApp(locale)`)
-
-### Security Headers
-- **CSP**: `ctx.SetDefaultCSP()` sets strict Content Security Policy defaults
-- **Custom CSP**: `ctx.SetCSP(policy string)` sets custom CSP policy
-- **Security headers**: `ctx.SetSecurityHeaders()` or `ctx.SetCustomSecurityHeaders(headers map[string]string)` for broader security
-
-### App-Level Configuration
-- **Routing**: `app.Page(path, layout, handler)` registers page route
-- **Actions**: `app.Action(path, handler)` registers action endpoint
-- **Callables**: `app.Callable(path, handler)` registers callable endpoint
-- **Static assets**: `app.Assets(fs embed.FS, path string)` serves static files
-- **Favicon**: `app.Favicon(fs embed.FS, path string, cacheDuration time.Duration)` serves favicon with caching
-- **Auto-restart**: `app.AutoRestart(enabled bool)` enables file watching and auto-rebuild
-- **Session sweeper**: `app.StartSweeper(interval time.Duration)` cleans up expired sessions
-- **Server start**: `app.Listen(addr string)` starts HTTP/WebSocket server
-
-## Common Patterns & Examples
-
-### Basic Page with Server Action
 ```go
-app.Page("/", layout("Home", func(ctx *ui.Context) string {
-    hello := func(ctx *ui.Context) string {
-        ctx.Success("Hello!")
-        return ""
-    }
-    return ui.Div("p-4")(
-        ui.Button().Color(ui.Blue).Click(ctx.Call(hello).None()).Render("Say hello"),
-    )
-}))
+package main
+
+import (
+    "github.com/michalCapo/g-sui/ui"
+)
+
+func main() {
+    app := ui.MakeApp("en")
+    
+    app.Page("/", func(ctx *ui.Context) string {
+        return app.HTML("Home", "bg-gray-100", 
+            ui.Div("p-8")(
+                ui.Div("text-2xl font-bold")("Hello World"),
+            ),
+        )
+    })
+    
+    app.Listen(":8080")
+}
 ```
 
-### Form with Validation
+---
+
+## Core Types
+
+```go
+type Callable = func(*ui.Context) string  // All handlers return HTML strings
+type Attr struct { ID, Href, Class, Value, OnClick, OnSubmit string; ... }
+type AOption struct { ID, Value string }
+```
+
+---
+
+## App Setup
+
+```go
+app := ui.MakeApp("en")                           // Create app with locale
+app.Page("/path", handler)                        // Register page route
+app.Favicon(embedFS, "assets/favicon.svg", 24*time.Hour)
+app.Assets(embedFS, "assets/", 24*time.Hour)      // Serve static files
+app.AutoRestart(true)                             // Dev: rebuild on file changes
+app.Listen(":8080")                               // Start server (also starts WS at /__ws)
+```
+
+### HTML Wrapper
+```go
+app.HTML(title, bodyClass, content) string        // Full HTML document with Tailwind
+app.HTMLHead = append(app.HTMLHead, `<link ...>`) // Add to <head>
+```
+
+---
+
+## HTML DSL
+
+### Elements
+```go
+ui.Div(class, attr...)(children...)    // <div>
+ui.Span(class, attr...)(children...)   // <span>
+ui.P(class, attr...)(children...)      // <p>
+ui.A(class, attr...)(children...)      // <a>
+ui.Form(class, attr...)(children...)   // <form>
+ui.List(class, attr...)(children...)   // <ul>
+ui.ListItem(class, attr...)(children...)// <li>
+ui.Img(class, attr...)                 // <img /> (self-closing)
+ui.Input(class, attr...)               // <input /> (self-closing)
+```
+
+### Attributes
+```go
+ui.Attr{
+    ID: "myid",
+    Class: "extra-classes",
+    Href: "/path",
+    Value: "val",
+    OnClick: "jsCode()",
+    OnSubmit: "jsCode()",
+    Required: true,
+    Disabled: true,
+}
+
+// Shorthand helpers
+ui.Href("/path")           // Attr{Href: "/path"}
+ui.ID("myid")              // Attr{ID: "myid"}
+ui.Title("tooltip")        // Attr{Title: "tooltip"}
+```
+
+### Control Flow
+```go
+ui.Map(items, func(item *T, index int) string { return ... })
+ui.For(0, 10, func(i int) string { return ... })
+ui.If(condition, func() string { return ... })
+ui.Iff(condition)("content shown if true")
+ui.Or(condition, trueFunc, falseFunc)
+```
+
+### Utilities
+```go
+ui.Flex1           // Div that grows (flex-grow: 1)
+ui.Space           // &nbsp;
+ui.Classes(a, b)   // Join CSS classes
+ui.Markdown(css)(md) // Render markdown to HTML
+ui.Script(js...)   // Inline <script>
+```
+
+---
+
+## Targets & Actions
+
+### Creating Targets
+```go
+target := ui.Target()  // Returns Attr{ID: "i<random>"}
+
+// Use in elements:
+ui.Div("class", target)("content")
+
+// Use in actions (where to put response):
+ctx.Call(handler).Replace(target)
+```
+
+### Server Actions Overview
+```go
+// ctx.Call - returns JS string for onclick/onchange handlers
+ctx.Call(handler, payloadStruct...).Render(target)   // Replace innerHTML
+ctx.Call(handler, payloadStruct...).Replace(target)  // Replace entire element
+ctx.Call(handler, payloadStruct...).Append(target)   // Append to element
+ctx.Call(handler, payloadStruct...).Prepend(target)  // Prepend to element
+ctx.Call(handler, payloadStruct...).None()           // Fire-and-forget (no DOM update)
+
+// ctx.Submit - returns Attr{OnSubmit: ...} for forms
+ctx.Submit(handler, payloadStruct...).Render(target)
+ctx.Submit(handler, payloadStruct...).Replace(target)
+ctx.Submit(handler, payloadStruct...).Append(target)
+ctx.Submit(handler, payloadStruct...).Prepend(target)
+ctx.Submit(handler, payloadStruct...).None()
+
+// ctx.Click - returns Attr{OnClick: ...} for elements
+ctx.Click(handler, payloadStruct...).Render(target)
+ctx.Click(handler, payloadStruct...).Replace(target)
+ctx.Click(handler, payloadStruct...).Append(target)
+ctx.Click(handler, payloadStruct...).Prepend(target)
+ctx.Click(handler, payloadStruct...).None()
+
+// ctx.Send - returns JS string (similar to Call but for form-style submission)
+ctx.Send(handler, payloadStruct...).Render(target)
+```
+
+---
+
+## Click Examples
+
+### Basic Click - Replace Target
+```go
+func MyPage(ctx *ui.Context) string {
+    target := ui.Target()
+    
+    sayHello := func(ctx *ui.Context) string {
+        ctx.Success("Hello!")
+        return ui.Div("text-green-500", target)("Clicked!")
+    }
+    
+    return ui.Div("", target)(
+        ui.Button().
+            Color(ui.Blue).
+            Click(ctx.Call(sayHello).Replace(target)).
+            Render("Click me"),
+    )
+}
+```
+
+### Click with State - Counter Example
+```go
+type Counter struct {
+    Count int
+}
+
+func (c *Counter) Increment(ctx *ui.Context) string {
+    ctx.Body(c)  // Restore state from previous call
+    c.Count++
+    return c.Render(ctx)
+}
+
+func (c *Counter) Decrement(ctx *ui.Context) string {
+    ctx.Body(c)
+    c.Count--
+    if c.Count < 0 {
+        c.Count = 0
+    }
+    return c.Render(ctx)
+}
+
+func (c *Counter) Render(ctx *ui.Context) string {
+    target := ui.Target()
+    return ui.Div("flex gap-2 items-center bg-purple-500 rounded text-white p-1", target)(
+        ui.Button().
+            Click(ctx.Call(c.Decrement, c).Replace(target)).  // Pass state as payload
+            Class("rounded-l px-5").
+            Render("-"),
+        ui.Div("text-2xl")(fmt.Sprintf("%d", c.Count)),
+        ui.Button().
+            Click(ctx.Call(c.Increment, c).Replace(target)).
+            Class("rounded-r px-5").
+            Render("+"),
+    )
+}
+```
+
+### Click - Append Items
+```go
+func AppendDemo(ctx *ui.Context) string {
+    target := ui.Target()
+
+    addItem := func(ctx *ui.Context) string {
+        now := time.Now().Format("15:04:05")
+        return ui.Div("p-2 rounded border bg-white")(
+            fmt.Sprintf("Added at %s", now),
+        )
+    }
+
+    return ui.Div("")(
+        ui.Button().
+            Color(ui.Blue).
+            Click(ctx.Call(addItem).Append(target)).
+            Render("Add item at end"),
+        ui.Button().
+            Color(ui.Green).
+            Click(ctx.Call(addItem).Prepend(target)).
+            Render("Add item at start"),
+        ui.Div("space-y-2 mt-4", target)(
+            ui.Div("p-2 border bg-white")("Initial item"),
+        ),
+    )
+}
+```
+
+### Click - Fire and Forget (None)
+```go
+func FireAndForget(ctx *ui.Context) string {
+    logAction := func(ctx *ui.Context) string {
+        log.Println("Button clicked, but no UI update needed")
+        ctx.Success("Action logged!")
+        return ""  // Return value ignored when using .None()
+    }
+
+    return ui.Button().
+        Color(ui.Blue).
+        Click(ctx.Call(logAction).None()).
+        Render("Log Action")
+}
+```
+
+---
+
+## Submit Examples
+
+### Basic Form Submit
+```go
+type LoginForm struct {
+    Email    string `validate:"required,email"`
+    Password string `validate:"required,min=6"`
+}
+
+func (f *LoginForm) OnSubmit(ctx *ui.Context) string {
+    if err := ctx.Body(f); err != nil {
+        ctx.Error("Invalid form data")
+        return f.Render(ctx, &err)
+    }
+    
+    v := validator.New()
+    if err := v.Struct(f); err != nil {
+        return f.Render(ctx, &err)
+    }
+    
+    ctx.Success("Login successful!")
+    return f.Render(ctx, nil)
+}
+
+func (f *LoginForm) Render(ctx *ui.Context, err *error) string {
+    target := ui.Target()
+    
+    // Form with Submit - the form replaces itself on submit
+    return ui.Form("bg-white p-6 rounded shadow", target, ctx.Submit(f.OnSubmit).Replace(target))(
+        ui.ErrorForm(err, nil),
+        ui.IEmail("Email", f).Required().Error(err).Render("Email"),
+        ui.IPassword("Password").Required().Error(err).Render("Password"),
+        ui.Button().Submit().Color(ui.Blue).Class("rounded").Render("Login"),
+    )
+}
+```
+
+### Form with Reset Button
+```go
+func (f *MyForm) OnReset(ctx *ui.Context) string {
+    f.Name = ""
+    f.Description = ""
+    return f.Render(ctx)
+}
+
+func (f *MyForm) Render(ctx *ui.Context) string {
+    target := ui.Target()
+    
+    return ui.Form("flex flex-col gap-4", target, ctx.Submit(f.OnSubmit).Replace(target))(
+        ui.IText("Name", f).Render("Name"),
+        ui.IArea("Description", f).Rows(4).Render("Description"),
+        
+        ui.Div("flex gap-4 justify-end")(
+            // Reset button uses Click, not Submit
+            ui.Button().
+                Click(ctx.Call(f.OnReset).Replace(target)).
+                Color(ui.Gray).
+                Render("Reset"),
+            ui.Button().Submit().Color(ui.Blue).Render("Submit"),
+        ),
+    )
+}
+```
+
+### Form Submission with Validation Translations
+```go
+var translations = map[string]string{
+    "Name":              "User name",
+    "Email":             "Email address",
+    "has invalid value": "is invalid",
+}
+
+func (f *Form) Render(ctx *ui.Context, err *error) string {
+    target := ui.Target()
+    return ui.Form("p-4", target, ctx.Submit(f.OnSubmit).Replace(target))(
+        ui.ErrorForm(err, &translations),  // Pass translations map
+        ui.IText("Name", f).Required().Error(err).Render("Name"),
+        ui.IEmail("Email", f).Required().Error(err).Render("Email"),
+        ui.Button().Submit().Color(ui.Blue).Render("Submit"),
+    )
+}
+```
+
+---
+
+## Buttons
+
+```go
+ui.Button().
+    Color(ui.Blue).           // Blue, Green, Red, Yellow, Purple, Gray, White + *Outline variants
+    Size(ui.MD).              // XS, SM, MD, ST, LG, XL
+    Class("rounded px-4").    // Custom classes
+    Click(ctx.Call(...)).     // Click handler (JS string)
+    Href("/path").            // Make it a link
+    Submit().                 // type="submit" for forms
+    Reset().                  // type="reset" for forms
+    Disabled(true).           // Disable button
+    If(condition).            // Conditional rendering
+    Render("Button Text")
+```
+
+---
+
+## Inputs
+
+All inputs use fluent API: `IXxx(fieldName, dataPtr...).Method().Render("Label")`
+
+### Text Inputs
+```go
+ui.IText("FieldName", &data).Required().Placeholder("hint").Render("Label")
+ui.IEmail("Email", &data).Required().Render("Email")
+ui.IPhone("Phone", &data).Render("Phone")       // +XXX pattern
+ui.IPassword("Password").Required().Render("Password")
+ui.IArea("Bio", &data).Rows(5).Render("Biography")
+```
+
+### Numbers & Dates
+```go
+ui.INumber("Age", &data).Numbers(0, 120, 1).Render("Age")
+ui.INumber("Price", &data).Format("%.2f").Render("Price")
+ui.IDate("BirthDate", &data).Dates(minTime, maxTime).Render("Birth Date")
+ui.ITime("Alarm", &data).Render("Alarm Time")
+ui.IDateTime("Meeting", &data).Render("Meeting")
+```
+
+### Selection
+```go
+// Dropdown select
+options := ui.MakeOptions([]string{"A", "B", "C"})  // []AOption from strings
+options := []ui.AOption{{ID: "val", Value: "Display"}, ...}
+ui.ISelect("Country", &data).Options(options).Render("Country")
+
+// Checkbox
+ui.ICheckbox("Agree", &data).Required().Render("I agree")
+
+// Radio buttons
+ui.IRadio("Gender", &data).Value("male").Render("Male")
+ui.IRadio("Gender", &data).Value("female").Render("Female")
+// OR radio button group:
+ui.IRadioButtons("Gender", &data).Options(genderOptions).Render("Gender")
+```
+
+### Common Input Methods
+```go
+.Required()           // Mark required
+.Disabled()           // Disable input
+.Readonly()           // Read-only
+.Placeholder("hint")  // Placeholder text
+.Class("classes")     // Wrapper classes
+.ClassInput("cls")    // Input element classes
+.ClassLabel("cls")    // Label classes
+.Value("default")     // Default value
+.Pattern("regex")     // HTML pattern
+.Autocomplete("email")// Autocomplete hint
+.Change(action)       // OnChange handler (JS string)
+.Click(action)        // OnClick handler (JS string)
+.Error(&err)          // Show validation error
+.If(condition)        // Conditional render
+.Render("Label")      // Render with label
+```
+
+---
+
+## Forms
+
 ```go
 type LoginForm struct {
     Email    string `validate:"required,email"`
     Password string `validate:"required,min=8"`
 }
 
-func Login(ctx *ui.Context) string {
-    if ctx.Request.Method == http.MethodPost {
-        var form LoginForm
-        if err := ctx.Body(&form); err != nil {
-            ctx.Error("Invalid form data")
-            return ""
-        }
-        // Process login...
-        ctx.Success("Logged in!")
+func (f *LoginForm) Submit(ctx *ui.Context) string {
+    if err := ctx.Body(f); err != nil {  // Parse form data into struct
+        return f.Render(ctx, &err)
     }
-    var form LoginForm
-    return ui.Form("post", "/login")(
-        ui.IEmail("Email", &form).Required().Render("Email"),
-        ui.IPassword("Password", &form).Required().Render("Password"),
-        ui.Button().Color(ui.Blue).Submit().Render("Login"),
+    
+    v := validator.New()
+    if err := v.Struct(f); err != nil {  // Validate struct
+        return f.Render(ctx, &err)
+    }
+    
+    ctx.Success("Login successful!")
+    return ctx.Redirect("/dashboard")
+}
+
+func (f *LoginForm) Render(ctx *ui.Context, err *error) string {
+    target := ui.Target()
+    
+    return ui.Form("bg-white p-6 rounded", target, ctx.Submit(f.Submit).Replace(target))(
+        ui.ErrorForm(err, nil),  // Show validation errors
+        
+        ui.IEmail("Email", f).Required().Error(err).Render("Email"),
+        ui.IPassword("Password").Required().Error(err).Render("Password"),
+        
+        ui.Button().Submit().Color(ui.Blue).Render("Login"),
     )
 }
 ```
 
-### Deferred Fragment with Skeleton
+---
+
+## Context API
+
+### Request Data
 ```go
-func Deferred(ctx *ui.Context) string {
+ctx.Request          // *http.Request
+ctx.Response         // http.ResponseWriter  
+ctx.IP()             // Client IP
+ctx.Body(&struct)    // Parse form/JSON into struct
+```
+
+### User Feedback (Toasts)
+```go
+ctx.Success("Operation completed")  // Green toast
+ctx.Error("Something went wrong")   // Red toast
+ctx.Info("FYI message")             // Blue toast
+ctx.ErrorReload("Error - click to reload")  // Red toast with reload button
+```
+
+### Navigation
+```go
+ctx.Load("/path")    // Returns Attr for SPA-like navigation (no full reload)
+ctx.Reload()         // Returns JS to reload page
+ctx.Redirect("/url") // Returns JS to navigate away
+```
+
+### Sessions (requires GORM DB)
+```go
+session := ctx.Session(db, "session_name")
+session.Load(&data)   // Load data from session
+session.Save(&data)   // Save data to session
+```
+
+### File Downloads
+```go
+ctx.DownloadAs(&reader, "application/xlsx", "export.xlsx")
+```
+
+### Security Headers
+```go
+ctx.SetDefaultCSP()
+ctx.SetSecurityHeaders()
+```
+
+---
+
+## WebSocket Patches (Real-time Updates)
+
+WebSocket patches push HTML updates from server to all connected clients. The WebSocket endpoint is automatically created at `/__ws`.
+
+### Patch Methods
+```go
+ctx.Patch(target.Render(), html)   // Replace innerHTML of target
+ctx.Patch(target.Replace(), html)  // Replace entire target element
+ctx.Patch(target.Append(), html)   // Append HTML to target
+ctx.Patch(target.Prepend(), html)  // Prepend HTML to target
+
+// With cleanup callback (called when target no longer exists in DOM)
+ctx.Patch(target.Replace(), html, func() {
+    // Called when client reports target is invalid
+    // Use to stop tickers, cleanup resources
+})
+```
+
+### Live Clock Example
+```go
+func Clock(ctx *ui.Context) string {
     target := ui.Target()
+
+    clockUI := func() string {
+        t := time.Now()
+        return ui.Div("font-mono text-3xl bg-white p-4 border rounded", target)(
+            fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second()),
+        )
+    }
+
+    // Start background updates
+    stop := make(chan struct{})
     
-    // Return skeleton immediately
+    // First patch with cleanup callback
+    ctx.Patch(target.Replace(), clockUI(), func() {
+        close(stop)  // Stop ticker when target disappears
+    })
+
     go func() {
-        time.Sleep(2 * time.Second)
-        html := ui.Div("")(target)("Content loaded!")
+        ticker := time.NewTicker(time.Second)
+        defer ticker.Stop()
+        for {
+            select {
+            case <-stop:
+                return
+            case <-ticker.C:
+                ctx.Patch(target.Replace(), clockUI())
+            }
+        }
+    }()
+
+    return clockUI()
+}
+```
+
+### Deferred Loading with Skeleton
+```go
+func DeferredComponent(ctx *ui.Context) string {
+    target := ui.Target()
+
+    // Start async data fetch
+    go func() {
+        defer func() { recover() }()  // Handle panics gracefully
+        
+        time.Sleep(2 * time.Second)  // Simulate slow API call
+        
+        html := ui.Div("space-y-4", target)(
+            ui.Div("bg-white p-4 rounded shadow")(
+                ui.Div("text-lg font-semibold")("Content loaded!"),
+                ui.Div("text-gray-600")("This replaced the skeleton via WebSocket."),
+            ),
+        )
         ctx.Patch(target.Replace(), html)
     }()
-    
+
+    // Return skeleton immediately
     return target.Skeleton(ui.SkeletonComponent)
 }
 ```
 
-### Data Table with Collate
+### Multiple Patches (Replace + Append)
 ```go
-type Person struct {
-    ID   uint
-    Name string
-    Age  int
+func DeferredWithButtons(ctx *ui.Context) string {
+    target := ui.Target()
+
+    // First patch: replace skeleton with content
+    go func() {
+        defer func() { recover() }()
+        time.Sleep(2 * time.Second)
+        
+        content := ui.Div("bg-white p-4 rounded", target)(
+            ui.Div("font-bold")("Main content loaded"),
+        )
+        ctx.Patch(target.Replace(), content)
+    }()
+
+    // Second patch: append controls after content
+    go func() {
+        defer func() { recover() }()
+        time.Sleep(2100 * time.Millisecond)  // Slightly after first patch
+        
+        controls := ui.Div("flex gap-2 mt-4")(
+            ui.Button().Color(ui.Blue).Class("rounded").
+                Click(ctx.Call(DeferredWithButtons).Replace(target)).
+                Render("Reload"),
+        )
+        ctx.Patch(target.Append(), controls)
+    }()
+
+    return target.Skeleton(ui.SkeletonList)
 }
-
-collate := ui.Collate[Person](&ui.TQuery{Limit: 10})
-nameField := ui.TField{DB: "name", Field: "Name", Text: "Name"}
-collate.Search(nameField)
-collate.Sort(nameField)
-collate.Row(func(p *Person, _ int) string {
-    return ui.Div("")(fmt.Sprintf("%s (%d)", p.Name, p.Age))
-})
-
-content := collate.Render(ctx, db)
 ```
 
-### WebSocket Real-Time Updates
+### Broadcast to All Clients
 ```go
-func Clock(ctx *ui.Context) string {
+// Patches are broadcast to ALL connected WebSocket clients
+// This enables real-time collaboration features
+
+func NotifyAll(ctx *ui.Context) string {
+    notificationTarget := ui.ID("global-notifications")  // Fixed ID all clients have
+    
+    message := ui.Div("bg-blue-100 p-2 rounded")(
+        fmt.Sprintf("New message at %s", time.Now().Format("15:04:05")),
+    )
+    
+    ctx.Patch(notificationTarget.Append(), message)
+    ctx.Success("Notification sent to all clients!")
+    return ""
+}
+```
+
+---
+
+## Skeletons (Loading States)
+
+```go
+target := ui.Target()
+
+// Return skeleton immediately, patch real content later
+go func() {
+    time.Sleep(2 * time.Second)
+    html := ui.Div("", target)("Content loaded!")
+    ctx.Patch(target.Replace(), html)
+}()
+
+return target.Skeleton(ui.SkeletonComponent)  // Or SkeletonList, SkeletonPage, SkeletonForm
+```
+
+### Skeleton Types
+```go
+target.Skeleton()                    // Default (3 text lines)
+target.Skeleton(ui.SkeletonList)     // List items
+target.Skeleton(ui.SkeletonComponent)// Component block
+target.Skeleton(ui.SkeletonPage)     // Full page
+target.Skeleton(ui.SkeletonForm)     // Form layout
+```
+
+---
+
+## Tables
+
+### Simple Table (No Headers)
+```go
+table := ui.SimpleTable(3, "w-full bg-white rounded")  // 3 columns
+table.Field("Name", "font-bold")
+table.Field("Age", "text-center")
+table.Field("Email", "text-gray-600")
+// New row starts automatically after 3 fields
+table.Field("John", "font-bold")
+table.Field("30", "text-center")
+table.Field("john@example.com", "text-gray-600")
+table.Render()
+```
+
+### Typed Table with Headers
+```go
+type Person struct { Name string; Age int; Email string }
+
+persons := []*Person{
+    {Name: "Alice", Age: 25, Email: "alice@example.com"},
+    {Name: "Bob", Age: 30, Email: "bob@example.com"},
+}
+
+table := ui.Table[Person]("w-full bg-white rounded")
+table.Head("Name", "font-bold")
+table.Head("Age", "text-center")
+table.Head("Email", "")
+
+// FieldText escapes HTML (safe for user input)
+table.FieldText(func(p *Person) string { return p.Name }, "font-bold")
+table.FieldText(func(p *Person) string { return fmt.Sprintf("%d", p.Age) }, "text-center")
+table.FieldText(func(p *Person) string { return p.Email }, "text-gray-600")
+
+// Field allows raw HTML (use only for trusted content)
+table.Field(func(p *Person) string {
+    return ui.Button().Color(ui.Blue).Class("rounded").Render("Edit")
+}, "")
+
+table.Render(persons)
+```
+
+### Table with Colspan
+```go
+table := ui.SimpleTable(4, "w-full")
+table.Field("Spanning 2 columns").Attr(`colspan="2"`)
+table.Field("Col 3")
+table.Field("Col 4")
+table.Render()
+```
+
+---
+
+## Data Collation (Search, Sort, Filter, Pagination, Excel Export)
+
+Full-featured data management UI backed by GORM.
+
+### Complete Example
+```go
+type Person struct {
+    ID        uint `gorm:"primaryKey"`
+    Name      string
+    Surname   string
+    Email     string
+    Country   string
+    Status    string
+    Active    bool
+    CreatedAt time.Time
+    LastLogin time.Time
+}
+
+func PeopleList(ctx *ui.Context) string {
+    // Define fields
+    name := ui.TField{DB: "name", Field: "Name", Text: "Name"}
+    surname := ui.TField{DB: "surname", Field: "Surname", Text: "Surname"}
+    email := ui.TField{DB: "email", Field: "Email", Text: "Email"}
+    country := ui.TField{
+        DB: "country", Field: "Country", Text: "Country",
+        As: ui.SELECT, Options: ui.MakeOptions([]string{"USA", "UK", "Germany", "France"}),
+    }
+    status := ui.TField{
+        DB: "status", Field: "Status", Text: "Status",
+        As: ui.SELECT, Options: ui.MakeOptions([]string{"new", "active", "blocked"}),
+    }
+    active := ui.TField{DB: "active", Field: "Active", Text: "Active", As: ui.BOOL}
+    hasLoggedIn := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Has logged in", As: ui.NOT_ZERO_DATE}
+    neverLoggedIn := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Never logged in", As: ui.ZERO_DATE}
+    createdAt := ui.TField{DB: "created_at", Field: "CreatedAt", Text: "Created between", As: ui.DATES}
+
+    // Initialize collate
+    collate := ui.Collate[Person](&ui.TQuery{
+        Limit: 10,
+        Order: "surname asc",
+    })
+
+    // Configure features
+    collate.Search(name, surname, email, country)  // Searchable fields
+    collate.Sort(surname, name, email)              // Sortable fields
+    collate.Filter(active, hasLoggedIn, neverLoggedIn, createdAt, country, status)  // Filter panel
+    collate.Excel(surname, name, email, country, status, active, createdAt)  // Excel export columns
+
+    // Define row rendering
+    collate.Row(func(p *Person, idx int) string {
+        statusBadge := ui.Span("px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700")(p.Status)
+        activeBadge := ui.Iff(p.Active)(
+            ui.Span("px-2 py-0.5 rounded text-xs bg-green-100 text-green-700")("active"),
+        )
+
+        return ui.Div("bg-white rounded-lg border p-3 mb-2")(
+            ui.Div("flex items-center justify-between")(
+                ui.Div("font-semibold")(fmt.Sprintf("%s %s", p.Surname, p.Name)),
+                ui.Div("text-gray-500 text-sm")(p.Email),
+                ui.Div("flex gap-1")(statusBadge, activeBadge),
+            ),
+            ui.Div("text-sm text-gray-600 mt-1")(
+                fmt.Sprintf("Country: %s | Created: %s", p.Country, p.CreatedAt.Format("2006-01-02")),
+            ),
+        )
+    })
+
+    // Render with database connection
+    return collate.Render(ctx, db)
+}
+```
+
+### TField Configuration
+```go
+ui.TField{
+    DB:        "column_name",      // Database column name
+    Field:     "StructField",      // Go struct field name
+    Text:      "Display Label",    // UI label
+    As:        ui.SELECT,          // Filter type
+    Options:   ui.MakeOptions([]string{"A", "B"}),  // For SELECT filters
+    Bool:      false,              // Default bool value for BOOL filters
+    Condition: " = 1",             // Custom SQL condition for BOOL
+}
+```
+
+### Filter Types
+```go
+ui.BOOL           // Checkbox filter (column = 1)
+ui.SELECT         // Dropdown filter (requires Options)
+ui.DATES          // Date range picker (From/To)
+ui.ZERO_DATE      // "Has no date" checkbox (column IS NULL or zero)
+ui.NOT_ZERO_DATE  // "Has date" checkbox (column IS NOT NULL and not zero)
+```
+
+### Custom Excel Export
+```go
+collate.OnExcel = func(data *[]Person) (string, io.Reader, error) {
+    f := excelize.NewFile()
+    // ... custom Excel generation
+    filename := fmt.Sprintf("export_%s.xlsx", time.Now().Format("20060102"))
+    buffer, _ := f.WriteToBuffer()
+    return filename, bytes.NewReader(buffer.Bytes()), nil
+}
+```
+
+### SQLite Search Normalization
+```go
+// Register custom normalize function for accent-insensitive search
+db, _ := gorm.Open(sqlite.Open("database.db"), &gorm.Config{})
+ui.RegisterSQLiteNormalize(db)  // Enables searching "café" with "cafe"
+```
+
+---
+
+## Stateful Components
+
+```go
+// Define component with state
+type Counter struct {
+    Count int
+}
+
+func (c *Counter) Increment(ctx *ui.Context) string {
+    ctx.Body(c)  // Restore state from form
+    c.Count++
+    return c.render(ctx)
+}
+
+func (c *Counter) render(ctx *ui.Context) string {
+    target := ui.Target()
+    return ui.Div("flex gap-2", target)(
+        ui.Button().
+            Click(ctx.Call(c.Increment, c).Replace(target)).  // Pass state
+            Render(fmt.Sprintf("Count: %d", c.Count)),
+    )
+}
+
+// Usage
+func Page(ctx *ui.Context) string {
+    counter := &Counter{Count: 0}
+    return counter.render(ctx)
+}
+```
+
+---
+
+## Labels
+
+```go
+target := ui.Target()
+
+ui.Label(&target).Render("Field Label")
+ui.Label(&target).Required(true).Render("Required Field")
+ui.Label(&target).Class("text-lg font-bold").Render("Styled Label")
+ui.Label(&target).ClassLabel("text-blue-600").Render("Custom Label Style")
+ui.Label(nil).Render("Label without target")  // No `for` attribute
+```
+
+---
+
+## Icons (FontAwesome)
+
+```go
+// Include FontAwesome in HTMLHead
+app.HTMLHead = append(app.HTMLHead,
+    `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">`,
+)
+
+// Icon helpers
+ui.Icon("fa fa-check")                       // <i class="fa fa-check"></i>
+ui.Icon2("fa fa-check", "text-green-500")    // Icon with extra classes
+ui.IconLeft("fa fa-arrow-left", "Back")      // Icon + text (icon on left)
+ui.IconRight("Next", "fa fa-arrow-right")    // Text + icon (icon on right)
+ui.IconStart("fa fa-download", "Download")   // Icon at start with gap
+```
+
+---
+
+## CAPTCHA Components
+
+### Captcha2 - Image-based Challenge
+```go
+func validated(ctx *ui.Context) string {
+    return ui.Div("text-green-600")("CAPTCHA validated!")
+}
+
+func FormWithCaptcha(ctx *ui.Context) string {
+    return ui.Div("")(
+        ui.Captcha2(validated).Render(ctx),
+    )
+}
+```
+
+### Captcha3 - Draggable Tile Challenge
+```go
+func FormWithCaptcha3(ctx *ui.Context) string {
+    onSuccess := func(ctx *ui.Context) string {
+        ctx.Success("CAPTCHA passed!")
+        return showProtectedContent(ctx)
+    }
+    
+    return ui.Captcha3(onSuccess).
+        Count(4).  // Number of tiles to arrange
+        Render(ctx)
+}
+```
+
+### CAPTCHA Configuration
+```go
+captcha := ui.Captcha2(onValidated)
+captcha.SessionField("captcha_session")
+captcha.ClientVerifiedField("captcha_verified")
+captcha.AnswerField("captcha_answer")
+captcha.Attempts(5)                    // Max attempts
+captcha.Lifetime(5 * time.Minute)      // Session lifetime
+captcha.Render(ctx)
+
+// Server-side validation
+if err := captcha.ValidateRequest(ctx.Request); err != nil {
+    ctx.Error("Invalid CAPTCHA")
+}
+```
+
+---
+
+## Theme Switcher
+
+```go
+// Renders a button that cycles: System → Light → Dark
+ui.ThemeSwitcher("")                    // Default styling
+ui.ThemeSwitcher("fixed bottom-4 right-4")  // Custom positioning
+```
+
+---
+
+## Hidden Fields
+
+```go
+// Preserve state in forms
+ui.Hidden("UserID", "uint", 123)
+ui.Hidden("Mode", "string", "edit")
+ui.Hidden("Filter[0].Field", "string", "name")
+```
+
+---
+
+## CSS Constants
+
+### Colors (for buttons/components)
+```go
+ui.Blue, ui.BlueOutline
+ui.Green, ui.GreenOutline
+ui.Red, ui.RedOutline
+ui.Yellow, ui.YellowOutline
+ui.Purple, ui.PurpleOutline
+ui.Gray, ui.GrayOutline
+ui.White, ui.WhiteOutline
+```
+
+### Sizes
+```go
+ui.XS  // p-1
+ui.SM  // p-2
+ui.MD  // p-3 (default)
+ui.ST  // p-4
+ui.LG  // p-5
+ui.XL  // p-6
+```
+
+### Input Styles
+```go
+ui.INPUT    // Standard input styling
+ui.AREA     // Textarea styling
+ui.BTN      // Button base styling
+ui.DISABLED // Disabled state styling
+```
+
+---
+
+## Common Patterns
+
+### Page with Layout
+```go
+func main() {
+    app := ui.MakeApp("en")
+    
+    layout := func(title string, body ui.Callable) ui.Callable {
+        return func(ctx *ui.Context) string {
+            nav := ui.Div("bg-white shadow p-4 flex items-center gap-4")(
+                ui.A("hover:text-blue-600", ui.Href("/"), ctx.Load("/"))("Home"),
+                ui.A("hover:text-blue-600", ui.Href("/about"), ctx.Load("/about"))("About"),
+                ui.Flex1,
+                ui.ThemeSwitcher(""),
+            )
+            return app.HTML(title, "bg-gray-100 min-h-screen", 
+                nav + ui.Div("max-w-4xl mx-auto p-4")(body(ctx)),
+            )
+        }
+    }
+    
+    app.Page("/", layout("Home", HomePage))
+    app.Page("/about", layout("About", AboutPage))
+    app.Listen(":8080")
+}
+```
+
+### Reusable Form Component
+```go
+// Reusable form that can be used in multiple places with different callbacks
+type TemplateForm struct {
+    target      ui.Attr
+    Title       string
+    Description string
+    onSubmit    func(*ui.Context) string
+}
+
+func NewTemplateForm(title, description string) *TemplateForm {
+    return &TemplateForm{
+        target:      ui.Target(),
+        Title:       title,
+        Description: description,
+    }
+}
+
+func (f *TemplateForm) OnReset(ctx *ui.Context) string {
+    f.Title = ""
+    f.Description = ""
+    return f.Render(ctx)
+}
+
+func (f *TemplateForm) Render(ctx *ui.Context) string {
+    return ui.Form("flex flex-col gap-4", f.target, ctx.Submit(f.onSubmit).Replace(f.target))(
+        ui.IText("Title", f).Placeholder("Enter title").Render("Title"),
+        ui.IArea("Description", f).Rows(4).Placeholder("Enter description").Render("Description"),
+        ui.Div("flex gap-4 justify-end")(
+            ui.Button().Click(ctx.Call(f.OnReset).Replace(f.target)).Color(ui.Gray).Render("Reset"),
+            ui.Button().Submit().Color(ui.Blue).Render("Submit"),
+        ),
+    )
+}
+
+// Usage
+func MyPage(ctx *ui.Context) string {
+    form1 := NewTemplateForm("Hello", "Description here")
+    form1.onSubmit = func(ctx *ui.Context) string {
+        ctx.Body(form1)
+        ctx.Success("Form 1 submitted!")
+        return form1.Render(ctx)
+    }
+    
+    form2 := NewTemplateForm("Another", "Different form")
+    form2.onSubmit = func(ctx *ui.Context) string {
+        ctx.Body(form2)
+        db.Create(&MyModel{Title: form2.Title})
+        ctx.Success("Saved to database!")
+        return form2.Render(ctx)
+    }
+    
+    return ui.Div("grid grid-cols-2 gap-4")(
+        ui.Div("bg-white p-4 rounded")(form1.Render(ctx)),
+        ui.Div("bg-white p-4 rounded")(form2.Render(ctx)),
+    )
+}
+```
+
+### CRUD Form Pattern
+```go
+type Item struct {
+    ID   uint
+    Name string `validate:"required"`
+}
+
+func (item *Item) Save(ctx *ui.Context) string {
+    if err := ctx.Body(item); err != nil {
+        return item.Form(ctx, &err)
+    }
+    
+    v := validator.New()
+    if err := v.Struct(item); err != nil {
+        return item.Form(ctx, &err)
+    }
+    
+    db.Save(item)
+    ctx.Success("Saved!")
+    return item.Form(ctx, nil)
+}
+
+func (item *Item) Form(ctx *ui.Context, err *error) string {
+    target := ui.Target()
+    return ui.Form("space-y-4", target, ctx.Submit(item.Save).Replace(target))(
+        ui.ErrorForm(err, nil),
+        ui.IText("Name", item).Required().Error(err).Render("Name"),
+        ui.Button().Submit().Color(ui.Blue).Render("Save"),
+    )
+}
+```
+
+### Deferred Loading
+```go
+func LoadData(ctx *ui.Context) string {
     target := ui.Target()
     
     go func() {
-        ticker := time.NewTicker(time.Second)
-        for {
-            select {
-            case <-ticker.C:
-                html := ui.Div("")(target)(time.Now().Format(time.RFC3339))
-                ctx.Patch(target.Render(), html)
-            }
-        }
+        defer func() { recover() }()
+        
+        time.Sleep(2 * time.Second)
+        data := fetchExpensiveData()
+        
+        html := ui.Div("bg-white p-4 rounded", target)(renderData(data))
+        ctx.Patch(target.Replace(), html)
     }()
     
-    return ui.Div("")(target)("Loading...")
+    return target.Skeleton(ui.SkeletonList)
 }
 ```
 
-## Security Best Practices
+### SPA-like Navigation
+```go
+func NavBar(ctx *ui.Context, currentPath string) string {
+    routes := []struct{ Path, Title string }{
+        {"/", "Home"},
+        {"/users", "Users"},
+        {"/settings", "Settings"},
+    }
+    
+    return ui.Div("flex gap-2")(
+        ui.Map(routes, func(r *struct{ Path, Title string }, _ int) string {
+            isActive := r.Path == currentPath
+            cls := "px-3 py-2 rounded hover:bg-gray-200"
+            if isActive {
+                cls = "px-3 py-2 rounded bg-blue-700 text-white"
+            }
+            // ctx.Load() enables SPA navigation without full page reload
+            return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+        }),
+    )
+}
+```
 
-1. **Always use text-safe methods** for user input:
-   - Tables: `table.FieldText(func(item) string { return item.UserInput })`
-   - Headers: `table.Head("User Text")` (auto-escaped)
+### Modal/Dialog Pattern
+```go
+func ConfirmDelete(ctx *ui.Context) string {
+    target := ui.Target()
+    
+    onConfirm := func(ctx *ui.Context) string {
+        // Perform delete
+        db.Delete(&Item{}, itemID)
+        ctx.Success("Deleted!")
+        return ""  // Close modal by returning empty
+    }
+    
+    onCancel := func(ctx *ui.Context) string {
+        return ""  // Close modal
+    }
+    
+    return ui.Div("fixed inset-0 bg-black/50 flex items-center justify-center", target)(
+        ui.Div("bg-white p-6 rounded-lg shadow-xl max-w-md")(
+            ui.Div("text-lg font-bold mb-4")("Confirm Delete"),
+            ui.Div("text-gray-600 mb-6")("Are you sure you want to delete this item?"),
+            ui.Div("flex gap-4 justify-end")(
+                ui.Button().Click(ctx.Call(onCancel).Replace(target)).Color(ui.Gray).Render("Cancel"),
+                ui.Button().Click(ctx.Call(onConfirm).Replace(target)).Color(ui.Red).Render("Delete"),
+            ),
+        ),
+    )
+}
+```
 
-2. **Set CSP headers** in handlers:
-   ```go
-   ctx.SetDefaultCSP()
-   ```
+### Conditional Rendering
+```go
+func UserCard(ctx *ui.Context, user *User) string {
+    return ui.Div("p-4 bg-white rounded")(
+        ui.Div("font-bold")(user.Name),
+        
+        // Show admin badge only for admins
+        ui.Iff(user.IsAdmin)(
+            ui.Span("bg-red-100 text-red-700 px-2 py-1 rounded text-xs")("Admin"),
+        ),
+        
+        // Show different buttons based on status
+        ui.Or(user.IsActive,
+            func() string {
+                return ui.Button().Color(ui.Red).Render("Deactivate")
+            },
+            func() string {
+                return ui.Button().Color(ui.Green).Render("Activate")
+            },
+        ),
+        
+        // Conditionally show with If
+        ui.If(user.HasProfilePic, func() string {
+            return ui.Img("rounded-full", ui.Attr{Src: user.ProfilePicURL})
+        }),
+    )
+}
+```
 
-3. **Validate input server-side** using `go-playground/validator` tags
+### List with Map
+```go
+func UserList(ctx *ui.Context, users []User) string {
+    return ui.Div("space-y-2")(
+        ui.Map(users, func(u *User, idx int) string {
+            return ui.Div("flex items-center gap-4 p-4 bg-white rounded")(
+                ui.Div("text-gray-500 w-8")(fmt.Sprintf("%d.", idx+1)),
+                ui.Div("font-bold flex-1")(u.Name),
+                ui.Div("text-gray-600")(u.Email),
+                ui.Button().Color(ui.BlueOutline).Class("rounded").Render("View"),
+            )
+        }),
+    )
+}
+```
 
-4. **Use PathValue** for safe struct field access (prevents unsafe reflection)
+### Error Handling
+```go
+func SafeHandler(ctx *ui.Context) string {
+    defer func() {
+        if r := recover(); r != nil {
+            ctx.Error(fmt.Sprintf("An error occurred: %v", r))
+        }
+    }()
+    
+    // Your code here
+    return doSomethingRisky()
+}
 
-5. **Avoid raw HTML** in user-controlled content; use component methods
+// Display form errors
+func FormWithErrors(ctx *ui.Context, err *error) string {
+    target := ui.Target()
+    
+    return ui.Form("space-y-4", target, ctx.Submit(handleSubmit).Replace(target))(
+        // Show all validation errors at top
+        ui.ErrorForm(err, nil),
+        
+        // Individual field with error highlighting
+        ui.IText("Name", &data).Required().Error(err).Render("Name"),
+        ui.IEmail("Email", &data).Required().Error(err).Render("Email"),
+        
+        ui.Button().Submit().Color(ui.Blue).Render("Submit"),
+    )
+}
+```
 
-6. **Rate limit** sensitive operations using CAPTCHA components
+---
 
-## Performance Considerations
+## Sessions
 
-- **Server-rendered**: All HTML generated on server; minimal client JS
-- **Partial updates**: Only update changed DOM elements via WebSocket patches
-- **Skeleton loading**: Show placeholders immediately, patch real content when ready
-- **Lighthouse scores**: Example app achieves 97 Performance, 100 Accessibility, 100 Best Practices, 90 SEO
-- **WebSocket efficiency**: Heartbeat keeps connections alive; stale connections auto-closed
+```go
+// Sessions require GORM database connection
+type SessionData struct {
+    UserID   uint
+    Username string
+    Role     string
+}
 
-## References
-- **README.md**: Comprehensive walkthroughs, security notes, deferred fragment examples, component documentation
-- **examples/main.go**: Complete example application demonstrating all features
-- **examples/pages/**: Individual page examples for each component and pattern
-- **docs/lighthouse-scores.png**: Performance profile visualization
-- **ui/**: Core library source code with inline documentation
+func LoginHandler(ctx *ui.Context) string {
+    session := ctx.Session(db, "auth")
+    
+    data := &SessionData{
+        UserID:   123,
+        Username: "john",
+        Role:     "admin",
+    }
+    session.Save(data)  // Save to _session table
+    
+    ctx.Success("Logged in!")
+    return ctx.Redirect("/dashboard")
+}
+
+func DashboardHandler(ctx *ui.Context) string {
+    session := ctx.Session(db, "auth")
+    
+    var data SessionData
+    session.Load(&data)  // Load from _session table
+    
+    if data.UserID == 0 {
+        return ctx.Redirect("/login")
+    }
+    
+    return ui.Div("")("Welcome, " + data.Username)
+}
+
+// Session sweeper (cleanup expired sessions)
+app.StartSweeper(24 * time.Hour)  // Clean up daily
+```
+
+---
+
+## Security
+
+### Content Security Policy
+```go
+func SecurePage(ctx *ui.Context) string {
+    ctx.SetDefaultCSP()  // Restrictive default policy
+    // Or custom:
+    ctx.SetCSP("default-src 'self'; script-src 'self' 'unsafe-inline';")
+    
+    return renderPage()
+}
+```
+
+### Security Headers
+```go
+func SecureHandler(ctx *ui.Context) string {
+    ctx.SetSecurityHeaders()  // Sets all security headers:
+    // - Strict-Transport-Security
+    // - X-Frame-Options: DENY
+    // - X-Content-Type-Options: nosniff
+    // - X-XSS-Protection: 1; mode=block
+    // - Referrer-Policy
+    // - Permissions-Policy
+    
+    return renderPage()
+}
+
+// Custom security headers
+ctx.SetCustomSecurityHeaders(ui.SecurityHeaderOptions{
+    CSP:                "default-src 'self'",
+    EnableHSTS:         true,
+    FrameOptions:       "SAMEORIGIN",
+    ContentTypeOptions: true,
+    ReferrerPolicy:     "strict-origin",
+})
+```
+
+### Safe Output
+```go
+// Always use FieldText/HeadText for user-provided content
+table.FieldText(func(p *Person) string { return p.Name }, "")  // Escapes HTML
+table.Head("User Input", "")  // Escapes HTML
+
+// Field/HeadHTML allow raw HTML - only for trusted content
+table.Field(func(p *Person) string { return trustedHTML }, "")  // No escaping
+```
+
+---
+
+## Validation Tags (go-playground/validator)
+
+```go
+type Form struct {
+    Email     string `validate:"required,email"`
+    Age       int    `validate:"gte=0,lte=120"`
+    Password  string `validate:"required,min=8"`
+    Role      string `validate:"oneof=admin user guest"`
+    Website   string `validate:"url"`
+    Phone     string `validate:"e164"`
+    Agree     bool   `validate:"eq=true"`
+}
+```
+
+---
+
+## Project Structure
+
+```
+myapp/
+├── main.go          # App setup, routes, layout
+├── pages/
+│   ├── home.go      # Page handlers
+│   └── users.go
+├── components/
+│   └── navbar.go    # Reusable components
+├── assets/
+│   └── favicon.svg
+├── go.mod
+└── go.sum
+```
+
+---
+
+## Dependencies
+
+```go
+import (
+    "github.com/michalCapo/g-sui/ui"          // Core UI library
+    "github.com/go-playground/validator/v10"  // Struct validation
+    "gorm.io/gorm"                            // Database ORM (sessions/collate)
+    "gorm.io/driver/sqlite"                   // SQLite driver (or postgres/mysql)
+)
+```
+
+---
+
+## Quick Reference
+
+### Actions Summary
+| Method | Returns | Use For |
+|--------|---------|---------|
+| `ctx.Call(fn).Replace(target)` | JS string | Button onclick |
+| `ctx.Click(fn).Replace(target)` | Attr{OnClick} | Element onclick attr |
+| `ctx.Submit(fn).Replace(target)` | Attr{OnSubmit} | Form onsubmit attr |
+| `ctx.Patch(target.Replace(), html)` | void | WebSocket push |
+
+### Swap Strategies
+| Strategy | Effect |
+|----------|--------|
+| `.Render(target)` | Replace innerHTML |
+| `.Replace(target)` | Replace entire element |
+| `.Append(target)` | Add to end |
+| `.Prepend(target)` | Add to start |
+| `.None()` | No DOM update |
+
+### Input Types
+| Function | HTML Type |
+|----------|-----------|
+| `ui.IText()` | text |
+| `ui.IEmail()` | email |
+| `ui.IPhone()` | tel |
+| `ui.IPassword()` | password |
+| `ui.INumber()` | number |
+| `ui.IDate()` | date |
+| `ui.ITime()` | time |
+| `ui.IDateTime()` | datetime-local |
+| `ui.IArea()` | textarea |
+| `ui.ISelect()` | select |
+| `ui.ICheckbox()` | checkbox |
+| `ui.IRadio()` | radio |
+| `ui.IRadioButtons()` | radio group |
+
+### Skeleton Types
+| Type | Description |
+|------|-------------|
+| `ui.SkeletonList` | List items with avatars |
+| `ui.SkeletonComponent` | Card/component block |
+| `ui.SkeletonPage` | Full page with header |
+| `ui.SkeletonForm` | Form with inputs |
+| (default) | 3 text lines |
