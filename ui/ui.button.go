@@ -75,6 +75,16 @@ func (b *button) Href(value string) *button {
 	return b
 }
 
+func (b *button) Name(value string) *button {
+	b.attr = append(b.attr, Attr{Name: value})
+	return b
+}
+
+func (b *button) Val(value string) *button {
+	b.attr = append(b.attr, Attr{Value: value})
+	return b
+}
+
 func (b *button) Render(text string) string {
 	if !b.visible {
 		return ""
