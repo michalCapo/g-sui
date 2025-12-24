@@ -72,6 +72,7 @@ type Attr struct {
 	Max          string
 	Min          string
 	Target       string
+	Form         string
 	Rows         uint8
 	Cols         uint8
 	Width        uint8
@@ -83,13 +84,13 @@ type Attr struct {
 
 // TargetSwap pairs a target id with a swap strategy for convenient patch calls.
 type TargetSwap struct {
-    ID   string
-    Swap Swap
+	ID   string
+	Swap Swap
 }
 
 type AOption struct {
-    ID    string
-    Value string
+	ID    string
+	Value string
 }
 
 func MakeOptions(options []string) []AOption {
@@ -241,6 +242,10 @@ func attributes(attrs ...Attr) string {
 			result = append(result, fmt.Sprintf(`target="%s"`, escapeAttr(attr.Target)))
 		}
 
+		if attr.Form != "" {
+			result = append(result, fmt.Sprintf(`form="%s"`, escapeAttr(attr.Form)))
+		}
+
 		if attr.Required {
 			result = append(result, `required="required"`)
 		}
@@ -319,11 +324,11 @@ var Markdown = func(css string) func(elements ...string) string {
 }
 
 var Script = func(value ...string) string {
-    return Trim(fmt.Sprintf(`<script>%s</script>`, strings.Join(value, " ")))
+	return Trim(fmt.Sprintf(`<script>%s</script>`, strings.Join(value, " ")))
 }
 
 var Target = func() Attr {
-    return Attr{ID: "i" + RandomString(15)}
+	return Attr{ID: "i" + RandomString(15)}
 }
 
 // Convenience helpers on targets to produce swap descriptors compatible with ctx.PatchTo.
@@ -379,124 +384,126 @@ func ThemeSwitcher(css string) string {
 type Skeleton string
 
 const (
-    SkeletonList      Skeleton = "list"
-    SkeletonComponent Skeleton = "component"
-    SkeletonPage      Skeleton = "page"
-    SkeletonForm      Skeleton = "form"
+	SkeletonList      Skeleton = "list"
+	SkeletonComponent Skeleton = "component"
+	SkeletonPage      Skeleton = "page"
+	SkeletonForm      Skeleton = "form"
 )
 
 // Skeleton renders a skeleton for the given target.
 // If kind is not provided or unknown, renders the Default variant
 // (three text lines), matching the TS implementation.
 func (a Attr) Skeleton(kind ...Skeleton) string {
-    if len(kind) == 0 || string(kind[0]) == "" {
-        return a.SkeletonDefault()
-    }
-    switch kind[0] {
-    case SkeletonList:
-        return a.SkeletonList(5)
-    case SkeletonComponent:
-        return a.SkeletonComponent()
-    case SkeletonPage:
-        return a.SkeletonPage()
-    case SkeletonForm:
-        return a.SkeletonForm()
-    default:
-        return a.SkeletonDefault()
-    }
+	if len(kind) == 0 || string(kind[0]) == "" {
+		return a.SkeletonDefault()
+	}
+	switch kind[0] {
+	case SkeletonList:
+		return a.SkeletonList(5)
+	case SkeletonComponent:
+		return a.SkeletonComponent()
+	case SkeletonPage:
+		return a.SkeletonPage()
+	case SkeletonForm:
+		return a.SkeletonForm()
+	default:
+		return a.SkeletonDefault()
+	}
 }
 
 // SkeletonDefault renders three generic text lines.
 func (a Attr) SkeletonDefault() string {
-    return Div("animate-pulse", a)(
-        Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(
-            Div("bg-gray-200 h-5 rounded w-5/6 mb-2")(),
-            Div("bg-gray-200 h-5 rounded w-2/3 mb-2")(),
-            Div("bg-gray-200 h-5 rounded w-4/6")(),
-        ),
-    )
+	return Div("animate-pulse", a)(
+		Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(
+			Div("bg-gray-200 h-5 rounded w-5/6 mb-2")(),
+			Div("bg-gray-200 h-5 rounded w-2/3 mb-2")(),
+			Div("bg-gray-200 h-5 rounded w-4/6")(),
+		),
+	)
 }
 
 // SkeletonList renders a vertical list of generic list items (avatar + text).
 func (a Attr) SkeletonList(count int) string {
-    if count <= 0 { count = 5 }
-    items := make([]string, 0, count)
-    for i := 0; i < count; i++ {
-        row := Div("flex items-center gap-3 mb-3")(
-            Div("bg-gray-200 rounded-full h-10 w-10")(),
-            Div("flex-1")(
-                Div("bg-gray-200 h-4 rounded w-5/6 mb-2")(),
-                Div("bg-gray-200 h-4 rounded w-3/6")(),
-            ),
-        )
-        items = append(items, row)
-    }
-    return Div("animate-pulse", a)(
-        Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(strings.Join(items, "")),
-    )
+	if count <= 0 {
+		count = 5
+	}
+	items := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		row := Div("flex items-center gap-3 mb-3")(
+			Div("bg-gray-200 rounded-full h-10 w-10")(),
+			Div("flex-1")(
+				Div("bg-gray-200 h-4 rounded w-5/6 mb-2")(),
+				Div("bg-gray-200 h-4 rounded w-3/6")(),
+			),
+		)
+		items = append(items, row)
+	}
+	return Div("animate-pulse", a)(
+		Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(strings.Join(items, "")),
+	)
 }
 
 // SkeletonComponent renders a component-sized content block.
 func (a Attr) SkeletonComponent() string {
-    return Div("animate-pulse", a)(
-        Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(
-            Div("bg-gray-200 h-6 rounded w-2/5 mb-4")(),
-            Div("bg-gray-200 h-4 rounded w-full mb-2")(),
-            Div("bg-gray-200 h-4 rounded w-5/6 mb-2")(),
-            Div("bg-gray-200 h-4 rounded w-4/6")(),
-        ),
-    )
+	return Div("animate-pulse", a)(
+		Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(
+			Div("bg-gray-200 h-6 rounded w-2/5 mb-4")(),
+			Div("bg-gray-200 h-4 rounded w-full mb-2")(),
+			Div("bg-gray-200 h-4 rounded w-5/6 mb-2")(),
+			Div("bg-gray-200 h-4 rounded w-4/6")(),
+		),
+	)
 }
 
 // SkeletonPage renders a larger page-level skeleton with header and two cards.
 func (a Attr) SkeletonPage() string {
-    card := func() string {
-        return Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow mb-4")(
-            Div("bg-gray-200 h-5 rounded w-2/5 mb-3")(),
-            Div("bg-gray-200 h-4 rounded w-full mb-2")(),
-            Div("bg-gray-200 h-4 rounded w-5/6 mb-2")(),
-            Div("bg-gray-200 h-4 rounded w-4/6")(),
-        )
-    }
-    return Div("animate-pulse", a)(
-        Div("bg-gray-200 h-8 rounded w-1/3 mb-6")(),
-        card(),
-        card(),
-    )
+	card := func() string {
+		return Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow mb-4")(
+			Div("bg-gray-200 h-5 rounded w-2/5 mb-3")(),
+			Div("bg-gray-200 h-4 rounded w-full mb-2")(),
+			Div("bg-gray-200 h-4 rounded w-5/6 mb-2")(),
+			Div("bg-gray-200 h-4 rounded w-4/6")(),
+		)
+	}
+	return Div("animate-pulse", a)(
+		Div("bg-gray-200 h-8 rounded w-1/3 mb-6")(),
+		card(),
+		card(),
+	)
 }
 
 // SkeletonForm renders a form-shaped skeleton: labels, inputs, actions.
 func (a Attr) SkeletonForm() string {
-    fieldShort := func() string {
-        return Div("")(
-            Div("bg-gray-200 h-4 rounded w-3/6 mb-2")(),
-            Div("bg-gray-200 h-10 rounded w-full")(),
-        )
-    }
-    fieldArea := func() string {
-        return Div("")(
-            Div("bg-gray-200 h-4 rounded w-2/6 mb-2")(),
-            Div("bg-gray-200 h-24 rounded w-full")(),
-        )
-    }
-    actions := func() string {
-        return Div("flex justify-end gap-3 mt-6")(
-            Div("bg-gray-200 h-10 rounded w-24")(),
-            Div("bg-gray-200 h-10 rounded w-32")(),
-        )
-    }
-    return Div("animate-pulse", a)(
-        Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(
-            Div("bg-gray-200 h-6 rounded w-2/5 mb-5")(),
-            Div("grid grid-cols-1 md:grid-cols-2 gap-4")(
-                Div("")(fieldShort()),
-                Div("")(fieldShort()),
-                Div("")(fieldArea()),
-                Div("")(fieldShort()),
-            ),
-            actions(),
-        ),
-    )
+	fieldShort := func() string {
+		return Div("")(
+			Div("bg-gray-200 h-4 rounded w-3/6 mb-2")(),
+			Div("bg-gray-200 h-10 rounded w-full")(),
+		)
+	}
+	fieldArea := func() string {
+		return Div("")(
+			Div("bg-gray-200 h-4 rounded w-2/6 mb-2")(),
+			Div("bg-gray-200 h-24 rounded w-full")(),
+		)
+	}
+	actions := func() string {
+		return Div("flex justify-end gap-3 mt-6")(
+			Div("bg-gray-200 h-10 rounded w-24")(),
+			Div("bg-gray-200 h-10 rounded w-32")(),
+		)
+	}
+	return Div("animate-pulse", a)(
+		Div("bg-white dark:bg-gray-900 rounded-lg p-4 shadow")(
+			Div("bg-gray-200 h-6 rounded w-2/5 mb-5")(),
+			Div("grid grid-cols-1 md:grid-cols-2 gap-4")(
+				Div("")(fieldShort()),
+				Div("")(fieldShort()),
+				Div("")(fieldArea()),
+				Div("")(fieldShort()),
+			),
+			actions(),
+		),
+	)
 }
 
 // Convenience globals (without binding to a specific target id)
@@ -589,10 +596,10 @@ var (
 	re  = regexp.MustCompile(`\s{4,}`)
 	re2 = regexp.MustCompile(`[\t\n]+`)
 	re3 = regexp.MustCompile(`"`)
-    // Remove comments before flattening to a single line
-    reCommentBlock = regexp.MustCompile(`(?s)/\*.*?\*/`)
-    reHtmlComment  = regexp.MustCompile(`(?s)<!--.*?-->`)
-    reLineComment  = regexp.MustCompile(`(?m)^[ \t]*//.*$`)
+	// Remove comments before flattening to a single line
+	reCommentBlock = regexp.MustCompile(`(?s)/\*.*?\*/`)
+	reHtmlComment  = regexp.MustCompile(`(?s)<!--.*?-->`)
+	reLineComment  = regexp.MustCompile(`(?m)^[ \t]*//.*$`)
 )
 
 func Trim(s string) string {
@@ -744,20 +751,20 @@ func validateFieldAccess(path string) error {
 	if len(path) > 256 {
 		return fmt.Errorf("field path too long: %d characters", len(path))
 	}
-	
+
 	// Check for dangerous patterns
 	dangerousPatterns := []string{
 		"os.", "exec.", "syscall.", "runtime.", "unsafe.", "reflect.",
 		"__", // Double underscores often indicate private fields
 	}
-	
+
 	pathLower := strings.ToLower(path)
 	for _, pattern := range dangerousPatterns {
 		if strings.Contains(pathLower, pattern) {
 			return fmt.Errorf("potentially unsafe field path: contains '%s'", pattern)
 		}
 	}
-	
+
 	// Validate each part of the path
 	parts := strings.Split(path, ".")
 	for _, part := range parts {
@@ -771,7 +778,7 @@ func validateFieldAccess(path string) error {
 			return fmt.Errorf("invalid field name: %s", part)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -780,12 +787,12 @@ func isValidFieldName(name string) bool {
 	if name == "" {
 		return false
 	}
-	
+
 	// Must start with letter or underscore
 	if !((name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= 'a' && name[0] <= 'z') || name[0] == '_') {
 		return false
 	}
-	
+
 	// Rest can be letters, numbers, or underscores
 	for i := 1; i < len(name); i++ {
 		c := name[i]
@@ -793,7 +800,7 @@ func isValidFieldName(name string) bool {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -802,10 +809,10 @@ func PathValue(obj any, path string) (*reflect.Value, error) {
 	if err := validateFieldAccess(path); err != nil {
 		return nil, fmt.Errorf("unsafe field access: %w", err)
 	}
-	
+
 	parts := strings.Split(path, ".")
 	current := reflect.ValueOf(obj)
-	
+
 	// Ensure we have a valid starting value
 	if !current.IsValid() {
 		return nil, fmt.Errorf("invalid starting object")
@@ -820,7 +827,7 @@ func PathValue(obj any, path string) (*reflect.Value, error) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid slice index '%s' in part %d: %w", indexStr, partIndex, err)
 			}
-			
+
 			// Bounds check for slice index
 			if indexVal < 0 || indexVal > 10000 { // Reasonable upper bound
 				return nil, fmt.Errorf("slice index out of reasonable bounds: %d", indexVal)
@@ -853,7 +860,7 @@ func PathValue(obj any, path string) (*reflect.Value, error) {
 			// Safely expand slice if needed
 			for current.Len() <= indexVal {
 				elemType := current.Type().Elem()
-				
+
 				// Prevent infinite growth
 				if current.Len() > 1000 {
 					return nil, fmt.Errorf("slice grew too large, potential memory exhaustion attack")
@@ -865,12 +872,12 @@ func PathValue(obj any, path string) (*reflect.Value, error) {
 				} else {
 					newElem = reflect.New(elemType).Elem()
 				}
-				
+
 				// Check if we can actually append
 				if !current.CanSet() {
 					return nil, fmt.Errorf("cannot modify slice at part %d", partIndex)
 				}
-				
+
 				current.Set(reflect.Append(current, newElem))
 			}
 
@@ -908,7 +915,7 @@ func PathValue(obj any, path string) (*reflect.Value, error) {
 			if !found {
 				return nil, fmt.Errorf("field '%s' metadata not found at part %d", part, partIndex)
 			}
-			
+
 			// Prevent access to unexported fields as a security measure
 			if !field.IsExported() {
 				return nil, fmt.Errorf("cannot access unexported field '%s' at part %d", part, partIndex)

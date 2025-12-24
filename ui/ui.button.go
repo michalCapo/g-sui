@@ -11,6 +11,7 @@ type button struct {
 	target   Attr
 	visible  bool
 	disabled bool
+	form     string
 	attr     []Attr
 }
 
@@ -85,6 +86,11 @@ func (b *button) Val(value string) *button {
 	return b
 }
 
+func (b *button) Form(value string) *button {
+	b.form = value
+	return b
+}
+
 func (b *button) Render(text string) string {
 	if !b.visible {
 		return ""
@@ -118,6 +124,7 @@ func (b *button) Render(text string) string {
 				ID:      b.target.ID,
 				Type:    b.as,
 				OnClick: b.onclick,
+				Form:    b.form,
 			})...,
 	)(text)
 }

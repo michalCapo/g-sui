@@ -22,6 +22,7 @@ type ASelect struct {
 	disabled    bool
 	required    bool
 	visible     bool
+	form        string
 }
 
 func (c *ASelect) Error(errs *error) *ASelect {
@@ -100,6 +101,11 @@ func (c *ASelect) Options(options []AOption) *ASelect {
 	return c
 }
 
+func (c *ASelect) Form(form string) *ASelect {
+	c.form = form
+	return c
+}
+
 func (c *ASelect) Render(text string) string {
 	value := ""
 
@@ -127,6 +133,7 @@ func (c *ASelect) Render(text string) string {
 		Select(
 			Classes(INPUT, c.size, If(c.disabled, func() string { return "cursor-text bg-gray-100" }), If(c.error != nil, func() string { return "border-l-8 border-red-600" })),
 			Attr{
+				Form:        c.form,
 				Type:        c.as,
 				ID:          c.target.ID,
 				Name:        c.name,

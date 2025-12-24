@@ -58,8 +58,8 @@ func IRadio(name string, data ...any) *TInput {
 			Input(
 				Classes("hover:cursor-pointer", If(c.disabled, func() string { return DISABLED })),
 				Attr{
-					Checked: checked,
-
+					Checked:  checked,
+					Form:     c.form,
 					Value:    c.value,
 					Type:     c.as,
 					ID:       c.target.ID,
@@ -190,6 +190,11 @@ func (c *ARadio) Empty() *ARadio {
 
 func (c *ARadio) Options(options []AOption) *ARadio {
 	c.options = options
+	return c
+}
+
+func (c *ARadio) Form(form string) *ARadio {
+	c.target.Form = form
 	return c
 }
 

@@ -28,6 +28,7 @@ type TInput struct {
 	pattern      string
 	value        string
 	valueFormat  string
+	form         string
 	error        validator.FieldError
 	target       Attr
 	numbers      struct {
@@ -58,6 +59,11 @@ func (c *TInput) If(value bool) *TInput {
 
 func (c *TInput) Value(value string) *TInput {
 	c.value = value
+	return c
+}
+
+func (c *TInput) Form(value string) *TInput {
+	c.form = value
 	return c
 }
 
@@ -247,6 +253,7 @@ func IText(name string, data ...any) *TInput {
 					Pattern:      c.pattern,
 					Placeholder:  c.placeholder,
 					Autocomplete: c.autocomplete,
+					Form:         c.form,
 				},
 			),
 
