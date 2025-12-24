@@ -8,19 +8,20 @@ This document describes the internal architecture, design patterns, and implemen
 2. [Architecture Principles](#architecture-principles)
 3. [Package Structure](#package-structure)
 4. [Component Reference](#component-reference)
-5. [Core Components](#core-components)
-6. [Context API Reference](#context-api-reference)
-7. [Request Lifecycle](#request-lifecycle)
-8. [State Management](#state-management)
-9. [Action System](#action-system)
-10. [WebSocket Communication](#websocket-communication)
-11. [Data Collation (TCollate)](#data-collation-tcollate)
-12. [CAPTCHA Components](#captcha-components)
-13. [Security Model](#security-model)
-14. [Extension Points](#extension-points)
-15. [Performance Considerations](#performance-considerations)
-16. [Testing Patterns](#testing-patterns)
-17. [Future Considerations](#future-considerations)
+5. [Form System](#form-system)
+6. [Core Components](#core-components)
+7. [Context API Reference](#context-api-reference)
+8. [Request Lifecycle](#request-lifecycle)
+9. [State Management](#state-management)
+10. [Action System](#action-system)
+11. [WebSocket Communication](#websocket-communication)
+12. [Data Collation (TCollate)](#data-collation-tcollate)
+13. [CAPTCHA Components](#captcha-components)
+14. [Security Model](#security-model)
+15. [Extension Points](#extension-points)
+16. [Performance Considerations](#performance-considerations)
+17. [Testing Patterns](#testing-patterns)
+18. [Future Considerations](#future-considerations)
 
 ---
 
@@ -100,6 +101,7 @@ ui/
 ├── ui.go          # Core HTML DSL, colors, utilities
 ├── ui.server.go   # App, Context, HTTP server, WebSocket
 ├── ui.input.go    # Input components and validation
+├── ui.form.go     # Form instance with automatic form association
 ├── ui.data.go     # Data collation (search/sort/filter/paging)
 ├── ui.button.go   # Button component
 ├── ui.table.go    # Simple table component
@@ -119,14 +121,15 @@ ui/
 |------|-------|----------------|
 | `ui.go` | ~927 | HTML element helpers, color constants, utility functions |
 | `ui.server.go` | ~2,188 | App setup, routing, WebSocket, request handling |
-| `ui.input.go` | ~871 | All input types with validation binding |
+| `ui.input.go` | ~877 | All input types with validation binding |
+| `ui.form.go` | ~72 | Form instance for automatic form attribute association |
 | `ui.data.go` | ~824 | Data table with search, sort, filter, pagination, Excel export |
-| `ui.button.go` | ~123 | Button component with fluent API |
+| `ui.button.go` | ~130 | Button component with fluent API |
 | `ui.table.go` | ~251 | Simple table with column definitions |
 | `ui.label.go` | ~54 | Form label component |
-| `ui.check.go` | ~94 | Checkbox component |
+| `ui.check.go` | ~95 | Checkbox component |
 | `ui.radio.go` | ~330 | Radio button and radio button group |
-| `ui.select.go` | ~162 | Select dropdown component |
+| `ui.select.go` | ~163 | Select dropdown component |
 | `ui.icon.go` | ~47 | Icon helpers (FontAwesome) |
 | `ui.captcha.go` | ~108 | Google reCAPTCHA integration |
 | `ui.captcha2.go` | ~487 | Image CAPTCHA generation and validation |
@@ -385,6 +388,90 @@ target.SkeletonComponent()              // Component skeleton
 target.SkeletonPage()                   // Page skeleton
 target.SkeletonForm()                   // Form skeleton
 ```
+
+---
+
+## Form System
+
+The Form system provides a convenient way to create reusable forms where input fields and submit buttons are defined outside the HTML form element. This is particularly useful when you want to reuse the same form in multiple places or separate the form structure from its content.
+
+### FormInstance
+
+The `FormInstance` manages form creation and automatically associates all inputs and buttons with the form via the `form` attribute.
+
+```go
+type FormInstance struct {
+    FormId   string   // Unique form identifier
+    OnSubmit Attr     // OnSubmit action handler
+}
+```
+
+### Creating a Form
+
+```go
+func Submit(ctx *ui.Context) string {
+    return "Form submitted successfully!"
+}
+
+func FormContent(ctx *ui.Context) string {
+    target := ui.Target()
+
+    // Create form with submit handler
+    form := ui.FormNew(ctx.Submit(Submit).Replace(target))
+
+    return ui.Div("max-w-5xl mx-auto")(
+        form.Render(),                    // Hidden form element
+        form.Text("Title").Required().Render("Title"),
+        form.Email("Email").Required().Render("Email"),
+        form.Phone("Phone").Render("Phone"),
+        form.Number("Age").Render("Age"),
+        form.Area("Address").Render("Address"),
+        form.Password("Password").Render("Password"),
+        form.Date("BirthDate").Render("Birth Date"),
+        form.Time("AppointmentTime").Render("Time"),
+        form.DateTime("CreatedAt").Render("Created At"),
+        form.Select("Country").Options(options).Render("Country"),
+        form.Checkbox("Agree").Required().Render("I agree"),
+        form.Radio("Gender", data).Value("male").Render("Male"),
+        form.RadioButtons("Plan").Options(planOptions).Render("Plan"),
+        form.Button().Color(ui.Blue).Submit().Render("Submit"),
+    )
+}
+```
+
+### FormInstance Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.Text(name, data...)` | `*TInput` | Text input field |
+| `.Area(name, data...)` | `*TInput` | Textarea field |
+| `.Password(name, data...)` | `*TInput` | Password input |
+| `.Number(name, data...)` | `*TInput` | Number input |
+| `.Phone(name, data...)` | `*TInput` | Phone input (tel type) |
+| `.Email(name, data...)` | `*TInput` | Email input |
+| `.Date(name, data...)` | `*TInput` | Date picker |
+| `.Time(name, data...)` | `*TInput` | Time picker |
+| `.DateTime(name, data...)` | `*TInput` | DateTime picker |
+| `.Select(name, data...)` | `*ASelect` | Dropdown select |
+| `.Checkbox(name, data...)` | `*TInput` | Checkbox |
+| `.Radio(name, data...)` | `*TInput` | Radio button |
+| `.RadioButtons(name, data...)` | `*ARadio` | Radio button group |
+| `.Button()` | `*button` | Submit button |
+| `.Render()` | `string` | Hidden form element |
+
+### How It Works
+
+1. **Form Creation**: `FormNew()` generates a unique form ID and stores the submit handler
+2. **Input Association**: Each input method automatically adds the `form` attribute with the form ID
+3. **Button Association**: Buttons created via `.Button()` also get the `form` attribute
+4. **Hidden Form**: `.Render()` outputs a hidden `<form>` element that handles the submit event
+
+### Benefits
+
+- **Separation of Concerns**: Form structure is separate from field layout
+- **Reusability**: Same form definition can be used in multiple contexts
+- **Flexibility**: Fields can be placed anywhere in the DOM, not just inside the form element
+- **Automatic Association**: No need to manually set `form` attributes on each field
 
 ---
 

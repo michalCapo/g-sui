@@ -432,26 +432,113 @@ func (f *LoginForm) Submit(ctx *ui.Context) string {
     if err := ctx.Body(f); err != nil {  // Parse form data into struct
         return f.Render(ctx, &err)
     }
-    
+
     v := validator.New()
     if err := v.Struct(f); err != nil {  // Validate struct
         return f.Render(ctx, &err)
     }
-    
+
     ctx.Success("Login successful!")
     return ctx.Redirect("/dashboard")
 }
 
 func (f *LoginForm) Render(ctx *ui.Context, err *error) string {
     target := ui.Target()
-    
+
     return ui.Form("bg-white p-6 rounded", target, ctx.Submit(f.Submit).Replace(target))(
         ui.ErrorForm(err, nil),  // Show validation errors
-        
+
         ui.IEmail("Email", f).Required().Error(err).Render("Email"),
         ui.IPassword("Password").Required().Error(err).Render("Password"),
-        
+
         ui.Button().Submit().Color(ui.Blue).Render("Login"),
+    )
+}
+```
+
+---
+
+## FormInstance (Disconnected Forms)
+
+The `FormInstance` allows creating forms where inputs and buttons are placed outside the HTML form element. All fields are automatically associated with the form via the `form` attribute.
+
+### Basic Usage
+
+```go
+func Submit(ctx *ui.Context) string {
+    ctx.Success("Form submitted!")
+    return ""
+}
+
+func FormContent(ctx *ui.Context) string {
+    target := ui.Target()
+
+    // Create form instance with submit handler
+    form := ui.FormNew(ctx.Submit(Submit).Replace(target))
+
+    return ui.Div("max-w-5xl mx-auto flex flex-col gap-4")(
+        form.Render(),                         // Hidden form element
+        form.Text("Title").Required().Render("Title"),
+        form.Email("Email").Required().Render("Email"),
+        form.Phone("Phone").Render("Phone"),
+        form.Number("Age").Render("Age"),
+        form.Area("Address").Render("Address"),
+        form.Password("Password").Render("Password"),
+        form.Date("BirthDate").Render("Birth Date"),
+        form.Time("AppointmentTime").Render("Time"),
+        form.DateTime("CreatedAt").Render("Created At"),
+        form.Select("Country").Options(options).Render("Country"),
+        form.Checkbox("Agree").Required().Render("I agree"),
+        form.Radio("Gender", data).Value("male").Render("Male"),
+        form.RadioButtons("Plan").Options(planOptions).Render("Plan"),
+        form.Button().Color(ui.Blue).Submit().Render("Submit"),
+    )
+}
+```
+
+### FormInstance Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.Text(name, data...)` | `*TInput` | Text input |
+| `.Area(name, data...)` | `*TInput` | Textarea |
+| `.Password(name, data...)` | `*TInput` | Password input |
+| `.Number(name, data...)` | `*TInput` | Number input |
+| `.Phone(name, data...)` | `*TInput` | Phone input (tel) |
+| `.Email(name, data...)` | `*TInput` | Email input |
+| `.Date(name, data...)` | `*TInput` | Date picker |
+| `.Time(name, data...)` | `*TInput` | Time picker |
+| `.DateTime(name, data...)` | `*TInput` | DateTime picker |
+| `.Select(name, data...)` | `*ASelect` | Dropdown select |
+| `.Checkbox(name, data...)` | `*TInput` | Checkbox |
+| `.Radio(name, data...)` | `*TInput` | Radio button |
+| `.RadioButtons(name, data...)` | `*ARadio` | Radio button group |
+| `.Button()` | `*button` | Submit button |
+| `.Render()` | `string` | Hidden form element |
+
+### Reusable Form Pattern
+
+```go
+// Define a reusable form component
+type UserForm struct {
+    form *ui.FormInstance
+    data *UserData
+}
+
+func NewUserForm(data *UserData, submitHandler ui.Callable) *UserForm {
+    target := ui.Target()
+    return &UserForm{
+        form: ui.FormNew(ctx.Submit(submitHandler).Replace(target)),
+        data: data,
+    }
+}
+
+func (f *UserForm) Render(ctx *ui.Context) string {
+    return ui.Div("bg-white p-6 rounded-lg")(
+        f.form.Render(),
+        f.form.Text("Name", f.data).Required().Render("Name"),
+        f.form.Email("Email", f.data).Required().Render("Email"),
+        f.form.Button().Color(ui.Blue).Submit().Render("Save"),
     )
 }
 ```
