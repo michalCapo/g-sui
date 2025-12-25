@@ -563,6 +563,11 @@ ctx.Info("FYI message")             // Blue toast
 ctx.ErrorReload("Error - click to reload")  // Red toast with reload button
 ```
 
+### Page Title
+```go
+ctx.Title("New Page Title")  // Update the page title dynamically
+```
+
 ### Navigation
 ```go
 ctx.Load("/path")    // Returns Attr for SPA-like navigation (no full reload)

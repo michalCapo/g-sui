@@ -664,6 +664,12 @@ func (ctx *Context) Info(message string) {
 	displayMessage(ctx, message, "bg-blue-700 text-white")
 }
 
+// Title updates the page title dynamically
+func (ctx *Context) Title(title string) {
+	script := fmt.Sprintf(`<script>document.title=%q;</script>`, title)
+	ctx.append = append(ctx.append, script)
+}
+
 // SetSecurityHeaders sets comprehensive security headers
 func (ctx *Context) SetSecurityHeaders() {
 	headers := ctx.Response.Header()

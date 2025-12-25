@@ -540,6 +540,9 @@ type Context struct {
 - `Info(msg string)` - Blue toast notification
 - `ErrorReload(msg string)` - Red toast with reload button
 
+#### Page Title
+- `Title(title string)` - Update the page title dynamically
+
 #### Navigation
 - `Load(href string) Attr` - SPA-like navigation (returns Attr for onclick)
 - `Reload() string` - JavaScript to reload page

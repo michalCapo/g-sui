@@ -216,6 +216,7 @@ Notes:
 
 - Toasts: `ctx.Success(msg)`, `ctx.Error(msg)`, `ctx.Info(msg)`
 - Error toast with Reload button: `ctx.ErrorReload(msg)`
+- Page title: `ctx.Title(title)` - Update the page title dynamically
 - Built‑in client handlers display a compact error panel for failed fetches (HTTP 500 etc.) with a Reload button.
 - Server panics are recovered and surface as an error toast with Reload.
 
