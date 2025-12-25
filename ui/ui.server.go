@@ -1287,6 +1287,16 @@ func (ctx *Context) Patch(ts TargetSwap, html string, clear ...func()) {
 	ctx.App.sendPatch(ts.ID, ts.Swap, html)
 }
 
+// Render renders HTML inside the given target element (replaces innerHTML).
+func (ctx *Context) Render(target Attr, html string) {
+	ctx.Patch(target.Render(), html)
+}
+
+// Replace replaces the given target element with HTML (replaces outerHTML).
+func (ctx *Context) Replace(target Attr, html string) {
+	ctx.Patch(target.Replace(), html)
+}
+
 func (app *App) AutoRestart(enable bool) {
 	if !enable {
 		return

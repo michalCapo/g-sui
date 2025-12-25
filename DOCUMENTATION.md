@@ -563,7 +563,9 @@ type Context struct {
 - `SetCustomSecurityHeaders(opts SecurityHeaderOptions)` - Custom security headers
 
 #### WebSocket Patches
-- `Patch(swap TargetSwap, html string)` - Server-initiated DOM update
+- `Render(target Attr, html string)` - Render HTML inside target (innerHTML)
+- `Replace(target Attr, html string)` - Replace target element (outerHTML)
+- `Patch(swap TargetSwap, html string)` - Server-initiated DOM update (full API)
 - `Patch(swap TargetSwap, html string, cleanup func())` - With cleanup callback
 
 ---
@@ -795,6 +797,11 @@ The WebSocket system at `/__ws` enables:
 ### Patch Methods
 
 ```go
+// Convenience methods (recommended)
+ctx.Render(target, html)   // Replace innerHTML
+ctx.Replace(target, html)  // Replace element
+
+// Full Patch API with all swap strategies
 ctx.Patch(target.Render(), html)   // Replace innerHTML
 ctx.Patch(target.Replace(), html)  // Replace element
 ctx.Patch(target.Append(), html)   // Append child
@@ -813,7 +820,13 @@ Patches are sent to **all connected clients**. Use fixed IDs for shared elements
 
 ```go
 notificationTarget := ui.ID("global-notifications")
+// For append/prepend, use full Patch API
 ctx.Patch(notificationTarget.Append(), notificationHTML)
+
+// For render/replace, use convenience methods
+statusTarget := ui.ID("status-indicator")
+ctx.Render(statusTarget, "<div>Online</div>")  // Update innerHTML
+ctx.Replace(statusTarget, "<div id='status-indicator'>Offline</div>")  // Replace element
 ```
 
 ---

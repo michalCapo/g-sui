@@ -593,6 +593,16 @@ ctx.SetDefaultCSP()
 ctx.SetSecurityHeaders()
 ```
 
+### WebSocket Patches
+```go
+ctx.Render(target, html)   // Render HTML inside target (innerHTML)
+ctx.Replace(target, html)  // Replace target element (outerHTML)
+ctx.Patch(target.Render(), html)   // Full API: replace innerHTML
+ctx.Patch(target.Replace(), html)  // Full API: replace element
+ctx.Patch(target.Append(), html)   // Full API: append to target
+ctx.Patch(target.Prepend(), html)  // Full API: prepend to target
+```
+
 ---
 
 ## WebSocket Patches (Real-time Updates)
@@ -601,6 +611,11 @@ WebSocket patches push HTML updates from server to all connected clients. The We
 
 ### Patch Methods
 ```go
+// Convenience methods (recommended)
+ctx.Render(target, html)   // Replace innerHTML of target
+ctx.Replace(target, html)  // Replace entire target element
+
+// Full Patch API with all swap strategies
 ctx.Patch(target.Render(), html)   // Replace innerHTML of target
 ctx.Patch(target.Replace(), html)  // Replace entire target element
 ctx.Patch(target.Append(), html)   // Append HTML to target
@@ -628,7 +643,7 @@ func Clock(ctx *ui.Context) string {
     // Start background updates
     stop := make(chan struct{})
     
-    // First patch with cleanup callback
+    // First patch with cleanup callback (requires full Patch API)
     ctx.Patch(target.Replace(), clockUI(), func() {
         close(stop)  // Stop ticker when target disappears
     })
@@ -641,7 +656,8 @@ func Clock(ctx *ui.Context) string {
             case <-stop:
                 return
             case <-ticker.C:
-                ctx.Patch(target.Replace(), clockUI())
+                // Using convenience method
+                ctx.Replace(target, clockUI())
             }
         }
     }()
@@ -667,7 +683,8 @@ func DeferredComponent(ctx *ui.Context) string {
                 ui.Div("text-gray-600")("This replaced the skeleton via WebSocket."),
             ),
         )
-        ctx.Patch(target.Replace(), html)
+        // Using convenience method
+        ctx.Replace(target, html)
     }()
 
     // Return skeleton immediately
@@ -720,8 +737,18 @@ func NotifyAll(ctx *ui.Context) string {
         fmt.Sprintf("New message at %s", time.Now().Format("15:04:05")),
     )
     
+    // For append/prepend, use full Patch API
     ctx.Patch(notificationTarget.Append(), message)
     ctx.Success("Notification sent to all clients!")
+    return ""
+}
+
+// Example using Render convenience method
+func UpdateStatus(ctx *ui.Context) string {
+    statusTarget := ui.ID("status-indicator")
+    
+    html := ui.Div("bg-green-500 text-white p-2 rounded")("Online")
+    ctx.Render(statusTarget, html)  // Update innerHTML
     return ""
 }
 ```
@@ -737,7 +764,8 @@ target := ui.Target()
 go func() {
     time.Sleep(2 * time.Second)
     html := ui.Div("", target)("Content loaded!")
-    ctx.Patch(target.Replace(), html)
+    // Using convenience method
+    ctx.Replace(target, html)
 }()
 
 return target.Skeleton(ui.SkeletonComponent)  // Or SkeletonList, SkeletonPage, SkeletonForm
@@ -1499,7 +1527,9 @@ import (
 | `ctx.Call(fn).Replace(target)` | JS string | Button onclick |
 | `ctx.Click(fn).Replace(target)` | Attr{OnClick} | Element onclick attr |
 | `ctx.Submit(fn).Replace(target)` | Attr{OnSubmit} | Form onsubmit attr |
-| `ctx.Patch(target.Replace(), html)` | void | WebSocket push |
+| `ctx.Render(target, html)` | void | WebSocket push (innerHTML) |
+| `ctx.Replace(target, html)` | void | WebSocket push (outerHTML) |
+| `ctx.Patch(target.Replace(), html)` | void | WebSocket push (full API) |
 
 ### Swap Strategies
 | Strategy | Effect |
