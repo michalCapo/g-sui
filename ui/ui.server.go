@@ -920,11 +920,11 @@ func (app *App) Register(httpMethod string, path string, method *Callable) strin
 	return path
 }
 
-// todo
-// iplementat middleware support for pages
-// Page("/", middleware1, middleware2, component)
-// middleware1 and middleware2 will be called before component is called
-// all middleware and compnets to have same mehtod signature: func(ctx *Context) string aka Callable
+// Page registers a route with optional middleware support.
+// Usage: Page("/", middleware1, middleware2, component)
+// All middleware functions are called in order before the component.
+// If any middleware returns a non-empty string, that response is used and execution stops.
+// All middleware and components must have the same signature: func(ctx *Context) string
 func (app *App) Page(path string, component ...Callable) **Callable {
 	if len(component) == 0 {
 		panic("Page requires at least one component")
@@ -936,9 +936,36 @@ func (app *App) Page(path string, component ...Callable) **Callable {
 		}
 	}
 
-	// Extract the first component and take its address
-	fn := component[0]
-	found := &fn
+	// If only one component provided, use it directly (backward compatible)
+	if len(component) == 1 {
+		fn := component[0]
+		found := &fn
+		mu.Lock()
+		stored[found] = path
+		mu.Unlock()
+		return &found
+	}
+
+	// Multiple components: last one is the handler, others are middleware
+	// Create a wrapper function that chains middleware before the final component
+	handler := component[len(component)-1]
+	middleware := component[:len(component)-1]
+
+	// Create a chained wrapper function
+	wrapper := func(ctx *Context) string {
+		// Call all middleware in order
+		for _, mw := range middleware {
+			result := mw(ctx)
+			// If middleware returns non-empty string, use it as response (early return)
+			if result != "" {
+				return result
+			}
+		}
+		// All middleware passed, call the final component
+		return handler(ctx)
+	}
+
+	found := &wrapper
 
 	mu.Lock()
 	stored[found] = path
