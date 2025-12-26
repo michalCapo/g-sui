@@ -920,14 +920,25 @@ func (app *App) Register(httpMethod string, path string, method *Callable) strin
 	return path
 }
 
-func (app *App) Page(path string, component Callable) **Callable {
+// todo
+// iplementat middleware support for pages
+// Page("/", middleware1, middleware2, component)
+// middleware1 and middleware2 will be called before component is called
+// all middleware and compnets to have same mehtod signature: func(ctx *Context) string aka Callable
+func (app *App) Page(path string, component ...Callable) **Callable {
+	if len(component) == 0 {
+		panic("Page requires at least one component")
+	}
+
 	for key, value := range stored {
 		if value == path {
 			return &key
 		}
 	}
 
-	found := &component
+	// Extract the first component and take its address
+	fn := component[0]
+	found := &fn
 
 	mu.Lock()
 	stored[found] = path
