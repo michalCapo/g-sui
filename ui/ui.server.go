@@ -1127,17 +1127,23 @@ func (app *App) Assets(assets embed.FS, path string, maxAge time.Duration) {
 	http.Handle("/"+path, mimeTypeMiddleware(cacheControlMiddleware(handler, maxAge)))
 }
 
-func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
-	path = strings.TrimPrefix(path, "/")
+// Favicon serves a favicon file from the embedded filesystem at /favicon.ico.
+// The path parameter should be the path to the favicon file in the embed.FS
+// (e.g., "assets/favicon.ico", "assets/favicon.svg").
+// Defaults to "favicon.ico" if not provided.
+func (app *App) Favicon(assets embed.FS, maxAge time.Duration, path string) {
+	if path == "" {
+		path = "favicon.ico"
+	}
 
-	faviconHandler := func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		file, err := assets.ReadFile(path)
 		if err != nil {
 			http.Error(w, "File not found", http.StatusNotFound)
 			return
 		}
 
-		// Set proper content type for common favicon formats.
+		// Set proper content type based on file extension.
 		// Some browsers (and Go's DetectContentType) don't reliably detect SVG,
 		// so prefer extension-based mapping for correctness.
 		switch strings.ToLower(filepath.Ext(path)) {
@@ -1151,6 +1157,10 @@ func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
 			w.Header().Set("Content-Type", "image/gif")
 		case ".jpg", ".jpeg":
 			w.Header().Set("Content-Type", "image/jpeg")
+		case ".webp":
+			w.Header().Set("Content-Type", "image/webp")
+		case ".avif":
+			w.Header().Set("Content-Type", "image/avif")
 		default:
 			// Fallback to detection if unknown extension
 			w.Header().Set("Content-Type", http.DetectContentType(file))
@@ -1158,12 +1168,7 @@ func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
 
 		w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(int(maxAge.Seconds())))
 		w.Write(file)
-	}
-
-	// Register both /favicon.ico and /favicon.svg routes
-	// Browsers request /favicon.ico by default, but modern browsers also support /favicon.svg
-	http.HandleFunc("/favicon.ico", faviconHandler)
-	http.HandleFunc("/favicon.svg", faviconHandler)
+	})
 }
 
 func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {

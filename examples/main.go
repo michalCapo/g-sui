@@ -43,7 +43,7 @@ var routes = []route{
 
 func main() {
 	app := ui.MakeApp("en")
-	app.Favicon(assets, "assets/favicon.svg", 24*time.Hour)
+	app.Favicon(assets, 24*time.Hour, "assets/favicon.svg")
 	app.SmoothNavigation(true)
 	// app.AutoRestart(true) // enable if you want the examples to rebuild on changes
 	app.HTMLHead = append(app.HTMLHead,
