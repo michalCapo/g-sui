@@ -1,5 +1,7 @@
 package ui
 
+import "fmt"
+
 type FormInstance struct {
 	FormId   string
 	OnSubmit Attr
@@ -62,6 +64,11 @@ func (f *FormInstance) Phone(name string, data ...any) *TInput {
 
 func (f *FormInstance) Email(name string, data ...any) *TInput {
 	return IEmail(name, data...).Form(f.FormId)
+}
+
+func (f *FormInstance) Hidden(name string, typ string, value any, attr ...Attr) string {
+	attr = append(attr, Attr{Name: name, Type: typ, Value: fmt.Sprintf("%v", value), Form: f.FormId})
+	return Input("hidden", attr...)
 }
 
 func (f *FormInstance) Button() *button {

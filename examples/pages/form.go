@@ -27,6 +27,7 @@ func FormContent(ctx *ui.Context) string {
 			some.Render(),
 			some.Text("Title").Required().Render("Title"),
 			some.Number("Number").Render("Number"),
+			some.Hidden("Some", "number", "value", ui.Attr{Step: "123"}),
 			some.Button().Color(ui.Blue).Submit().Render("Submit"),
 		),
 	)
