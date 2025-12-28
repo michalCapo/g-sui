@@ -1038,9 +1038,93 @@ func (app *App) Callable(action Callable) **Callable {
 	return &found
 }
 
+// mimeTypeMiddleware wraps a handler to set correct MIME types for common web file types
+func mimeTypeMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ext := strings.ToLower(filepath.Ext(r.URL.Path))
+		switch ext {
+		// JavaScript/TypeScript
+		case ".js", ".mjs":
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		case ".ts", ".mts":
+			w.Header().Set("Content-Type", "text/typescript; charset=utf-8")
+		case ".jsx":
+			w.Header().Set("Content-Type", "text/jsx; charset=utf-8")
+		case ".tsx":
+			w.Header().Set("Content-Type", "text/tsx; charset=utf-8")
+		// Stylesheets
+		case ".css":
+			w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		// JSON
+		case ".json":
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		// HTML
+		case ".html", ".htm":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// XML
+		case ".xml":
+			w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+		// Images
+		case ".svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+		case ".png":
+			w.Header().Set("Content-Type", "image/png")
+		case ".jpg", ".jpeg":
+			w.Header().Set("Content-Type", "image/jpeg")
+		case ".gif":
+			w.Header().Set("Content-Type", "image/gif")
+		case ".webp":
+			w.Header().Set("Content-Type", "image/webp")
+		case ".ico":
+			w.Header().Set("Content-Type", "image/x-icon")
+		case ".avif":
+			w.Header().Set("Content-Type", "image/avif")
+		// Fonts
+		case ".woff":
+			w.Header().Set("Content-Type", "font/woff")
+		case ".woff2":
+			w.Header().Set("Content-Type", "font/woff2")
+		case ".ttf":
+			w.Header().Set("Content-Type", "font/ttf")
+		case ".otf":
+			w.Header().Set("Content-Type", "font/otf")
+		case ".eot":
+			w.Header().Set("Content-Type", "application/vnd.ms-fontobject")
+		// Audio/Video
+		case ".mp3":
+			w.Header().Set("Content-Type", "audio/mpeg")
+		case ".wav":
+			w.Header().Set("Content-Type", "audio/wav")
+		case ".ogg":
+			w.Header().Set("Content-Type", "audio/ogg")
+		case ".mp4":
+			w.Header().Set("Content-Type", "video/mp4")
+		case ".webm":
+			w.Header().Set("Content-Type", "video/webm")
+		// Documents
+		case ".pdf":
+			w.Header().Set("Content-Type", "application/pdf")
+		// Web manifest
+		case ".webmanifest":
+			w.Header().Set("Content-Type", "application/manifest+json")
+		// Source maps
+		case ".map":
+			w.Header().Set("Content-Type", "application/json")
+		// WebAssembly
+		case ".wasm":
+			w.Header().Set("Content-Type", "application/wasm")
+		// Plain text
+		case ".txt", ".md":
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (app *App) Assets(assets embed.FS, path string, maxAge time.Duration) {
 	path = strings.TrimPrefix(path, "/")
-	http.Handle("/"+path, cacheControlMiddleware(http.FileServer(http.FS(assets)), maxAge))
+	handler := http.FileServer(http.FS(assets))
+	http.Handle("/"+path, mimeTypeMiddleware(cacheControlMiddleware(handler, maxAge)))
 }
 
 func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
