@@ -876,7 +876,7 @@ type App struct {
 	SmoothNav    bool
 	sessMu       sync.Mutex
 	sessions     map[string]*sessRec
-	wsMu         sync.Mutex
+	wsMu         sync.RWMutex
 	wsClients    map[*websocket.Conn]*wsState
 }
 
@@ -1327,9 +1327,9 @@ func (app *App) initWS() {
 						}
 						app.sessMu.Unlock()
 					}
-					app.wsMu.Lock()
+					app.wsMu.RLock()
 					last := st.lastPong
-					app.wsMu.Unlock()
+					app.wsMu.RUnlock()
 					if time.Since(last) > 75*time.Second {
 						_ = ws.Close()
 						return
@@ -1394,14 +1394,14 @@ func (app *App) sendPatch(id string, swap Swap, html string) {
 		"html": Trim(html),
 	}
 	data, _ := json.Marshal(msg)
-	app.wsMu.Lock()
+	app.wsMu.RLock()
 	for ws := range app.wsClients {
 		go func(c *websocket.Conn) {
 			defer func() { recover() }()
 			_ = websocket.Message.Send(c, string(data))
 		}(ws)
 	}
-	app.wsMu.Unlock()
+	app.wsMu.RUnlock()
 }
 
 // Patch patches using a TargetSwap descriptor (id + swap) and pushes to WS clients.

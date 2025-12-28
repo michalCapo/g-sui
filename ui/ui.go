@@ -3,6 +3,7 @@ package ui
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html"
 	"log"
@@ -110,15 +111,11 @@ func escapeAttr(s string) string {
 
 // escapeJS escapes JavaScript string literals to prevent XSS attacks
 func escapeJS(s string) string {
-	// Replace dangerous characters for JavaScript string literals
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, `'`, `\'`)
-	s = strings.ReplaceAll(s, "\n", `\n`)
-	s = strings.ReplaceAll(s, "\r", `\r`)
-	s = strings.ReplaceAll(s, "\t", `\t`)
-	s = strings.ReplaceAll(s, "</script>", `<\/script>`)
-	return s
+	b, _ := json.Marshal(s)
+	if len(b) >= 2 && b[0] == '"' && b[len(b)-1] == '"' {
+		return string(b[1 : len(b)-1])
+	}
+	return string(b)
 }
 
 func attributes(attrs ...Attr) string {
