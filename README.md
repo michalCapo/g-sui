@@ -15,6 +15,8 @@ Need the quick project map for tools or onboarding? Check out [`ai.md`](ai.md) f
 - Server-rendered HTML components with a small helper DSL
 - Lightweight interactivity via server actions (`Click`, `Submit`, `Send`)
 - Partial updates: re-render, replace, append, or prepend only the target
+- Smooth navigation with background loading and delayed loader (50ms threshold)
+- Optional automatic link interception for seamless SPA-like navigation (`app.SmoothNavigation(true)`)
 - Deferred fragments with skeletons via WebSocket patches (`ctx.Patch` + skeleton helpers)
 - Query/Collate helper for data UIs: search, sort, filters, paging, and XLS export (works with `gorm`)
 - Form helpers with validation (uses `go-playground/validator`)
@@ -52,6 +54,7 @@ import (
 func main() {
     app := ui.MakeApp("en")
     app.AutoRestart(true) // optional during development (rebuild + restart on file changes)
+    app.SmoothNavigation(true) // optional: enable automatic smooth navigation for all internal links
 
     hello := func(ctx *ui.Context) string { ctx.Success("Hello from g-sui!"); return "" }
 
@@ -118,7 +121,39 @@ The examples include:
 - Clock demo and deferred fragments (skeleton → WS patch)
 - Navigation bar that highlights the current page based on the URL path
 
-### Active navigation highlight
+### Smooth Navigation
+
+g-sui provides smooth, SPA-like navigation with background loading and a smart loader that only appears if the fetch takes longer than 50ms.
+
+#### Manual Navigation
+
+Use `ctx.Load()` for explicit smooth navigation:
+
+```go
+ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+```
+
+This creates a link that:
+- Fetches the page in the background on click
+- Shows a loader only if the fetch takes longer than 50ms
+- Replaces the page content seamlessly without a full reload
+- Updates the browser history and title
+
+#### Automatic Link Interception
+
+Enable automatic smooth navigation for all internal links:
+
+```go
+app := ui.MakeApp("en")
+app.SmoothNavigation(true) // Enable automatic link interception
+```
+
+When enabled, all regular `<a href="/path">` links automatically use smooth navigation without needing `ctx.Load()`. The interceptor:
+- Only affects internal links (same origin)
+- Skips external links, download links, and links with `target` attributes
+- Respects links that already have custom onclick handlers
+
+#### Active Navigation Highlight
 
 The examples' top navigation highlights the last selected page (the current route) without any extra state. Compare each route path to `ctx.Request.URL.Path` and choose classes accordingly:
 
@@ -132,6 +167,12 @@ ui.Map(routes, func(r *route, _ int) string {
     }
     return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
 })
+```
+
+With `app.SmoothNavigation(true)`, you can omit `ctx.Load()` and regular links will still use smooth navigation:
+
+```go
+return ui.A(cls, ui.Href(r.Path))(r.Title) // Works automatically!
 ```
 
 ## Server actions and partial updates

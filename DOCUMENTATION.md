@@ -11,17 +11,18 @@ This document describes the internal architecture, design patterns, and implemen
 5. [Form System](#form-system)
 6. [Core Components](#core-components)
 7. [Context API Reference](#context-api-reference)
-8. [Request Lifecycle](#request-lifecycle)
-9. [State Management](#state-management)
-10. [Action System](#action-system)
-11. [WebSocket Communication](#websocket-communication)
-12. [Data Collation (TCollate)](#data-collation-tcollate)
-13. [CAPTCHA Components](#captcha-components)
-14. [Security Model](#security-model)
-15. [Extension Points](#extension-points)
-16. [Performance Considerations](#performance-considerations)
-17. [Testing Patterns](#testing-patterns)
-18. [Future Considerations](#future-considerations)
+8. [Smooth Navigation](#smooth-navigation)
+9. [Request Lifecycle](#request-lifecycle)
+10. [State Management](#state-management)
+11. [Action System](#action-system)
+12. [WebSocket Communication](#websocket-communication)
+13. [Data Collation (TCollate)](#data-collation-tcollate)
+14. [CAPTCHA Components](#captcha-components)
+15. [Security Model](#security-model)
+16. [Extension Points](#extension-points)
+17. [Performance Considerations](#performance-considerations)
+18. [Testing Patterns](#testing-patterns)
+19. [Future Considerations](#future-considerations)
 
 ---
 
@@ -544,9 +545,20 @@ type Context struct {
 - `Title(title string)` - Update the page title dynamically
 
 #### Navigation
-- `Load(href string) Attr` - SPA-like navigation (returns Attr for onclick)
+- `Load(href string) Attr` - SPA-like navigation with background loading (returns Attr for onclick)
+  - Fetches page content in the background
+  - Shows loader only if fetch takes longer than 50ms
+  - Replaces page content seamlessly without full reload
+  - Updates browser history and title
 - `Reload() string` - JavaScript to reload page
 - `Redirect(url string) string` - JavaScript to navigate to URL
+
+#### Smooth Navigation Configuration
+- `app.SmoothNavigation(enable bool)` - Enable automatic link interception for smooth navigation
+  - When enabled, all internal `<a href="/path">` links automatically use background loading
+  - Only affects internal links (same origin)
+  - Skips external links, download links, links with `target` attributes, and links with existing onclick handlers
+  - Works with regular links created via `ui.A()` without needing `ctx.Load()`
 
 #### Session Management
 - `Session(db *gorm.DB, name string) *Session` - Get session by name
@@ -567,6 +579,119 @@ type Context struct {
 - `Replace(target Attr, html string)` - Replace target element (outerHTML)
 - `Patch(swap TargetSwap, html string)` - Server-initiated DOM update (full API)
 - `Patch(swap TargetSwap, html string, cleanup func())` - With cleanup callback
+
+---
+
+## Smooth Navigation
+
+g-sui provides seamless, SPA-like navigation with background loading and intelligent loader display.
+
+### Background Loading
+
+When using `ctx.Load()` or enabling `app.SmoothNavigation(true)`, navigation works as follows:
+
+1. **Immediate Fetch**: On link click, the fetch starts immediately in the background
+2. **Delayed Loader**: A loader overlay appears only if the fetch takes longer than 50ms
+3. **Instant Rendering**: If the fetch completes quickly (< 50ms), content renders without showing a loader
+4. **Seamless Replacement**: Page content is replaced without a full page reload
+5. **History Management**: Browser history and page title are updated automatically
+
+### Manual Navigation with `ctx.Load()`
+
+Use `ctx.Load()` to explicitly enable smooth navigation on specific links:
+
+```go
+ui.A("px-2 py-1 rounded", ui.Href("/about"), ctx.Load("/about"))("About")
+```
+
+This creates an `<a>` element with an onclick handler that calls `__load()` for smooth navigation.
+
+### Automatic Link Interception
+
+Enable automatic smooth navigation for all internal links:
+
+```go
+app := ui.MakeApp("en")
+app.SmoothNavigation(true)
+```
+
+When enabled, the framework automatically intercepts clicks on all internal `<a>` links and uses smooth navigation. This works with:
+
+- Regular links: `ui.A("class", ui.Href("/path"))("Link")`
+- Links in navigation menus
+- Dynamically created links (via event delegation)
+
+**What Gets Intercepted:**
+- Internal links (same origin)
+- Relative paths (`/path`, `./path`, `../path`)
+- Absolute paths on the same domain
+
+**What Gets Skipped:**
+- External links (different origin)
+- Links with `target` attribute (e.g., `target="_blank"`)
+- Links with `download` attribute
+- Hash-only links (`#section`)
+- Links with existing onclick handlers (to avoid double-handling)
+- `javascript:`, `mailto:`, `data:` links
+
+### Implementation Details
+
+The smooth navigation system consists of:
+
+1. **`__load(href)` JavaScript Function**: Handles the background fetch and DOM replacement
+   - Starts fetch immediately
+   - Sets a 50ms timer for loader display
+   - Cancels loader if fetch completes quickly
+   - Replaces `document.body.innerHTML` with fetched content
+   - Executes scripts from the new page
+   - Updates browser history
+
+2. **`__smoothnav` JavaScript Module**: Global click interceptor (when enabled)
+   - Attaches event listener on document (capture phase)
+   - Uses `closest('a')` to find link elements
+   - Checks if link should be intercepted
+   - Calls `__load(href)` for smooth navigation
+   - Falls back to normal navigation on error
+
+### Best Practices
+
+1. **Use `ctx.Load()` for explicit control**: When you need fine-grained control over which links use smooth navigation
+2. **Use `app.SmoothNavigation(true)` for automatic behavior**: When you want all internal links to use smooth navigation by default
+3. **Combine with active state highlighting**: Use `ctx.Request.URL.Path` to highlight the current route
+4. **Handle dynamic content**: The interceptor uses event delegation, so dynamically added links work automatically
+
+### Example: Navigation Bar
+
+```go
+func NavBar(ctx *ui.Context) string {
+    routes := []struct{ Path, Title string }{
+        {"/", "Home"},
+        {"/about", "About"},
+        {"/contact", "Contact"},
+    }
+    
+    return ui.Div("flex gap-2")(
+        ui.Map(routes, func(r *struct{ Path, Title string }, _ int) string {
+            isActive := ctx.Request.URL.Path == r.Path
+            cls := "px-3 py-2 rounded"
+            if isActive {
+                cls += " bg-blue-700 text-white"
+            } else {
+                cls += " hover:bg-gray-200"
+            }
+            
+            // With SmoothNavigation enabled, ctx.Load() is optional
+            return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+        }),
+    )
+}
+```
+
+With `app.SmoothNavigation(true)`, you can simplify to:
+
+```go
+return ui.A(cls, ui.Href(r.Path))(r.Title) // Smooth navigation works automatically!
+```
 
 ---
 

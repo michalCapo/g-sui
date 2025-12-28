@@ -873,6 +873,7 @@ type App struct {
 	HTMLBody     func(string) string
 	HTMLHead     []string
 	DebugEnabled bool
+	SmoothNav    bool
 	sessMu       sync.Mutex
 	sessions     map[string]*sessRec
 	wsMu         sync.Mutex
@@ -978,6 +979,12 @@ func (app *App) Page(path string, component ...Callable) **Callable {
 // When enabled, debug logs are printed with the "gsui:" prefix.
 func (app *App) Debug(enable bool) {
 	app.DebugEnabled = enable
+}
+
+// SmoothNavigation enables or disables automatic link interception for smooth navigation.
+// When enabled, all internal links will use background loading with delayed loader instead of full page reloads.
+func (app *App) SmoothNavigation(enable bool) {
+	app.SmoothNav = enable
 }
 
 func (app *App) debugf(format string, args ...any) {
@@ -1661,6 +1668,11 @@ func (app *App) HTML(title string, class string, body ...string) string {
 
 	head = append(head, app.HTMLHead...)
 
+	// Conditionally add smooth navigation script if enabled
+	if app.SmoothNav {
+		head = append(head, Script(__smoothnav))
+	}
+
 	html := app.HTMLBody(class)
 	html = strings.ReplaceAll(html, "__lang__", app.Lanugage)
 	html = strings.ReplaceAll(html, "__head__", strings.Join(head, " "))
@@ -1861,16 +1873,107 @@ var __submit = Trim(`
     }
 `)
 
+// __smoothnav: automatically intercepts clicks on internal links for smooth navigation
+var __smoothnav = Trim(`
+    (function(){
+        try {
+            if (window.__gsuiSmoothNavInit) { return; }
+            window.__gsuiSmoothNavInit = true;
+            
+            function isInternalLink(href) {
+                if (!href) return false;
+                // Skip hash-only links
+                if (href.startsWith('#')) return false;
+                // Skip javascript: links
+                if (href.startsWith('javascript:')) return false;
+                // Skip data: and mailto: links
+                if (href.startsWith('data:') || href.startsWith('mailto:')) return false;
+                // Check if external (starts with http/https but not same origin)
+                if (href.startsWith('http://') || href.startsWith('https://')) {
+                    try {
+                        var linkUrl = new URL(href, window.location.href);
+                        return linkUrl.origin === window.location.origin;
+                    } catch(_) {
+                        return false;
+                    }
+                }
+                // Relative paths are internal
+                return true;
+            }
+            
+            document.addEventListener('click', function(e) {
+                var link = e.target.closest('a');
+                if (!link) return;
+                
+                var href = link.getAttribute('href');
+                if (!href) return;
+                
+                // Skip links with target attribute (e.g., _blank)
+                if (link.target && link.target !== '_self') return;
+                
+                // Skip links with download attribute
+                if (link.download) return;
+                
+                // Skip if link already has onclick handler (avoid double-handling with ctx.Load())
+                var onclickAttr = link.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.trim().length > 0) return;
+                
+                // Only intercept internal links
+                if (!isInternalLink(href)) return;
+                
+                // Prevent default navigation
+                e.preventDefault();
+                
+                // Use __load for smooth navigation
+                try {
+                    __load(href);
+                } catch(_) {
+                    // Fallback to normal navigation if __load fails
+                    window.location.href = href;
+                }
+            }, true); // Use capture phase to catch before other handlers
+        } catch(_) {}
+    })();
+`)
+
 var __load = Trim(`
     function __load(href) {
-		event.preventDefault(); 
+		// Prevent default navigation if event is available
+		try {
+			if (typeof event !== 'undefined' && event && event.preventDefault) {
+				event.preventDefault();
+			}
+		} catch(_) {}
 
-
-		var L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
+		// Start fetch immediately in background
+		var loaderTimer = null;
+		var loaderStarted = false;
+		var L = null;
+		
+		// Set timer to show loader after 50ms if fetch is still pending
+		loaderTimer = setTimeout(function() {
+			if (!loaderStarted) {
+				loaderStarted = true;
+				try {
+					L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
+				} catch(_) {}
+			}
+		}, 50);
 
 		fetch(href, {method: "GET"})
 			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
 			.then(function (html) {
+				// Cancel loader timer if fetch completed quickly (< 50ms)
+				if (loaderTimer) {
+					clearTimeout(loaderTimer);
+					loaderTimer = null;
+				}
+				
+				// Only stop loader if it was actually started
+				if (loaderStarted && L) {
+					try { L.stop(); } catch(_) {}
+				}
+
 				const parser = new DOMParser();
 				const doc = parser.parseFromString(html, 'text/html');
 
@@ -1886,8 +1989,17 @@ var __load = Trim(`
 
 				window.history.pushState({}, doc.title, href);
 			})
-			.catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
-			.finally(function(){ try { L.stop(); } catch(_){} });
+			.catch(function(_){ 
+				// Cancel loader timer on error
+				if (loaderTimer) {
+					clearTimeout(loaderTimer);
+					loaderTimer = null;
+				}
+				if (loaderStarted && L) {
+					try { L.stop(); } catch(_) {}
+				}
+				try { __error('Something went wrong ...'); } catch(__){} 
+			});
     }
 `)
 
