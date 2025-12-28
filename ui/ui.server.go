@@ -1131,7 +1131,7 @@ func (app *App) Assets(assets embed.FS, path string, maxAge time.Duration) {
 // The path parameter should be the path to the favicon file in the embed.FS
 // (e.g., "assets/favicon.ico", "assets/favicon.svg").
 // Defaults to "favicon.ico" if not provided.
-func (app *App) Favicon(assets embed.FS, maxAge time.Duration, path string) {
+func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
 	if path == "" {
 		path = "favicon.ico"
 	}
