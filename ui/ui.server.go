@@ -2021,7 +2021,7 @@ var __smoothnav = Trim(`
                     // Fallback to normal navigation if __load fails
                     window.location.href = href;
                 }
-            }, true); // Use capture phase to catch before other handlers
+            }, true);
         } catch(_) {}
     })();
 `)
