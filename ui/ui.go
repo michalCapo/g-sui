@@ -513,6 +513,47 @@ func SkeletonComponentBlock() string { return Attr{}.SkeletonComponent() }
 func SkeletonPageBlock() string      { return Attr{}.SkeletonPage() }
 func SkeletonFormBlock() string      { return Attr{}.SkeletonForm() }
 
+// Icon functions for creating icon elements and layouts
+func Icon(css string, attr ...Attr) string {
+	return Div(css, attr...)()
+}
+
+func IconStart(css string, text string) string {
+	return Div("flex-1 flex items-center gap-2")(
+		Icon(css),
+		Flex1,
+		Div("text-center")(text),
+		Flex1,
+	)
+}
+
+func IconLeft(css string, text string) string {
+	return Div("flex-1 flex items-center gap-2")(
+		Flex1,
+		Icon(css),
+		Div("text-center")(text),
+		Flex1,
+	)
+}
+
+func IconRight(css string, text string) string {
+	return Div("flex-1 flex items-center gap-2")(
+		Flex1,
+		Div("text-center")(text),
+		Icon(css),
+		Flex1,
+	)
+}
+
+func IconEnd(css string, text string) string {
+	return Div("flex-1 flex items-center gap-2")(
+		Flex1,
+		Div("text-center")(text),
+		Flex1,
+		Icon(css),
+	)
+}
+
 func Variable[T any](getter func(*T) string) func(item *T) Attr {
 	temp := Target()
 

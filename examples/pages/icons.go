@@ -8,9 +8,6 @@ func Icons() string {
 	return ui.Div("")(
 		ui.Div("flex flex-col gap-3")(
 			icon(
-				ui.IconBasic("w-6 h-6 bg-gray-400 rounded", "Basic icon"),
-			),
-			icon(
 				ui.IconStart("w-6 h-6 bg-gray-400 rounded", "Start aligned icon"),
 			),
 			icon(
