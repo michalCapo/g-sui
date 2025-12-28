@@ -1129,7 +1129,8 @@ func (app *App) Assets(assets embed.FS, path string, maxAge time.Duration) {
 
 func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
 	path = strings.TrimPrefix(path, "/")
-	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+
+	faviconHandler := func(w http.ResponseWriter, r *http.Request) {
 		file, err := assets.ReadFile(path)
 		if err != nil {
 			http.Error(w, "File not found", http.StatusNotFound)
@@ -1157,7 +1158,12 @@ func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
 
 		w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(int(maxAge.Seconds())))
 		w.Write(file)
-	})
+	}
+
+	// Register both /favicon.ico and /favicon.svg routes
+	// Browsers request /favicon.ico by default, but modern browsers also support /favicon.svg
+	http.HandleFunc("/favicon.ico", faviconHandler)
+	http.HandleFunc("/favicon.svg", faviconHandler)
 }
 
 func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {
