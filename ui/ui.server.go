@@ -1281,6 +1281,48 @@ func (app *App) Listen(port string) {
 	}
 }
 
+// TestHandler returns an http.Handler that uses g-sui's routing logic.
+// This is intended for testing purposes to allow test servers to
+// use the same routing as production without starting a real HTTP server.
+func (app *App) TestHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains("GET POST", r.Method) {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		if strings.Contains(strings.Join(r.Header["Upgrade"], " "), "websocket") {
+			http.NotFound(w, r)
+			return
+		}
+
+		for found, routePath := range stored {
+			if routePath == r.URL.Path {
+				ctx := makeContext(app, r, w)
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+				defer func() {
+					if rec := recover(); rec != nil {
+						log.Println("handler panic recovered:", rec)
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte(devErrorPage()))
+					}
+				}()
+
+				app.debugf("route %s -> %s", r.Method, routePath)
+				w.Write([]byte((*found)(ctx)))
+				if len(ctx.append) > 0 {
+					w.Write([]byte(strings.Join(ctx.append, "")))
+				}
+
+				return
+			}
+		}
+
+		http.Error(w, "Not found", http.StatusNotFound)
+	})
+}
+
 // initWS registers the WebSocket endpoint for server-initiated patches.
 func (app *App) initWS() {
 	app.wsMu.Lock()
