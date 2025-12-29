@@ -46,6 +46,10 @@ func (f *FormInstance) RadioButtons(name string, data ...any) *ARadio {
 	return IRadioButtons(name, data...).Form(f.FormId)
 }
 
+func (f *FormInstance) RadioDiv(name string, data ...any) *ARadio {
+	return IRadioDiv(name, data...).Form(f.FormId)
+}
+
 func (f *FormInstance) Date(name string, data ...any) *TInput {
 	return IDate(name, data...).Form(f.FormId)
 }
