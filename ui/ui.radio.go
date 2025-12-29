@@ -364,9 +364,9 @@ func IRadioDiv(name string, data ...any) *ARadio {
 		visible:        true,
 		data:           temp,
 		classLabel:     "text-sm text-xs mt-3 font-bold relative",
-		button:         "cursor-pointer flex items-center justify-center text-center rounded-xl",
-		buttonActive:   "border border-blue-400 rounded-xl",
+		button:         "cursor-pointer grid rounded-xl",
+		buttonActive:   "border border-blue-400",
 		buttonInactive: "",
-		radioPosition:  "absolute bottom-2 right-2",
+		radioPosition:  "absolute bottom-4 right-4",
 	}
 }

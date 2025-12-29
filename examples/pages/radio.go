@@ -15,7 +15,7 @@ func Radio(_ *ui.Context) string {
 	customs := []ui.AOption{
 		{
 			ID: "car1",
-			Value: ui.Div("w-full h-48 rounded-lg border border-gray-300 relative overflow-hidden")(
+			Value: ui.Div("w-full h-48 rounded-xl border border-gray-300 relative overflow-hidden")(
 				ui.Div("absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200 opacity-60")(""),
 				ui.Div("absolute top-4 left-4 z-10")(
 					ui.Div("text-2xl font-bold text-gray-800")("11-AA"),
@@ -25,7 +25,7 @@ func Radio(_ *ui.Context) string {
 		},
 		{
 			ID: "car2",
-			Value: ui.Div("w-full h-48 rounded-lg border border-gray-300 relative bg-white")(
+			Value: ui.Div("w-full h-48 rounded-xl border border-gray-300 relative bg-white")(
 				ui.Div("absolute top-4 left-4 z-10")(
 					ui.Div("text-2xl font-bold text-gray-800")("22aa"),
 				),
@@ -33,7 +33,7 @@ func Radio(_ *ui.Context) string {
 		},
 		{
 			ID: "car3",
-			Value: ui.Div("w-full h-48 rounded-lg border border-gray-300 relative overflow-hidden")(
+			Value: ui.Div("w-full h-48 rounded-xl border border-gray-300 relative overflow-hidden")(
 				ui.Div("absolute inset-0 bg-gradient-to-br from-amber-100 to-amber-200 opacity-60")(""),
 				ui.Div("absolute top-4 left-4 z-10")(
 					ui.Div("text-2xl font-bold text-gray-800")("ABC-123"),
