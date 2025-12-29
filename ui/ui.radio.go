@@ -228,6 +228,7 @@ func (c *ARadio) Render(text string) string {
 		Hidden(c.name, "radio", value, Attr{
 			ID:       c.target.ID,
 			OnChange: c.onchange,
+			Form:     c.target.Form,
 		}),
 
 		Div(Classes("w-full grid grid-flow-col justify-stretch gap-px", If(c.error != nil, func() string { return "border-l-8 border-red-600" })))(

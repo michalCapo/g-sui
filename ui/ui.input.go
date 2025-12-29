@@ -348,6 +348,7 @@ func IArea(name string, data ...any) *TInput {
 					Disabled:    c.disabled,
 					Readonly:    c.readonly,
 					Placeholder: c.placeholder,
+					Form:        c.form,
 				},
 			)(value),
 		)
@@ -413,6 +414,7 @@ func IPassword(name string, data ...any) *TInput {
 					Required:    c.required,
 					Disabled:    c.disabled,
 					Placeholder: c.placeholder,
+					Form:        c.form,
 				},
 			),
 		)
@@ -527,6 +529,7 @@ func IDate(name string, data ...any) *TInput {
 					Required:    c.required,
 					Disabled:    c.disabled,
 					Placeholder: c.placeholder,
+					Form:        c.form,
 				},
 			),
 		)
@@ -608,6 +611,7 @@ func ITime(name string, data ...any) *TInput {
 					Required:    c.required,
 					Disabled:    c.disabled,
 					Placeholder: c.placeholder,
+					Form:        c.form,
 				},
 			),
 		)
@@ -686,6 +690,7 @@ func IDateTime(name string, data ...any) *TInput {
 					Required:    c.required,
 					Disabled:    c.disabled,
 					Placeholder: c.placeholder,
+					Form:        c.form,
 				},
 			),
 		)
@@ -769,6 +774,7 @@ func INumber(name string, data ...any) *TInput {
 					Required:    c.required,
 					Disabled:    c.disabled,
 					Placeholder: c.placeholder,
+					Form:        c.form,
 				},
 			),
 
