@@ -53,7 +53,7 @@ Instead of using Go's `html/template` or third-party templating languages, g-sui
 
 ```go
 // Traditional template approach
-tmpl.Execute(&buf, map[string]interface{}{
+tmpl.Execute(&buf, map[string]any{
     "class": "p-4 bg-white",
     "content": "Hello",
 })
@@ -533,7 +533,7 @@ type Context struct {
 - `Request *http.Request` - HTTP request
 - `Response http.ResponseWriter` - HTTP response writer
 - `IP() string` - Client IP address
-- `Body(data interface{}) error` - Parse form/JSON into struct
+- `Body(data any) error` - Parse form/JSON into struct
 
 #### User Feedback (Toasts)
 - `Success(msg string)` - Green toast notification
@@ -562,8 +562,8 @@ type Context struct {
 
 #### Session Management
 - `Session(db *gorm.DB, name string) *Session` - Get session by name
-- `Session.Load(data interface{})` - Load session data into struct
-- `Session.Save(data interface{})` - Save struct to session
+- `Session.Load(data any)` - Load session data into struct
+- `Session.Save(data any)` - Save struct to session
 
 #### File Downloads
 - `DownloadAs(reader io.Reader, contentType, filename string)` - Send file as download
