@@ -331,7 +331,6 @@ var Target = func() Attr {
 	return Attr{ID: "i" + RandomString(15)}
 }
 
-// Convenience helpers on targets to produce swap descriptors compatible with ctx.PatchTo.
 func (a Attr) Replace() TargetSwap { return TargetSwap{ID: a.ID, Swap: OUTLINE} }
 func (a Attr) Render() TargetSwap  { return TargetSwap{ID: a.ID, Swap: INLINE} }
 func (a Attr) Append() TargetSwap  { return TargetSwap{ID: a.ID, Swap: APPEND} }
@@ -506,7 +505,6 @@ func (a Attr) SkeletonForm() string {
 	)
 }
 
-// Convenience globals (without binding to a specific target id)
 func SkeletonDefault() string        { return Attr{}.SkeletonDefault() }
 func SkeletonListN(count int) string { return Attr{}.SkeletonList(count) }
 func SkeletonComponentBlock() string { return Attr{}.SkeletonComponent() }
@@ -807,8 +805,8 @@ func validateFieldAccess(path string) error {
 	}
 
 	// Validate each part of the path
-	parts := strings.Split(path, ".")
-	for _, part := range parts {
+	parts := strings.SplitSeq(path, ".")
+	for part := range parts {
 		if strings.Contains(part, "[") && strings.Contains(part, "]") {
 			// Extract field name from slice notation
 			fieldName := part[:strings.Index(part, "[")]
@@ -830,14 +828,14 @@ func isValidFieldName(name string) bool {
 	}
 
 	// Must start with letter or underscore
-	if !((name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= 'a' && name[0] <= 'z') || name[0] == '_') {
+	if (name[0] < 'A' || name[0] > 'Z') && (name[0] < 'a' || name[0] > 'z') && name[0] != '_' {
 		return false
 	}
 
 	// Rest can be letters, numbers, or underscores
 	for i := 1; i < len(name); i++ {
 		c := name[i]
-		if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+		if (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' {
 			return false
 		}
 	}

@@ -1,3 +1,6 @@
+// Package pages provides example pages demonstrating form usage with FormInstance.
+// This file demonstrates creating forms where input fields and submit buttons
+// are defined outside the HTML form element for better reusability.
 package pages
 
 import (

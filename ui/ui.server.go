@@ -167,7 +167,7 @@ func validateInputSafety(data []BodyItem) error {
 
 		// Validate field name contains only safe characters
 		for _, r := range item.Name {
-			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '[' || r == ']' || r == '_') {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '.' && r != '[' && r != ']' && r != '_' {
 				return fmt.Errorf("unsafe character in field name at index %d: '%c'", i, r)
 			}
 		}
@@ -247,6 +247,7 @@ func validateNumericInput(value string, inputType string) (any, error) {
 
 	return nil, nil
 }
+
 func (ctx *Context) Body(output any) error {
 	body, err := io.ReadAll(io.LimitReader(ctx.Request.Body, MaxBodySize))
 	if err != nil {
@@ -300,7 +301,7 @@ func (ctx *Context) Body(output any) error {
 					fmt.Printf("Warning: Error parsing date at index %d: %v\n", i, err)
 					continue
 				}
-				if structFieldValue.Type() == reflect.TypeOf(gorm.DeletedAt{}) {
+				if structFieldValue.Type() == reflect.TypeFor[gorm.DeletedAt]() {
 					val = reflect.ValueOf(gorm.DeletedAt{Time: t, Valid: true})
 				} else {
 					val = reflect.ValueOf(t)
@@ -1347,9 +1348,10 @@ func (app *App) initWS() {
 			var obj map[string]any
 			if err := json.Unmarshal([]byte(s), &obj); err == nil {
 				if t, _ := obj["type"].(string); t != "" {
-					if t == "ping" {
+					switch t {
+					case "ping":
 						_ = websocket.Message.Send(ws, `{"type":"pong"}`)
-					} else if t == "pong" {
+					case "pong":
 						app.wsMu.Lock()
 						st.lastPong = time.Now()
 						app.wsMu.Unlock()
@@ -1360,7 +1362,7 @@ func (app *App) initWS() {
 							}
 							app.sessMu.Unlock()
 						}
-					} else if t == "invalid" {
+					case "invalid":
 						id, _ := obj["id"].(string)
 						if id != "" && st.sid != "" {
 							app.sessMu.Lock()
