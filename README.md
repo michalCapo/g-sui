@@ -8,7 +8,7 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 
 ---
 
-Need the quick project map for tools or onboarding? Check out [`ai.md`](ai.md) for an LLM-friendly overview.
+See documentation at [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) for a comprehensive reference guide and architecture documentation. See [`examples/`](examples/) for working examples.
 
 ## Highlights
 
@@ -42,8 +42,6 @@ Go 1.21+ recommended (module currently targets Go 1.23 toolchain).
 
 ## Quick start
 
-Create a minimal app with a single page and a server action.
-
 ```go
 package main
 
@@ -53,36 +51,20 @@ import (
 
 func main() {
     app := ui.MakeApp("en")
-    app.AutoRestart(true) // optional during development (rebuild + restart on file changes)
-    app.SmoothNavigation(true) // optional: enable automatic smooth navigation for all internal links
-
-    hello := func(ctx *ui.Context) string { ctx.Success("Hello from g-sui!"); return "" }
-
-    layout := func(title string, body func(*ui.Context) string) ui.Callable {
-        return func(ctx *ui.Context) string {
-            nav := ui.Div("bg-white shadow mb-6")(
-                ui.Div("max-w-5xl mx-auto px-4 py-2 flex items-center")(
-                    ui.A("px-2 py-1 rounded text-sm whitespace-nowrap bg-blue-700 text-white hover:bg-blue-600",
-                        ui.Href("/"), ctx.Load("/"),
-                    )("Home"),
-                ),
-            )
-            content := body(ctx)
-            return app.HTML(title, "bg-gray-100 min-h-screen", nav+ui.Div("max-w-5xl mx-auto px-2")(content))
-        }
-    }
-
-    app.Page("/", layout("Home", func(ctx *ui.Context) string {
-        return ui.Div("p-4")(
-            ui.Button().Color(ui.Blue).Class("rounded").Click(ctx.Call(hello).None()).Render("Say hello"),
+    
+    app.Page("/", func(ctx *ui.Context) string {
+        return app.HTML("Hello World", "bg-gray-100", 
+            ui.Div("p-8")(
+                ui.Div("text-2xl font-bold")("Hello World"),
+            ),
         )
-    }))
-
-    app.Listen(":1422")
+    })
+    
+    app.Listen(":8080")
 }
 ```
 
-Run and open http://localhost:1422
+Run and open http://localhost:8080
 
 ### Favicon (optional)
 
