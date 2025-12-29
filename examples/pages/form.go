@@ -40,7 +40,7 @@ func render(ctx *ui.Context, data *formData, err *error) string {
 	}
 
 	return ui.Div("max-w-5xl mx-auto flex flex-col gap-4", target)(
-		ui.Div("text-2xl font-bold")("Form missmatch"),
+		ui.Div("text-2xl font-bold")("Form association"),
 		ui.Div("text-gray-600")("Form input fields and submit button is defined outside html form element. This is useful when you want to reuse the form in multiple places."),
 
 		ui.Div("border rounded-lg p-4 bg-white dark:bg-gray-900 shadow-lg border rounded-lg flex flex-col gap-4")(

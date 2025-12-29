@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"reflect"
 	"strconv"
 	"strings"
@@ -57,7 +58,6 @@ func NormalizeForSearch(search string) string {
 // This function should be called after establishing the database connection
 func RegisterSQLiteNormalize(db *gorm.DB) error {
 	if normalizeRegistered {
-		fmt.Println("DEBUG: normalize function already registered")
 		return nil
 	}
 
@@ -72,7 +72,11 @@ func RegisterSQLiteNormalize(db *gorm.DB) error {
 	if err != nil {
 		return fmt.Errorf("failed to get connection: %v", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Printf("Error closing database connection: %v", err)
+		}
+	}()
 
 	// Register the custom normalize function
 	err = conn.Raw(func(driverConn any) error {
@@ -82,15 +86,15 @@ func RegisterSQLiteNormalize(db *gorm.DB) error {
 		}
 
 		// Register the normalize function
-		fmt.Println("DEBUG: Registering normalize function on connection")
+
 		return sqliteConn.RegisterFunc("normalize", NormalizeForSearch, true)
 	})
 
 	if err == nil {
 		normalizeRegistered = true
-		fmt.Println("DEBUG: Successfully registered normalize function")
+
 	} else {
-		fmt.Printf("DEBUG: Failed to register normalize function: %v\n", err)
+		log.Printf("Failed to register normalize function: %v", err)
 	}
 
 	return err
@@ -187,7 +191,7 @@ func (collate *collate[T]) onXLS(ctx *Context) string {
 	query := makeQuery(collate.Init)
 	err := ctx.Body(query)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error: %v", err)
 	}
 
 	query.Limit = 1000000
@@ -201,12 +205,16 @@ func (collate *collate[T]) onXLS(ctx *Context) string {
 
 		filename, reader, err = collate.OnExcel(&result.Data)
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("Error: %v", err)
 			return "Error generating Excel file"
 		}
 	} else {
 		f := excelize.NewFile()
-		defer f.Close()
+		defer func() {
+			if err := f.Close(); err != nil {
+				log.Printf("Error closing Excel file: %v", err)
+			}
+		}()
 
 		for i, header := range collate.ExcelFields {
 			if header.Text == "" {
@@ -219,7 +227,7 @@ func (collate *collate[T]) onXLS(ctx *Context) string {
 
 		styleDate, err := f.NewStyle(&excelize.Style{NumFmt: 14})
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("Error: %v", err)
 		}
 
 		// Write data rows
@@ -270,7 +278,7 @@ func (collate *collate[T]) onResize(ctx *Context) string {
 
 	err := ctx.Body(query)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error: %v", err)
 	}
 
 	query.Limit *= 2
@@ -284,7 +292,7 @@ func (collate *collate[T]) onSort(ctx *Context) string {
 	body := &TQuery{}
 	err := ctx.Body(body)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error: %v", err)
 	}
 
 	query.Order = body.Order
@@ -297,7 +305,7 @@ func (collate *collate[T]) onSearch(ctx *Context) string {
 
 	err := ctx.Body(query)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error: %v", err)
 	}
 
 	return collate.ui(ctx, query)
@@ -425,7 +433,7 @@ func (c *collate[T]) Load(query *TQuery) *TCollateResult[T] {
 		normalizedSearch := NormalizeForSearch(query.Search)
 
 		var searchConditions []string
-		var searchArgs []interface{}
+		var searchArgs []any
 
 		for _, field := range c.SearchFields {
 			if field.DB == "" {

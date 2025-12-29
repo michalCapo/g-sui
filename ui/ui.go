@@ -111,7 +111,10 @@ func escapeAttr(s string) string {
 
 // escapeJS escapes JavaScript string literals to prevent XSS attacks
 func escapeJS(s string) string {
-	b, _ := json.Marshal(s)
+	b, err := json.Marshal(s)
+	if err != nil {
+		return s
+	}
 	if len(b) >= 2 && b[0] == '"' && b[len(b)-1] == '"' {
 		return string(b[1 : len(b)-1])
 	}

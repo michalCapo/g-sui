@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"crypto/rand"
 	"embed"
 	"encoding/base64"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -113,7 +113,7 @@ func (session *TSession) Load(data any) {
 func (session *TSession) Save(output any) {
 	data, err := json.Marshal(output)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error: %v", err)
 		return
 	}
 
@@ -123,7 +123,10 @@ func (session *TSession) Save(output any) {
 		Data:      data,
 	}
 
-	session.DB.Where("session_id = ? and name = ?", session.SessionID, session.Name).Save(temp)
+	err = session.DB.Where("session_id = ? and name = ?", session.SessionID, session.Name).Save(temp).Error
+	if err != nil {
+		log.Printf("Error: %v", err)
+	}
 }
 
 func (ctx *Context) IP() string {
@@ -183,51 +186,66 @@ func validateInputSafety(data []BodyItem) error {
 	return nil
 }
 
-// validateNumericInput validates numeric input with bounds checking
-func validateNumericInput(value string, inputType string) error {
+// validateNumericInput validates numeric input with bounds checking and returns parsed value
+func validateNumericInput(value string, inputType string) (any, error) {
 	switch inputType {
 	case "int":
 		cleanedValue := strings.ReplaceAll(value, "_", "")
 		if len(cleanedValue) > 20 { // Prevent overflow attacks
-			return fmt.Errorf("integer value too long: %d characters", len(cleanedValue))
+			return nil, fmt.Errorf("integer value too long: %d characters", len(cleanedValue))
 		}
-		_, err := strconv.ParseInt(cleanedValue, 10, 64)
-		return err
+		n, err := strconv.ParseInt(cleanedValue, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return int(n), nil
 
 	case "int64":
 		cleanedValue := strings.ReplaceAll(value, "_", "")
 		if len(cleanedValue) > 20 {
-			return fmt.Errorf("int64 value too long: %d characters", len(cleanedValue))
+			return nil, fmt.Errorf("int64 value too long: %d characters", len(cleanedValue))
 		}
-		_, err := strconv.ParseInt(cleanedValue, 10, 64)
-		return err
+		n, err := strconv.ParseInt(cleanedValue, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return n, nil
 
 	case "uint":
 		cleanedValue := strings.ReplaceAll(value, "_", "")
 		if len(cleanedValue) > 20 {
-			return fmt.Errorf("uint value too long: %d characters", len(cleanedValue))
+			return nil, fmt.Errorf("uint value too long: %d characters", len(cleanedValue))
 		}
-		_, err := strconv.ParseUint(cleanedValue, 10, 64)
-		return err
+		n, err := strconv.ParseUint(cleanedValue, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return uint(n), nil
 
 	case "number":
 		cleanedValue := strings.ReplaceAll(value, "_", "")
 		if len(cleanedValue) > 20 {
-			return fmt.Errorf("number value too long: %d characters", len(cleanedValue))
+			return nil, fmt.Errorf("number value too long: %d characters", len(cleanedValue))
 		}
-		_, err := strconv.Atoi(cleanedValue)
-		return err
+		n, err := strconv.Atoi(cleanedValue)
+		if err != nil {
+			return nil, err
+		}
+		return n, nil
 
 	case "decimal", "float64":
 		cleanedValue := strings.ReplaceAll(value, "_", "")
 		if len(cleanedValue) > 50 { // Allow longer decimals but still bounded
-			return fmt.Errorf("decimal value too long: %d characters", len(cleanedValue))
+			return nil, fmt.Errorf("decimal value too long: %d characters", len(cleanedValue))
 		}
-		_, err := strconv.ParseFloat(cleanedValue, 64)
-		return err
+		f, err := strconv.ParseFloat(cleanedValue, 64)
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
 	}
 
-	return nil
+	return nil, nil
 }
 func (ctx *Context) Body(output any) error {
 	body, err := io.ReadAll(io.LimitReader(ctx.Request.Body, MaxBodySize))
@@ -323,34 +341,13 @@ func (ctx *Context) Body(output any) error {
 				val = reflect.ValueOf(t)
 
 			case "uint", "int", "int64", "number", "decimal", "float64":
-				// Validate numeric input with bounds checking
-				if err := validateNumericInput(item.Value, item.Type); err != nil {
+				// Validate numeric input with bounds checking and get parsed value
+				parsedVal, err := validateNumericInput(item.Value, item.Type)
+				if err != nil {
 					fmt.Printf("Warning: Invalid numeric value at index %d: %v\n", i, err)
 					continue
 				}
-
-				switch item.Type {
-				case "uint":
-					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-					n, _ := strconv.ParseUint(cleanedValue, 10, 64) // Already validated above
-					val = reflect.ValueOf(uint(n))
-				case "int":
-					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-					n, _ := strconv.ParseInt(cleanedValue, 10, 64)
-					val = reflect.ValueOf(int(n))
-				case "int64":
-					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-					n, _ := strconv.ParseInt(cleanedValue, 10, 64)
-					val = reflect.ValueOf(int64(n))
-				case "number":
-					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-					n, _ := strconv.Atoi(cleanedValue)
-					val = reflect.ValueOf(n)
-				case "decimal", "float64":
-					cleanedValue := strings.ReplaceAll(item.Value, "_", "")
-					f, _ := strconv.ParseFloat(cleanedValue, 64)
-					val = reflect.ValueOf(f)
-				}
+				val = reflect.ValueOf(parsedVal)
 
 			case "datetime-local":
 				if len(item.Value) > 16 { // Basic length check for datetime-local format
@@ -798,7 +795,7 @@ func RandomString(n ...int) string {
 	if err != nil {
 		// Fallback to timestamp-based generation if crypto/rand fails
 		// This is not ideal but ensures the function doesn't panic
-		fmt.Printf("Warning: crypto/rand failed (%v), falling back to time-based generation\n", err)
+		log.Printf("Warning: crypto/rand failed (%v), falling back to time-based generation\n", err)
 		return fmt.Sprintf("fallback_%d_%d", time.Now().UnixNano(), length)
 	}
 
@@ -1393,12 +1390,18 @@ func (app *App) sendPatch(id string, swap Swap, html string) {
 		"swap": string(swap),
 		"html": Trim(html),
 	}
-	data, _ := json.Marshal(msg)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("Error: %v", err)
+		return
+	}
 	app.wsMu.RLock()
 	for ws := range app.wsClients {
 		go func(c *websocket.Conn) {
 			defer func() { recover() }()
-			_ = websocket.Message.Send(c, string(data))
+			if err := websocket.Message.Send(c, string(data)); err != nil {
+				log.Printf("Warning: Failed to send patch to client: %v", err)
+			}
 		}(ws)
 	}
 	app.wsMu.RUnlock()
@@ -1478,7 +1481,11 @@ func watchAndRestart(root string) {
 		log.Println("[autorestart] watcher error:", err)
 		return
 	}
-	defer watcher.Close()
+	defer func() {
+		if err := watcher.Close(); err != nil {
+			log.Printf("[autorestart] watcher close error: %v", err)
+		}
+	}()
 
 	// Add directories recursively
 	addDirs := func() error {
@@ -1559,7 +1566,7 @@ func watchAndRestart(root string) {
 					// Add new directory and its children
 					_ = filepath.WalkDir(ev.Name, func(p string, d os.DirEntry, err error) error {
 						if err != nil {
-							return nil
+							return err
 						}
 						if d.IsDir() {
 							resolvedPath := p
@@ -1572,7 +1579,9 @@ func watchAndRestart(root string) {
 							if shouldSkipDir(d.Name()) {
 								return filepath.SkipDir
 							}
-							_ = watcher.Add(p)
+							if err := watcher.Add(p); err != nil {
+								log.Printf("[autorestart] failed to watch directory %s: %v", p, err)
+							}
 						}
 						return nil
 					})
@@ -1720,13 +1729,17 @@ func rebuildAndExec(root string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		_ = os.RemoveAll(tmpDir)
+		if rmErr := os.RemoveAll(tmpDir); rmErr != nil {
+			log.Printf("Warning: Failed to cleanup tmp dir %s: %v", tmpDir, rmErr)
+		}
 		return err
 	}
 
 	absTmp, err := filepath.Abs(tmp)
 	if err != nil {
-		_ = os.RemoveAll(tmpDir)
+		if rmErr := os.RemoveAll(tmpDir); rmErr != nil {
+			log.Printf("Warning: Failed to cleanup tmp dir %s: %v", tmpDir, rmErr)
+		}
 		return err
 	}
 
@@ -1741,7 +1754,9 @@ func rebuildAndExec(root string) error {
 		c.Stderr = os.Stderr
 		c.Stdin = os.Stdin
 		if err := c.Start(); err != nil {
-			_ = os.RemoveAll(tmpDir)
+			if rmErr := os.RemoveAll(tmpDir); rmErr != nil {
+				log.Printf("Warning: Failed to cleanup tmp dir %s: %v", tmpDir, rmErr)
+			}
 			return err
 		}
 		// Exit current process to let the new one take over
