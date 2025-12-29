@@ -419,9 +419,9 @@ func TestPathValue_SafeFieldAccess(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		obj     interface{}
+		obj     any
 		path    string
-		wantVal interface{}
+		wantVal any
 		wantErr bool
 	}{
 		{"simple field", user, "Name", "John Doe", false},
@@ -456,9 +456,9 @@ func TestPathValue_SliceAccess(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		obj     interface{}
+		obj     any
 		path    string
-		wantVal interface{}
+		wantVal any
 		wantErr bool
 	}{
 		{"first item", user, "Posts[0].Title", "Post 1", false},
@@ -488,7 +488,7 @@ func TestPathValue_ErrorHandling(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		obj     interface{}
+		obj     any
 		path    string
 		wantErr bool
 	}{
@@ -522,7 +522,7 @@ func TestPathValue_NilPointerHandling(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		obj     interface{}
+		obj     any
 		path    string
 		wantErr bool
 	}{
@@ -549,7 +549,7 @@ func TestPathValue_DynamicSliceExpansion(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		obj      interface{}
+		obj      any
 		path     string
 		wantType reflect.Kind
 		wantErr  bool
