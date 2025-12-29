@@ -249,6 +249,45 @@ func validateNumericInput(value string, inputType string) (any, error) {
 }
 
 func (ctx *Context) Body(output any) error {
+	contentType := ctx.Request.Header.Get("Content-Type")
+
+	// Handle multipart/form-data (file uploads)
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		if err := ctx.Request.ParseMultipartForm(MaxBodySize); err != nil {
+			return fmt.Errorf("failed to parse multipart form: %w", err)
+		}
+
+		// Process form values (non-file fields)
+		for name, values := range ctx.Request.MultipartForm.Value {
+			if len(values) == 0 {
+				continue
+			}
+			value := values[0]
+
+			structFieldValue, err := PathValue(output, name)
+			if err != nil {
+				fmt.Printf("Warning: Error getting field %s: %v\n", name, err)
+				continue
+			}
+
+			if !structFieldValue.CanSet() {
+				fmt.Printf("Warning: Cannot set field %s\n", name)
+				continue
+			}
+
+			// Try to set the value based on the field type
+			if err := setFieldValue(structFieldValue, value, ""); err != nil {
+				fmt.Printf("Warning: Error setting field %s: %v\n", name, err)
+			}
+		}
+
+		// Note: File fields are NOT processed here - they must be accessed via ctx.Request.FormFile()
+		// This is intentional as file handling requires special treatment in the handler
+
+		return nil
+	}
+
+	// Handle JSON (original behavior)
 	body, err := io.ReadAll(io.LimitReader(ctx.Request.Body, MaxBodySize))
 	if err != nil {
 		return fmt.Errorf("failed to read request body: %w", err)
@@ -284,102 +323,116 @@ func (ctx *Context) Body(output any) error {
 			continue
 		}
 
-		val := reflect.ValueOf(item.Value)
+		if err := setFieldValue(structFieldValue, item.Value, item.Type); err != nil {
+			fmt.Printf("Warning: Error setting field %s at index %d: %v\n", item.Name, i, err)
+		}
+	}
 
-		if structFieldValue.Type() != val.Type() {
-			switch item.Type {
-			case "Skeleton":
-				val = reflect.ValueOf(Skeleton(item.Value))
+	return nil
+}
 
-			case "date":
-				if len(item.Value) > 10 { // Basic length check for date format
-					fmt.Printf("Warning: Date value too long at index %d\n", i)
-					continue
-				}
-				t, err := time.Parse("2006-01-02", item.Value)
-				if err != nil {
-					fmt.Printf("Warning: Error parsing date at index %d: %v\n", i, err)
-					continue
-				}
-				if structFieldValue.Type() == reflect.TypeFor[gorm.DeletedAt]() {
-					val = reflect.ValueOf(gorm.DeletedAt{Time: t, Valid: true})
-				} else {
-					val = reflect.ValueOf(t)
-				}
+// setFieldValue sets a struct field value based on the value string and optional type hint
+func setFieldValue(structFieldValue *reflect.Value, value string, typeHint string) error {
+	val := reflect.ValueOf(value)
 
-			case "bool", "checkbox":
-				if item.Value != "true" && item.Value != "false" {
-					fmt.Printf("Warning: Invalid boolean value at index %d: %s\n", i, item.Value)
-					continue
-				}
-				val = reflect.ValueOf(item.Value == "true")
+	if structFieldValue.Type() == val.Type() {
+		structFieldValue.Set(val)
+		return nil
+	}
 
-			case "radio", "string":
-				val = reflect.ValueOf(item.Value)
+	// Infer type from struct field if no type hint provided
+	if typeHint == "" {
+		switch structFieldValue.Kind() {
+		case reflect.String:
+			structFieldValue.SetString(value)
+			return nil
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			typeHint = "int64"
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			typeHint = "uint"
+		case reflect.Float32, reflect.Float64:
+			typeHint = "float64"
+		case reflect.Bool:
+			typeHint = "bool"
+		}
+	}
 
-			case "time":
-				if len(item.Value) > 5 { // Basic length check for time format HH:MM
-					fmt.Printf("Warning: Time value too long at index %d\n", i)
-					continue
-				}
-				t, err := time.Parse("15:04", item.Value)
-				if err != nil {
-					fmt.Printf("Warning: Error parsing time at index %d: %v\n", i, err)
-					continue
-				}
-				val = reflect.ValueOf(t)
+	switch typeHint {
+	case "Skeleton":
+		val = reflect.ValueOf(Skeleton(value))
 
-			case "Time":
-				if len(item.Value) > 50 { // Extended length check for full timestamp
-					fmt.Printf("Warning: Timestamp value too long at index %d\n", i)
-					continue
-				}
-				t, err := time.Parse("2006-01-02 15:04:05 -0700 UTC", item.Value)
-				if err != nil {
-					fmt.Printf("Warning: Error parsing timestamp at index %d: %v\n", i, err)
-					continue
-				}
-				val = reflect.ValueOf(t)
-
-			case "uint", "int", "int64", "number", "decimal", "float64":
-				// Validate numeric input with bounds checking and get parsed value
-				parsedVal, err := validateNumericInput(item.Value, item.Type)
-				if err != nil {
-					fmt.Printf("Warning: Invalid numeric value at index %d: %v\n", i, err)
-					continue
-				}
-				val = reflect.ValueOf(parsedVal)
-
-			case "datetime-local":
-				if len(item.Value) > 16 { // Basic length check for datetime-local format
-					fmt.Printf("Warning: DateTime value too long at index %d\n", i)
-					continue
-				}
-				t, err := time.Parse("2006-01-02T15:04", item.Value)
-				if err != nil {
-					fmt.Printf("Warning: Error parsing datetime-local at index %d: %v\n", i, err)
-					continue
-				}
-				val = reflect.ValueOf(t)
-
-			case "":
-				continue
-
-			case "Model": // gorm.Model
-				continue
-
-			default:
-				fmt.Printf("Warning: Unknown field type at index %d: %s\n", i, item.Type)
-				continue
-			}
+	case "date":
+		if len(value) > 10 {
+			return fmt.Errorf("date value too long")
+		}
+		t, err := time.Parse("2006-01-02", value)
+		if err != nil {
+			return fmt.Errorf("error parsing date: %w", err)
+		}
+		if structFieldValue.Type() == reflect.TypeFor[gorm.DeletedAt]() {
+			val = reflect.ValueOf(gorm.DeletedAt{Time: t, Valid: true})
+		} else {
+			val = reflect.ValueOf(t)
 		}
 
-		// Safe reflection assignment with error handling
-		if val.IsValid() && val.Type().ConvertibleTo(structFieldValue.Type()) {
-			structFieldValue.Set(val.Convert(structFieldValue.Type()))
-		} else if val.IsValid() {
-			fmt.Printf("Warning: Cannot convert %s to %s for field %s\n", val.Type(), structFieldValue.Type(), item.Name)
+	case "bool", "checkbox":
+		if value != "true" && value != "false" {
+			return fmt.Errorf("invalid boolean value: %s", value)
 		}
+		val = reflect.ValueOf(value == "true")
+
+	case "radio", "string":
+		val = reflect.ValueOf(value)
+
+	case "time":
+		if len(value) > 5 {
+			return fmt.Errorf("time value too long")
+		}
+		t, err := time.Parse("15:04", value)
+		if err != nil {
+			return fmt.Errorf("error parsing time: %w", err)
+		}
+		val = reflect.ValueOf(t)
+
+	case "Time":
+		if len(value) > 50 {
+			return fmt.Errorf("timestamp value too long")
+		}
+		t, err := time.Parse("2006-01-02 15:04:05 -0700 UTC", value)
+		if err != nil {
+			return fmt.Errorf("error parsing timestamp: %w", err)
+		}
+		val = reflect.ValueOf(t)
+
+	case "uint", "int", "int64", "number", "decimal", "float64":
+		parsedVal, err := validateNumericInput(value, typeHint)
+		if err != nil {
+			return fmt.Errorf("invalid numeric value: %w", err)
+		}
+		val = reflect.ValueOf(parsedVal)
+
+	case "datetime-local":
+		if len(value) > 16 {
+			return fmt.Errorf("datetime value too long")
+		}
+		t, err := time.Parse("2006-01-02T15:04", value)
+		if err != nil {
+			return fmt.Errorf("error parsing datetime-local: %w", err)
+		}
+		val = reflect.ValueOf(t)
+
+	case "", "Model":
+		return nil
+
+	default:
+		return fmt.Errorf("unknown field type: %s", typeHint)
+	}
+
+	// Safe reflection assignment with error handling
+	if val.IsValid() && val.Type().ConvertibleTo(structFieldValue.Type()) {
+		structFieldValue.Set(val.Convert(structFieldValue.Type()))
+	} else if val.IsValid() {
+		return fmt.Errorf("cannot convert %s to %s", val.Type(), structFieldValue.Type())
 	}
 
 	return nil
@@ -1996,24 +2049,70 @@ var __submit = Trim(`
 			found = Array.from(form.querySelectorAll('[name]'));
 		};
 
+		// Check if any input is a file input with files selected
+		let hasFiles = false;
 		found.forEach((item) => {
-			const name = item.getAttribute("name");
-			const type = item.getAttribute("type");
-			let value = item.value;
-			
-			if (type === 'checkbox') {
-				value = String(item.checked)
-			}
-
-			if(name != null) {
-				body = body.filter(element => element.name !== name);
-				body.push({ name, type, value });
+			if (item.getAttribute("type") === "file" && item.files && item.files.length > 0) {
+				hasFiles = true;
 			}
 		});
 
 		var L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
 
-		fetch(path, {method: "POST", body: JSON.stringify(body)})
+		let fetchBody;
+		let fetchHeaders = {};
+
+		if (hasFiles) {
+			// Use FormData for file uploads
+			const formData = new FormData();
+			
+			// Add pre-populated values first
+			values.forEach((item) => {
+				formData.append(item.name, item.value);
+			});
+
+			// Add form inputs, overwriting any duplicates
+			found.forEach((item) => {
+				const name = item.getAttribute("name");
+				const type = item.getAttribute("type");
+				
+				if (name == null) return;
+
+				if (type === "file") {
+					if (item.files && item.files.length > 0) {
+						formData.append(name, item.files[0]);
+					}
+				} else if (type === "checkbox") {
+					formData.append(name, String(item.checked));
+				} else {
+					formData.append(name, item.value);
+				}
+			});
+
+			fetchBody = formData;
+			// Don't set Content-Type - browser will set it with boundary for multipart/form-data
+		} else {
+			// Use JSON for non-file forms (original behavior)
+			found.forEach((item) => {
+				const name = item.getAttribute("name");
+				const type = item.getAttribute("type");
+				let value = item.value;
+				
+				if (type === 'checkbox') {
+					value = String(item.checked)
+				}
+
+				if(name != null) {
+					body = body.filter(element => element.name !== name);
+					body.push({ name, type, value });
+				}
+			});
+
+			fetchBody = JSON.stringify(body);
+			fetchHeaders = { 'Content-Type': 'application/json' };
+		}
+
+		fetch(path, {method: "POST", body: fetchBody, headers: fetchHeaders})
 			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
 			.then(function (html) {
 				const parser = new DOMParser();
