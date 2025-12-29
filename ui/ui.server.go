@@ -867,15 +867,16 @@ func cacheControlMiddleware(next http.Handler, maxAge time.Duration) http.Handle
 }
 
 type App struct {
-	Lanugage     string
-	HTMLBody     func(string) string
-	HTMLHead     []string
-	DebugEnabled bool
-	SmoothNav    bool
-	sessMu       sync.Mutex
-	sessions     map[string]*sessRec
-	wsMu         sync.RWMutex
-	wsClients    map[*websocket.Conn]*wsState
+	Lanugage      string
+	HTMLBody      func(string) string
+	HTMLHead      []string
+	DebugEnabled  bool
+	SmoothNav     bool
+	sessMu        sync.Mutex
+	sessions      map[string]*sessRec
+	wsMu          sync.RWMutex
+	wsClients     map[*websocket.Conn]*wsState
+	assetHandlers map[string]http.Handler
 }
 
 type sessRec struct {
@@ -1122,7 +1123,15 @@ func mimeTypeMiddleware(next http.Handler) http.Handler {
 func (app *App) Assets(assets embed.FS, path string, maxAge time.Duration) {
 	path = strings.TrimPrefix(path, "/")
 	handler := http.FileServer(http.FS(assets))
-	http.Handle("/"+path, mimeTypeMiddleware(cacheControlMiddleware(handler, maxAge)))
+	wrappedHandler := mimeTypeMiddleware(cacheControlMiddleware(handler, maxAge))
+	
+	// Initialize the map if it doesn't exist
+	if app.assetHandlers == nil {
+		app.assetHandlers = make(map[string]http.Handler)
+	}
+	
+	// Store the handler for this path prefix
+	app.assetHandlers["/"+path+"/"] = wrappedHandler
 }
 
 // Favicon serves a favicon file from the embedded filesystem at /favicon.ico.
@@ -1231,7 +1240,7 @@ func (app *App) Listen(port string) {
 
 	// Wrap the main handler with security headers middleware
 	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains("GET POST", r.Method) {
+		if !strings.Contains("GET POST HEAD", r.Method) {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
@@ -1242,6 +1251,14 @@ func (app *App) Listen(port string) {
 			// Let explicit WS handlers handle upgrades
 			http.NotFound(w, r)
 			return
+		}
+
+		// Check if this is an asset request
+		for prefix, handler := range app.assetHandlers {
+			if strings.HasPrefix(value, prefix) {
+				handler.ServeHTTP(w, r)
+				return
+			}
 		}
 
 		for found, path := range stored {
