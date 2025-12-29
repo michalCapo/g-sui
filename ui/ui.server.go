@@ -1043,7 +1043,7 @@ func mimeTypeMiddleware(next http.Handler) http.Handler {
 		switch ext {
 		// JavaScript/TypeScript
 		case ".js", ".mjs":
-			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		case ".ts", ".mts":
 			w.Header().Set("Content-Type", "text/typescript; charset=utf-8")
 		case ".jsx":
