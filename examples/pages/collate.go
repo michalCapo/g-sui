@@ -45,8 +45,10 @@ var lastNames = []string{
 	"Valdez", "Wilson", "Xavier", "Young", "Zhang", "Adams", "Bell", "Cooper", "Dixon", "Edwards",
 }
 
-var countries = []string{"Slovakia", "Czechia", "Austria", "Poland", "Hungary", "Germany", "Spain", "France", "Italy", "Portugal"}
-var statuses = []string{"new", "active", "blocked"}
+var (
+	countries = []string{"Slovakia", "Czechia", "Austria", "Poland", "Hungary", "Germany", "Spain", "France", "Italy", "Portugal"}
+	statuses  = []string{"new", "active", "blocked"}
+)
 
 func randomEmail(name string) string {
 	// Sanitize name for email: lowercase, replace spaces with dots, remove special chars
@@ -67,11 +69,9 @@ func randomPerson() *Person {
 	firstName := firstNames[rand.Intn(len(firstNames))]
 	lastName := lastNames[rand.Intn(len(lastNames))]
 
-	var lastLogin = time.Time{}
+	lastLogin := time.Time{}
 	if rand.Intn(2) == 1 {
 		lastLogin = time.Now().Add(-time.Duration(rand.Intn(100)) * 24 * time.Hour)
-	} else {
-		lastLogin = time.Time{} // zero
 	}
 
 	return &Person{
@@ -129,7 +129,6 @@ func initDB() (*gorm.DB, error) {
 	return db, err
 }
 
-// Query demonstrates full ui.TCollate feature set over an in-memory DB
 func Collate(ctx *ui.Context) string {
 	database, err := initDB()
 	if err != nil {
