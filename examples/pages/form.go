@@ -11,8 +11,11 @@ import (
 )
 
 type formData struct {
-	Title string `validate:"required"`
-	Some  int    `validate:"required"`
+	Title   string `validate:"required"`
+	Some    int    `validate:"required"`
+	Gender  string `validate:"required"`
+	Number  int    `validate:"required"`
+	Country uint   `validate:"required"`
 }
 
 func Submit(ctx *ui.Context) string {
@@ -42,6 +45,10 @@ func render(ctx *ui.Context, data *formData, err *error) string {
 		result = fmt.Sprintf("Form data: %+v", data)
 	}
 
+	genders := []ui.AOption{{ID: "male", Value: "Male"}, {ID: "female", Value: "Female"}, {ID: "other", Value: "Other"}}
+	numbers := []ui.AOption{{ID: "1", Value: "1"}, {ID: "2", Value: "2"}, {ID: "3", Value: "3"}}
+	countries := []ui.AOption{{ID: "1", Value: "USA"}, {ID: "2", Value: "Slovakia"}, {ID: "3", Value: "Germany"}, {ID: "4", Value: "Japan"}}
+
 	return ui.Div("max-w-5xl mx-auto flex flex-col gap-4", target)(
 		ui.Div("text-2xl font-bold")("Form association"),
 		ui.Div("text-gray-600")("Form input fields and submit button is defined outside html form element. This is useful when you want to reuse the form in multiple places."),
@@ -60,6 +67,9 @@ func render(ctx *ui.Context, data *formData, err *error) string {
 
 			form.Render(),
 			form.Text("Title", data).Required().Render("Title"),
+			form.RadioButtons("Gender", data).Options(genders).Render("Male"),
+			form.RadioButtons("Number", data).Options(numbers, "int").Render("Number"),
+			form.Select("Country", data).Options(countries, "uint").Render("Country"),
 			form.Hidden("Some", "int", 123),
 			form.Button().Color(ui.Blue).Submit().Render("Submit"),
 		),
@@ -67,5 +77,5 @@ func render(ctx *ui.Context, data *formData, err *error) string {
 }
 
 func FormContent(ctx *ui.Context) string {
-	return render(ctx, &formData{}, nil)
+	return render(ctx, &formData{Gender: "male", Number: 2}, nil)
 }

@@ -190,7 +190,13 @@ func (c *ARadio) Empty() *ARadio {
 	return c
 }
 
-func (c *ARadio) Options(options []AOption) *ARadio {
+func (c *ARadio) Options(options []AOption, dataType ...string) *ARadio {
+	c.dataType = "text"
+
+	if len(dataType) > 0 && dataType[0] != "" {
+		c.dataType = dataType[0]
+	}
+
 	c.options = options
 	return c
 }

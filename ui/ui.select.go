@@ -96,7 +96,13 @@ func (c *ASelect) Empty() *ASelect {
 	return c
 }
 
-func (c *ASelect) Options(options []AOption) *ASelect {
+func (c *ASelect) Options(options []AOption, dataType ...string) *ASelect {
+	c.dataType = "text"
+
+	if len(dataType) > 0 && dataType[0] != "" {
+		c.dataType = dataType[0]
+	}
+
 	c.options = options
 	return c
 }
