@@ -10,11 +10,13 @@ const (
 	TabsStylePills     = "pills"
 	TabsStyleUnderline = "underline"
 	TabsStyleBoxed     = "boxed"
+	TabsStyleVertical  = "vertical"
 )
 
 // tabData represents a single tab with its label and content
 type tabData struct {
 	label   string
+	icon    string
 	content string
 }
 
@@ -41,9 +43,14 @@ func Tabs() *tabs {
 }
 
 // Tab adds a new tab with the given label and content
-func (t *tabs) Tab(label, content string) *tabs {
+func (t *tabs) Tab(label, content string, icon ...string) *tabs {
+	iconStr := ""
+	if len(icon) > 0 {
+		iconStr = icon[0]
+	}
 	t.tabs = append(t.tabs, tabData{
 		label:   label,
+		icon:    iconStr,
 		content: content,
 	})
 	return t
@@ -57,10 +64,10 @@ func (t *tabs) Active(index int) *tabs {
 	return t
 }
 
-// Style sets the visual style of the tabs: "pills", "underline", or "boxed"
+// Style sets the visual style of the tabs: "pills", "underline", "boxed", or "vertical"
 func (t *tabs) Style(value string) *tabs {
 	switch value {
-	case TabsStylePills, TabsStyleUnderline, TabsStyleBoxed:
+	case TabsStylePills, TabsStyleUnderline, TabsStyleBoxed, TabsStyleVertical:
 		t.style = value
 	default:
 		t.style = TabsStyleUnderline
@@ -97,22 +104,37 @@ func (t *tabs) Render() string {
 
 	var builder strings.Builder
 
-	// Container div with data attribute for active tab
+	// Add scrollbar-hide CSS
+	builder.WriteString(`<style>.scrollbar-hide::-webkit-scrollbar{display:none}.scrollbar-hide{-ms-overflow-style:none;scrollbar-width:none}</style>`)
+
+	// Container div
+	isVertical := t.style == TabsStyleVertical
 	containerClass := Classes(
 		"w-full",
+		If(isVertical, func() string { return "flex flex-col md:flex-row gap-6" }),
 		t.getClass(),
 	)
-	builder.WriteString(fmt.Sprintf(`<div id="%s" class="%s" data-tabs-active="%d">`,
+	builder.WriteString(fmt.Sprintf(`<div id="%s" class="%s" data-tabs-active="%d" data-tabs-style="%s">`,
 		escapeAttr(t.id),
 		escapeAttr(containerClass),
 		t.active,
+		t.style,
 	))
 
 	// Render tab buttons based on style
 	builder.WriteString(t.renderTabButtons(buttonIDs, panelIDs))
 
+	// Render tab panels container if vertical
+	if isVertical {
+		builder.WriteString(`<div class="flex-1">`)
+	}
+
 	// Render tab panels
 	builder.WriteString(t.renderTabPanels(panelIDs))
+
+	if isVertical {
+		builder.WriteString(`</div>`)
+	}
 
 	builder.WriteString(`</div>`)
 
@@ -134,14 +156,19 @@ func (t *tabs) getClass() string {
 func (t *tabs) renderTabButtons(buttonIDs []string, panelIDs []string) string {
 	var builder strings.Builder
 
+	wrapperClass := "flex overflow-x-auto scrollbar-hide "
 	switch t.style {
 	case TabsStylePills:
-		builder.WriteString(`<div class="flex gap-2 mb-4">`)
+		wrapperClass += "gap-2 mb-4"
 	case TabsStyleUnderline:
-		builder.WriteString(`<div class="flex border-b border-gray-300 dark:border-gray-700 mb-4">`)
+		wrapperClass += "border-b border-gray-200 dark:border-gray-800 mb-4"
 	case TabsStyleBoxed:
-		builder.WriteString(`<div class="flex flex-col sm:flex-row gap-0 mb-4 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">`)
+		wrapperClass += "gap-0 mb-4 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden p-1 bg-gray-50/50 dark:bg-gray-950/30"
+	case TabsStyleVertical:
+		wrapperClass = "flex flex-col gap-1 min-w-[12rem]"
 	}
+
+	builder.WriteString(fmt.Sprintf(`<div class="%s" role="tablist">`, wrapperClass))
 
 	for i, tab := range t.tabs {
 		isActive := i == t.active
@@ -159,7 +186,11 @@ func (t *tabs) renderTabButtons(buttonIDs []string, panelIDs []string) string {
 			escapeAttr(ariaControls),
 			escapeAttr(tabIndex),
 		))
-		builder.WriteString(tab.label)
+
+		if tab.icon != "" {
+			builder.WriteString(fmt.Sprintf(`<span class="mr-2">%s</span>`, tab.icon))
+		}
+		builder.WriteString(fmt.Sprintf(`<span>%s</span>`, tab.label))
 		builder.WriteString(`</button>`)
 	}
 
@@ -169,12 +200,12 @@ func (t *tabs) renderTabButtons(buttonIDs []string, panelIDs []string) string {
 
 // getButtonClass returns CSS classes for a tab button based on style and active state
 func (t *tabs) getButtonClass(isActive bool) string {
-	baseClass := "cursor-pointer font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+	baseClass := "cursor-pointer font-bold transition-all duration-200 focus:outline-none text-sm whitespace-nowrap flex items-center justify-center"
 
 	switch t.style {
 	case TabsStylePills:
-		activeClass := "bg-blue-600 text-white dark:bg-blue-700 dark:text-white"
-		inactiveClass := "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+		activeClass := "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+		inactiveClass := "bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800/50"
 		if isActive {
 			return Classes(baseClass, activeClass, "rounded-lg px-4 py-2")
 		}
@@ -182,19 +213,27 @@ func (t *tabs) getButtonClass(isActive bool) string {
 
 	case TabsStyleUnderline:
 		activeClass := "text-blue-600 border-b-2 border-blue-600 dark:text-blue-400 dark:border-blue-400"
-		inactiveClass := "text-gray-600 border-b-2 border-transparent hover:text-gray-800 hover:border-gray-400 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600"
+		inactiveClass := "text-gray-500 border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600"
 		if isActive {
-			return Classes(baseClass, activeClass, "px-4 py-2 -mb-px")
+			return Classes(baseClass, activeClass, "px-4 py-2.5 -mb-px")
 		}
-		return Classes(baseClass, inactiveClass, "px-4 py-2 -mb-px")
+		return Classes(baseClass, inactiveClass, "px-4 py-2.5 -mb-px")
 
 	case TabsStyleBoxed:
-		activeClass := "bg-white text-blue-600 border-b border-gray-300 dark:bg-gray-800 dark:text-blue-400 dark:border-gray-700"
-		inactiveClass := "bg-gray-50 text-gray-600 border-b border-gray-300 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-800"
+		activeClass := "bg-white text-blue-600 shadow-sm dark:bg-gray-800 dark:text-blue-400 rounded-md"
+		inactiveClass := "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
 		if isActive {
-			return Classes(baseClass, activeClass, "px-4 py-3")
+			return Classes(baseClass, activeClass, "px-4 py-1.5 flex-1")
 		}
-		return Classes(baseClass, inactiveClass, "px-4 py-3")
+		return Classes(baseClass, inactiveClass, "px-4 py-1.5 flex-1")
+
+	case TabsStyleVertical:
+		activeClass := "bg-blue-50 text-blue-700 border-r-2 border-blue-600 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-400"
+		inactiveClass := "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 border-r-2 border-transparent"
+		if isActive {
+			return Classes(baseClass, activeClass, "px-4 py-3 text-left rounded-l-md")
+		}
+		return Classes(baseClass, inactiveClass, "px-4 py-3 text-left rounded-l-md")
 
 	default:
 		return Classes(baseClass, "px-4 py-2")
@@ -212,8 +251,9 @@ func (t *tabs) renderTabPanels(panelIDs []string) string {
 
 		panelClass := Classes(
 			"tab-panel",
-			If(!isActive, func() string { return "hidden" }),
-			"transition-opacity duration-200",
+			If(!isActive, func() string { return "hidden opacity-0" }),
+			If(isActive, func() string { return "opacity-100" }),
+			"transition-opacity duration-300 ease-in-out",
 		)
 
 		builder.WriteString(fmt.Sprintf(
@@ -237,14 +277,17 @@ func (t *tabs) renderJavaScript(buttonIDs, panelIDs []string) string {
 	var activeClasses, inactiveClasses string
 	switch t.style {
 	case TabsStylePills:
-		activeClasses = "bg-blue-600 text-white dark:bg-blue-700 dark:text-white"
-		inactiveClasses = "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+		activeClasses = "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+		inactiveClasses = "bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800/50"
 	case TabsStyleUnderline:
 		activeClasses = "text-blue-600 border-b-2 border-blue-600 dark:text-blue-400 dark:border-blue-400"
-		inactiveClasses = "text-gray-600 border-b-2 border-transparent hover:text-gray-800 hover:border-gray-400 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600"
+		inactiveClasses = "text-gray-500 border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600"
 	case TabsStyleBoxed:
-		activeClasses = "bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border-b-2 border-blue-600 dark:border-blue-400"
-		inactiveClasses = "bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+		activeClasses = "bg-white text-blue-600 shadow-sm dark:bg-gray-800 dark:text-blue-400 rounded-md"
+		inactiveClasses = "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+	case TabsStyleVertical:
+		activeClasses = "bg-blue-50 text-blue-700 border-r-2 border-blue-600 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-400"
+		inactiveClasses = "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 border-r-2 border-transparent"
 	default:
 		activeClasses = "text-blue-600"
 		inactiveClasses = "text-gray-600"
@@ -263,13 +306,13 @@ func (t *tabs) renderJavaScript(buttonIDs, panelIDs []string) string {
 				var idx=parseInt(btn.getAttribute('data-tabs-index'));
 				if(idx===index){
 					btn.setAttribute('aria-selected','true');
-					btn.classList.remove(...inactiveClasses.split(' '));
-					btn.classList.add(...activeClasses.split(' '));
+					inactiveClasses.split(' ').filter(c => c).forEach(c => btn.classList.remove(c));
+					activeClasses.split(' ').filter(c => c).forEach(c => btn.classList.add(c));
 					btn.tabIndex=0;
 				}else{
 					btn.setAttribute('aria-selected','false');
-					btn.classList.remove(...activeClasses.split(' '));
-					btn.classList.add(...inactiveClasses.split(' '));
+					activeClasses.split(' ').filter(c => c).forEach(c => btn.classList.remove(c));
+					inactiveClasses.split(' ').filter(c => c).forEach(c => btn.classList.add(c));
 					btn.tabIndex=-1;
 				}
 			});
@@ -277,9 +320,16 @@ func (t *tabs) renderJavaScript(buttonIDs, panelIDs []string) string {
 				var idx=parseInt(panel.getAttribute('data-tabs-panel'));
 				if(idx===index){
 					panel.classList.remove('hidden');
+					panel.removeAttribute('hidden');
+					setTimeout(() => {
+						panel.classList.remove('opacity-0');
+						panel.classList.add('opacity-100');
+					}, 10);
 					panel.setAttribute('aria-hidden','false');
 				}else{
-					panel.classList.add('hidden');
+					panel.classList.add('hidden', 'opacity-0');
+					panel.setAttribute('hidden', '');
+					panel.classList.remove('opacity-100');
 					panel.setAttribute('aria-hidden','true');
 				}
 			});
@@ -293,13 +343,13 @@ func (t *tabs) renderJavaScript(buttonIDs, panelIDs []string) string {
 			});
 			btn.addEventListener('keydown',function(e){
 				var currentIndex=parseInt(container.getAttribute('data-tabs-active'));
-				if(e.key==='ArrowRight'){
-					var newIndex=Math.min(currentIndex+1,buttons.length-1);
+				if(e.key==='ArrowRight' || e.key==='ArrowDown'){
+					var newIndex=(currentIndex+1)%%buttons.length;
 					buttons[newIndex].focus();
 					setActiveTab(newIndex);
 					e.preventDefault();
-				}else if(e.key==='ArrowLeft'){
-					var newIndex=Math.max(currentIndex-1,0);
+				}else if(e.key==='ArrowLeft' || e.key==='ArrowUp'){
+					var newIndex=(currentIndex-1+buttons.length)%%buttons.length;
 					buttons[newIndex].focus();
 					setActiveTab(newIndex);
 					e.preventDefault();

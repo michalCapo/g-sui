@@ -2224,6 +2224,32 @@ ui.ProgressBar().Value(100).Color("bg-green-600").Striped(true).Animated(true).R
 - `.If(condition)` - Conditional rendering
 - `.Class(...classes)` - Custom CSS classes
 
+### StepProgress - Step Progress Indicator
+
+A step progress indicator that shows the current step out of total steps with a visual progress bar. Useful for multi-step forms, wizards, and onboarding flows.
+
+```go
+ui.StepProgress(1, 4).Render()                    // Step 1 of 4
+ui.StepProgress(2, 5).Color("bg-purple-500").Render()  // Step 2 of 5 with custom color
+ui.StepProgress(3, 10).Size("lg").Render()        // Step 3 of 10 with large size
+ui.StepProgress(4, 4).Color("bg-green-500").Render()  // Complete
+```
+
+**Methods**:
+- `.Current(value int)` - Set the current step
+- `.Total(value int)` - Set the total number of steps
+- `.Color(cssClass string)` - Custom color class (default: `bg-blue-500`)
+- `.Size(value string)` - Set height: `xs`, `sm`, `md` (default), `lg`, `xl`
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
+
+**Sizes**:
+- `xs` - Extra thin (h-0.5)
+- `sm` - Small (h-1)
+- `md` - Medium (h-1.5)
+- `lg` - Large (h-2)
+- `xl` - Extra large (h-3)
+
 ### Tooltip - Hover Tooltips
 
 Hover tooltips with positioning and light/dark variants.

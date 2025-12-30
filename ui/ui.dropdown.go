@@ -8,7 +8,10 @@ import (
 type dropdownItem struct {
 	label     string
 	onclick   string
+	icon      string
+	variant   string // "default", "danger"
 	isDivider bool
+	isHeader  bool
 }
 
 type dropdown struct {
@@ -37,11 +40,40 @@ func (d *dropdown) Trigger(html string) *dropdown {
 }
 
 // Item adds a menu item with the given label and onclick handler
-func (d *dropdown) Item(label string, onclick string) *dropdown {
-	d.items = append(d.items, dropdownItem{
+func (d *dropdown) Item(label string, onclick string, icon ...string) *dropdown {
+	item := dropdownItem{
 		label:     label,
 		onclick:   onclick,
+		variant:   "default",
 		isDivider: false,
+	}
+	if len(icon) > 0 {
+		item.icon = icon[0]
+	}
+	d.items = append(d.items, item)
+	return d
+}
+
+// Danger adds a danger-variant menu item
+func (d *dropdown) Danger(label string, onclick string, icon ...string) *dropdown {
+	item := dropdownItem{
+		label:     label,
+		onclick:   onclick,
+		variant:   "danger",
+		isDivider: false,
+	}
+	if len(icon) > 0 {
+		item.icon = icon[0]
+	}
+	d.items = append(d.items, item)
+	return d
+}
+
+// Header adds a non-interactive header label to the menu
+func (d *dropdown) Header(label string) *dropdown {
+	d.items = append(d.items, dropdownItem{
+		label:    label,
+		isHeader: true,
 	})
 	return d
 }
@@ -91,12 +123,14 @@ func (d *dropdown) Render() string {
 		"bg-white",
 		"dark:bg-gray-900",
 		"border",
-		"border-gray-300",
-		"dark:border-gray-600",
-		"rounded-lg",
-		"shadow-lg",
-		"py-1",
+		"border-gray-200",
+		"dark:border-gray-800",
+		"rounded-xl",
+		"shadow-xl",
+		"py-1.5",
 		"hidden",
+		"opacity-0 scale-95 origin-top",
+		"transition-all duration-200 ease-out",
 		positionClasses,
 		d.class,
 	)
@@ -114,7 +148,7 @@ func (d *dropdown) Render() string {
 
 	// Make trigger interactive by wrapping it with onclick
 	triggerWrapper := fmt.Sprintf(
-		`<div id="%s" class="relative inline-block" data-dropdown-open="false">%s%s</div>`,
+		`<div id="%s" class="relative inline-block">%s%s</div>`,
 		escapeAttr(triggerID),
 		d.trigger,
 		menuHTML,
@@ -130,13 +164,13 @@ func (d *dropdown) Render() string {
 func (d *dropdown) getPositionClasses() string {
 	switch d.position {
 	case "bottom-right":
-		return "left-full mt-1"
+		return "right-0 top-full mt-2 origin-top-right"
 	case "top-left":
-		return "right-0 bottom-full mb-1"
+		return "left-0 bottom-full mb-2 origin-bottom-left"
 	case "top-right":
-		return "left-0 bottom-full mb-1"
+		return "right-0 bottom-full mb-2 origin-bottom-right"
 	default: // "bottom-left"
-		return "left-0 mt-1"
+		return "left-0 top-full mt-2 origin-top-left"
 	}
 }
 
@@ -151,52 +185,107 @@ func (d *dropdown) renderItems() string {
 	for _, item := range d.items {
 		if item.isDivider {
 			builder.WriteString(d.renderDivider())
+		} else if item.isHeader {
+			builder.WriteString(d.renderHeader(item.label))
 		} else {
-			builder.WriteString(d.renderItem(item.label, item.onclick))
+			builder.WriteString(d.renderItem(item.label, item.onclick, item.icon, item.variant))
 		}
 	}
 
 	return builder.String()
 }
 
+// renderHeader generates the HTML for a menu header
+func (d *dropdown) renderHeader(label string) string {
+	return fmt.Sprintf(
+		`<div class="px-4 py-1.5 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">%s</div>`,
+		escapeAttr(label),
+	)
+}
+
 // renderItem generates the HTML for a single menu item
-func (d *dropdown) renderItem(label, onclick string) string {
+func (d *dropdown) renderItem(label, onclick, icon, variant string) string {
 	itemClass := Classes(
-		"block",
+		"flex",
+		"items-center",
+		"gap-2",
 		"w-full",
 		"text-left",
-		"px-4",
+		"px-3",
 		"py-2",
+		"mx-1",
+		"w-[calc(100%-0.5rem)]",
 		"text-sm",
+		"font-bold",
 		"cursor-pointer",
-		"hover:bg-gray-100",
-		"dark:hover:bg-gray-800",
-		"text-gray-800",
-		"dark:text-gray-200",
-		"transition-colors",
+		"rounded-md",
+		"transition-all",
 		"duration-150",
+		"whitespace-nowrap",
 	)
 
+	if variant == "danger" {
+		itemClass = Classes(itemClass, "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30")
+	} else {
+		itemClass = Classes(itemClass, "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800")
+	}
+
+	iconHTML := `<span class="w-5 h-5 flex-shrink-0 flex items-center justify-center opacity-70">`
+	if icon != "" {
+		iconHTML += icon
+	}
+	iconHTML += `</span>`
+
 	return fmt.Sprintf(
-		`<button class="%s" onclick="%s">%s</button>`,
+		`<button class="%s" onclick="%s">%s<span class="flex-1">%s</span></button>`,
 		escapeAttr(itemClass),
 		escapeAttr(onclick),
+		iconHTML,
 		escapeAttr(label),
 	)
 }
 
 // renderDivider generates the HTML for a divider line
 func (d *dropdown) renderDivider() string {
-	return `<div class="border-t border-gray-200 dark:border-gray-700 my-1 mx-2"></div>`
+	return `<div class="border-t border-gray-100 dark:border-gray-800 my-1.5 mx-2"></div>`
 }
 
 // renderScript generates JavaScript for dropdown toggle and click-outside-to-close
 func (d *dropdown) renderScript(dropdownID, triggerID string) string {
 	scriptJS := fmt.Sprintf(
-		`(function(){ var t=document.getElementById('%s'); if(!t) return; var d=document.getElementById('%s'); if(!d) return; var o=false; t.addEventListener('click',function(e){ e.stopPropagation(); o=!o; if(o){ d.classList.remove('hidden'); }else{ d.classList.add('hidden'); } }); d.addEventListener('click',function(e){ e.stopPropagation(); }); document.addEventListener('click',function(){ if(o){ o=false; d.classList.add('hidden'); } }); var p='%s'; window.addEventListener('resize',function(){ if(o){ var r=d.getBoundingClientRect(); var w=window.innerWidth; var h=window.innerHeight; if(r.left<0){ d.style.left='0px'; d.style.right='auto'; } if(r.right>w){ d.style.left='auto'; d.style.right='0px'; } if(r.bottom>h){ d.classList.remove('mt-1'); d.classList.add('bottom-full'); d.classList.add('mb-1'); } } }); })();`,
+		`(function(){ 
+			var t=document.getElementById('%s'); if(!t) return; 
+			var d=document.getElementById('%s'); if(!d) return; 
+			var o=false; 
+			
+			function show(){
+				o=true;
+				d.classList.remove('hidden');
+				setTimeout(function(){
+					d.classList.remove('opacity-0', 'scale-95');
+					d.classList.add('opacity-100', 'scale-100');
+				}, 10);
+			}
+			
+			function hide(){
+				o=false;
+				d.classList.remove('opacity-100', 'scale-100');
+				d.classList.add('opacity-0', 'scale-95');
+				setTimeout(function(){
+					if(!o) d.classList.add('hidden');
+				}, 200);
+			}
+			
+			t.addEventListener('click',function(e){ 
+				e.stopPropagation(); 
+				if(o) hide(); else show();
+			});
+			
+			document.addEventListener('click',function(){ if(o) hide(); });
+			document.addEventListener('keydown', function(e){ if(e.key==='Escape' && o) hide(); });
+		})();`,
 		escapeJS(triggerID),
 		escapeJS(dropdownID),
-		escapeJS(d.position),
 	)
 
 	return Script(scriptJS)
