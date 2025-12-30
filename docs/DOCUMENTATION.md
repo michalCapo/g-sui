@@ -112,6 +112,13 @@ app.AutoRestart(true)                             // Dev: rebuild on file change
 app.Listen(":8080")                               // Start server (also starts WS at /__ws)
 ```
 
+### Testing Handler
+```go
+handler := app.TestHandler()                      // Get http.Handler for testing
+server := httptest.NewServer(handler)             // Create test server
+resp, _ := http.Get(server.URL + "/path")         // Make test requests
+```
+
 ### HTML Wrapper
 ```go
 app.HTML(title, bodyClass, content) string        // Full HTML document with Tailwind
@@ -155,6 +162,13 @@ app.Favicon(embedFS, "assets/favicon.svg", 24*time.Hour)
 app.Assets(embedFS, "assets/", 24*time.Hour)      // Serve static files
 app.AutoRestart(true)                             // Dev: rebuild on file changes
 app.Listen(":8080")                               // Start server (also starts WS at /__ws)
+```
+
+### Testing Handler
+```go
+handler := app.TestHandler()                      // Get http.Handler for testing
+server := httptest.NewServer(handler)             // Create test server
+resp, _ := http.Get(server.URL + "/path")         // Make test requests
 ```
 
 ### HTML Wrapper
@@ -529,6 +543,48 @@ ui.IRadioButtons("Gender", &data).Options(genderOptions).Render("Gender")
 ---
 
 ## Forms
+
+### Form Data Parsing with Automatic Type Inference
+
+`ctx.Body(&struct)` automatically parses form data into Go structs with type inference:
+
+```go
+type UserForm struct {
+    Name      string    // String fields
+    Age       int       // Automatically parsed as int
+    Height    float64   // Automatically parsed as float64
+    Active    bool      // Automatically parsed as bool
+    BirthDate time.Time // Automatically parsed from date/datetime-local inputs
+    CreatedAt time.Time // Handles time.Time with multiple format support
+}
+
+func (f *UserForm) Submit(ctx *ui.Context) string {
+    if err := ctx.Body(f); err != nil {  // Auto-parses all types
+        ctx.Error("Invalid form data: " + err.Error())
+        return f.Render(ctx, &err)
+    }
+
+    // f.Age is now an int, f.Active is a bool, f.BirthDate is time.Time
+    ctx.Success(fmt.Sprintf("User %s, age %d, active: %v", f.Name, f.Age, f.Active))
+    return f.Render(ctx, nil)
+}
+```
+
+**Supported Types:**
+- `string` - Direct assignment
+- `int`, `int8`, `int16`, `int32`, `int64` - Parsed from numeric strings
+- `uint`, `uint8`, `uint16`, `uint32`, `uint64` - Parsed from numeric strings
+- `float32`, `float64` - Parsed from decimal strings
+- `bool` - Parses "true", "false", "1", "0" (case-insensitive)
+- `time.Time` - Parses multiple date/time formats:
+  - `2006-01-02` (HTML date input)
+  - `2006-01-02T15:04` (HTML datetime-local)
+  - `15:04` (HTML time input)
+  - RFC3339 and RFC3339Nano
+- `gorm.DeletedAt` - Special handling for GORM's soft delete type
+- **Type aliases** - Automatically handled (e.g., `type MyString string`)
+
+### Basic Form Example
 
 ```go
 type LoginForm struct {
@@ -2150,7 +2206,8 @@ type App struct {
 - `Favicon(fs embed.FS, path string, maxAge time.Duration)` - Serve favicon
 - `Assets(fs embed.FS, path string, maxAge time.Duration)` - Serve static assets
 - `StartSweeper(interval time.Duration)` - Start session cleanup goroutine
-- `Handler() http.Handler` - Get HTTP handler for testing/custom servers
+- `TestHandler() http.Handler` - Get HTTP handler for testing (returns handler without starting server)
+- `PWA(config PWAConfig)` - Enable Progressive Web App support
 
 **HTML Generation:**
 - `HTML(title, bodyClass, content) string` - Full HTML document with head, scripts, styles
