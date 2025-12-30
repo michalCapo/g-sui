@@ -396,7 +396,12 @@ func TestSetFieldValue_Time(t *testing.T) {
 			}
 		}},
 		{"invalid time", "not a time", true, nil},
-		{"empty time", "", true, nil},
+		{"empty time", "", false, func(t *testing.T, obj *TestStruct) {
+			// Empty string should set zero time value
+			if !obj.Time.IsZero() {
+				t.Errorf("Time = %v, want zero time", obj.Time)
+			}
+		}},
 	}
 
 	for _, tt := range tests {
@@ -445,7 +450,15 @@ func TestSetFieldValue_DeletedAt(t *testing.T) {
 			}
 		}},
 		{"invalid date", "not a date", true, nil},
-		{"empty date", "", true, nil},
+		{"empty date", "", false, func(t *testing.T, obj *TestStruct) {
+			// Empty string should set zero DeletedAt value
+			if obj.DeletedAt.Valid {
+				t.Errorf("DeletedAt.Valid = %v, want false", obj.DeletedAt.Valid)
+			}
+			if !obj.DeletedAt.Time.IsZero() {
+				t.Errorf("DeletedAt.Time = %v, want zero time", obj.DeletedAt.Time)
+			}
+		}},
 	}
 
 	for _, tt := range tests {

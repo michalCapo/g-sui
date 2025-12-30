@@ -49,18 +49,18 @@ func main() {
 	app.SmoothNavigation(true)
 
 	// Enable PWA
-	app.PWA(ui.PWAConfig{
-		Name:                  "g-sui Showcase",
-		ShortName:             "g-sui",
-		Description:           "Go Server-Rendered UI Showcase",
-		ThemeColor:            "#1d4ed8",
-		BackgroundColor:       "#ffffff",
-		Display:               "standalone",
-		GenerateServiceWorker: true,
-		Icons: []ui.PWAIcon{
-			{Src: "/favicon.ico", Sizes: "any", Type: "image/x-icon"},
-		},
-	})
+	// app.PWA(ui.PWAConfig{
+	// 	Name:                  "g-sui Showcase",
+	// 	ShortName:             "g-sui",
+	// 	Description:           "Go Server-Rendered UI Showcase",
+	// 	ThemeColor:            "#1d4ed8",
+	// 	BackgroundColor:       "#ffffff",
+	// 	Display:               "standalone",
+	// 	GenerateServiceWorker: true,
+	// 	Icons: []ui.PWAIcon{
+	// 		{Src: "/favicon.ico", Sizes: "any", Type: "image/x-icon"},
+	// 	},
+	// })
 
 	// app.AutoRestart(true) // enable if you want the examples to rebuild on changes
 	app.HTMLHead = append(app.HTMLHead,

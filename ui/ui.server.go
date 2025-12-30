@@ -373,6 +373,10 @@ func setFieldValue(structFieldValue *reflect.Value, value string) error {
 
 	// Handle gorm.DeletedAt specially
 	if fieldType == reflect.TypeFor[gorm.DeletedAt]() {
+		if value == "" {
+			structFieldValue.Set(reflect.ValueOf(gorm.DeletedAt{}))
+			return nil
+		}
 		t, err := parseTimeValue(value)
 		if err != nil {
 			return fmt.Errorf("error parsing date for DeletedAt: %w", err)
@@ -383,6 +387,10 @@ func setFieldValue(structFieldValue *reflect.Value, value string) error {
 
 	// Handle time.Time
 	if fieldType == reflect.TypeFor[time.Time]() {
+		if value == "" {
+			structFieldValue.Set(reflect.ValueOf(time.Time{}))
+			return nil
+		}
 		t, err := parseTimeValue(value)
 		if err != nil {
 			return fmt.Errorf("error parsing time: %w", err)

@@ -352,8 +352,13 @@ func TestContextBody_TimeFields(t *testing.T) {
 			data: []BodyItem{
 				{Name: "StartDate", Value: "", Type: "time.Time"},
 			},
-			verify:  func(t *testing.T, form *DateTimeForm) {},
-			wantErr: true, // Empty time should return error
+			verify: func(t *testing.T, form *DateTimeForm) {
+				// Empty string should set zero time value
+				if !form.StartDate.IsZero() {
+					t.Errorf("StartDate = %v, want zero time", form.StartDate)
+				}
+			},
+			wantErr: false, // Empty time should set zero value, not error
 		},
 	}
 
