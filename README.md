@@ -93,6 +93,7 @@ go run examples/main.go
 ```
 
 The examples include:
+- **Component Showcase**: Alerts, Badges, Cards, Progress Bars, Tooltips, Tabs, Accordion, Dropdown Menus
 - Showcase form with validations
 - Inputs: text/email/phone/password/number/date/time/datetime/textarea/select/checkbox/radio/radio cards
 - Buttons and color variants (solid/outline)
@@ -274,6 +275,17 @@ Notes:
 
 ## Components (selection)
 
+### UI Components
+- **Alert**: `ui.Alert().Message(text).Variant("success").Dismissible(true).Render()` - Dismissible notification banners with dark mode
+- **Badge**: `ui.Badge().Text("3").Color("red").Dot()` - Status indicators and notification counts
+- **Card**: `ui.Card().Header(h).Body(b).Footer(f).Variant(ui.CardBordered).Render()` - Content containers with 3 variants
+- **Progress**: `ui.ProgressBar().Value(75).Striped(true).Animated(true).Render()` - Progress indicators
+- **Tooltip**: `ui.Tooltip().Content(text).Position("top").Render(element)` - Hover tooltips with 4 positions
+- **Tabs**: `ui.Tabs().Tab(label, content).Active(0).Style("underline").Render()` - Tabbed content with underline/pills styles
+- **Accordion**: `ui.Accordion().Item(title, content).Multiple(true).Render()` - Collapsible sections
+- **Dropdown**: `ui.Dropdown().Trigger(html).Item(label, action).Position("bottom-left").Render()` - Context menus
+
+### Form Components
 - Buttons: `ui.Button().Color(...).Size(...).Class(...).Href(...).Submit().Reset().Click(...)`
 - Inputs: `ui.IText`, `ui.IEmail`, `ui.IPhone`, `ui.IPassword`, `ui.INumber`, `ui.IDate`, `ui.ITime`, `ui.IDateTime`, `ui.IArea`, `ui.ISelect`, `ui.ICheckbox`, `ui.IRadio`, `ui.IRadioButtons`, `ui.IRadioDiv`
 - Table: `ui.SimpleTable(cols, classes...)` with `Field`, `Empty`, `Class`, `Attr` (supports `colspan`)

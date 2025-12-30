@@ -35,6 +35,7 @@ This document combines the LLM Reference Guide and Architecture Documentation fo
 28. [Project Structure](#project-structure)
 29. [Dependencies](#dependencies)
 30. [Quick Reference](#quick-reference)
+30. [UI Components](#ui-components)
 
 ### Part II: Architecture Documentation
 31. [Architecture Overview](#architecture-overview)
@@ -1813,21 +1814,29 @@ The framework generates unique IDs and handles the patching logic transparently.
 
 ```
 ui/
-├── ui.go          # Core HTML DSL, colors, utilities
-├── ui.server.go   # App, Context, HTTP server, WebSocket
-├── ui.input.go    # Input components and validation
-├── ui.form.go     # Form instance with automatic form association
-├── ui.data.go     # Data collation (search/sort/filter/paging)
-├── ui.button.go   # Button component
-├── ui.table.go    # Simple table component
-├── ui.label.go    # Form labels
-├── ui.check.go    # Checkbox component
-├── ui.radio.go    # Radio button component
-├── ui.select.go   # Select dropdown component
-├── ui.icon.go     # Icon helpers
-├── ui.captcha.go  # Google reCAPTCHA integration
-├── ui.captcha2.go # Image-based CAPTCHA
-└── ui.captcha3.go # Tile-based CAPTCHA
+├── ui.go           # Core HTML DSL, colors, utilities
+├── ui.server.go    # App, Context, HTTP server, WebSocket
+├── ui.input.go     # Input components and validation
+├── ui.form.go      # Form instance with automatic form association
+├── ui.data.go      # Data collation (search/sort/filter/paging)
+├── ui.button.go    # Button component
+├── ui.table.go     # Simple table component
+├── ui.label.go     # Form labels
+├── ui.check.go     # Checkbox component
+├── ui.radio.go     # Radio button component
+├── ui.select.go    # Select dropdown component
+├── ui.icon.go      # Icon helpers
+├── ui.captcha.go   # Google reCAPTCHA integration
+├── ui.captcha2.go  # Image-based CAPTCHA
+├── ui.captcha3.go  # Tile-based CAPTCHA
+├── ui.alert.go     # Alert notification banners
+├── ui.badge.go     # Badge status indicators
+├── ui.card.go      # Card content containers
+├── ui.progress.go  # Progress bar indicators
+├── ui.tooltip.go   # Hover tooltips
+├── ui.tabs.go      # Tabbed content panels
+├── ui.accordion.go # Collapsible sections
+└── ui.dropdown.go  # Dropdown menus
 ```
 
 ### File Responsibilities
@@ -1849,6 +1858,14 @@ ui/
 | `ui.captcha.go` | ~108 | Google reCAPTCHA integration |
 | `ui.captcha2.go` | ~487 | Image CAPTCHA generation and validation |
 | `ui.captcha3.go` | ~455 | Tile puzzle CAPTCHA |
+| `ui.alert.go` | ~190 | Dismissible alert banners with dark mode |
+| `ui.badge.go` | ~90 | Status indicators and notification counts |
+| `ui.card.go` | ~120 | Card containers with header/body/footer |
+| `ui.progress.go` | ~100 | Progress bars with striped animation |
+| `ui.tooltip.go` | ~190 | Hover tooltips with positioning |
+| `ui.tabs.go` | ~250 | Tabbed navigation with client-side state |
+| `ui.accordion.go` | ~200 | Collapsible sections with toggle |
+| `ui.dropdown.go` | ~200 | Context menus with click-outside-to-close |
 
 ---
 
@@ -2115,6 +2132,192 @@ target.SkeletonComponent()              // Component skeleton
 target.SkeletonPage()                   // Page skeleton
 target.SkeletonForm()                   // Form skeleton
 ```
+
+---
+
+## UI Components
+
+### Alert - Notification Banners
+
+Dismissible notification banners for info, success, warning, and error messages with dark mode support.
+
+```go
+ui.Alert().Message("Important information").Variant("info").Dismissible(true).Render()
+ui.Alert().Message("Changes saved!").Variant("success").Dismissible(false).Render()
+ui.Alert().Message("Please review carefully").Variant("warning").Render()
+ui.Alert().Message("Something went wrong").Variant("error").Dismissible(true).Render()
+```
+
+**Variants**: `"info"` (default), `"success"`, `"warning"`, `"error"`
+
+**Methods**:
+- `.Message(text string)` - Set alert message
+- `.Variant(variant string)` - Set alert type (info/success/warning/error)
+- `.Dismissible(bool)` - Show close button (removes from DOM)
+- `.Persist(key string)` - Use localStorage to remember dismissal
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
+
+### Badge - Status Indicators
+
+Small status indicators, notification counts, and labels with dark mode support.
+
+```go
+// Dot variant (notification indicator)
+ui.Badge().Color("red").Dot().Render()
+
+// Text/number badge
+ui.Badge().Color("blue").Text("3").Render()
+
+// Label badge
+ui.Badge().Color("green").Text("Online").Render()
+```
+
+**Colors**: `"red"`, `"green"`, `"blue"`, `"yellow"`, `"purple"`, `"gray"` (or use constants like `ui.Red`)
+
+**Methods**:
+- `.Text(text string)` - Set badge text
+- `.Color(color string)` - Set badge color
+- `.Dot()` - Use dot variant (small circle)
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
+
+### Card - Content Containers
+
+Consistent containers with optional header, body, and footer sections.
+
+```go
+ui.Card().
+    Header("<h3 class='font-bold'>Card Title</h3>").
+    Body("<p class='text-gray-600'>Card content goes here.</p>").
+    Footer("<div class='text-sm text-gray-500'>Card footer</div>").
+    Variant(ui.CardBordered).
+    Render()
+```
+
+**Variants**: `ui.CardBordered`, `ui.CardShadowed`, `ui.CardFlat`
+
+**Methods**:
+- `.Header(html string)` - Set header HTML
+- `.Body(html string)` - Set body HTML
+- `.Footer(html string)` - Set footer HTML
+- `.Variant(variant string)` - Set card style
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
+
+### Progress Bar - Progress Indicators
+
+Visual progress indicators with optional striped animation.
+
+```go
+ui.ProgressBar().Value(75).Render()
+ui.ProgressBar().Value(50).Striped(true).Render()
+ui.ProgressBar().Value(75).Striped(true).Animated(true).Render()
+ui.ProgressBar().Value(100).Color("bg-green-600").Striped(true).Animated(true).Render()
+```
+
+**Methods**:
+- `.Value(percent int)` - Set progress value (0-100)
+- `.Striped(bool)` - Show striped pattern
+- `.Animated(bool)` - Animate stripes
+- `.Color(cssClass string)` - Custom color class
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
+
+### Tooltip - Hover Tooltips
+
+Hover tooltips with positioning and light/dark variants.
+
+```go
+ui.Tooltip().Content("Tooltip text").Position("top").Render(
+    ui.Button().Color(ui.Blue).Render("Hover me"),
+)
+```
+
+**Positions**: `"top"` (default), `"bottom"`, `"left"`, `"right"`
+
+**Variants**: `"dark"` (default), `"light"`
+
+**Methods**:
+- `.Content(text string)` - Set tooltip text
+- `.Position(position string)` - Set tooltip position
+- `.Variant(variant string)` - Set appearance style
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
+
+### Tabs - Tabbed Content
+
+Tabbed navigation for organizing content into switchable panels. Client-side state management.
+
+```go
+ui.Tabs().
+    Tab("Overview", "<div class='p-4'>Overview content</div>").
+    Tab("Features", "<div class='p-4'>Features content</div>").
+    Tab("Settings", "<div class='p-4'>Settings content</div>").
+    Active(0).                      // Set initially active tab (0-indexed)
+    Style("underline").             // "underline", "pills", or "boxed"
+    Render()
+```
+
+**Styles**: `"underline"` (default), `"pills"`, `"boxed"`
+
+**Methods**:
+- `.Tab(label string, content string)` - Add a tab panel
+- `.Active(index int)` - Set initially active tab
+- `.Style(style string)` - Set tab style
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
+
+### Accordion - Collapsible Sections
+
+Vertically stacked collapsible content sections with client-side toggle.
+
+```go
+// Single section open at a time
+ui.Accordion().
+    Item("Section 1", "Content for section 1").
+    Item("Section 2", "Content for section 2").
+    Item("Section 3", "Content for section 3").
+    Render()
+
+// Multiple sections can be open
+ui.Accordion().
+    Item("Section 1", "Content for section 1").
+    Item("Section 2", "Content for section 2").
+    Multiple(true).
+    Render()
+```
+
+**Methods**:
+- `.Item(title string, content string)` - Add collapsible section
+- `.Multiple(bool)` - Allow multiple sections open
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
+
+### Dropdown Menu - Context Menus
+
+Contextual action menus that appear on click with click-outside-to-close.
+
+```go
+ui.Dropdown().
+    Trigger(ui.Button().Color(ui.Blue).Render("Options ▼")).
+    Item("Edit", "alert('Edit')").
+    Item("Duplicate", "alert('Duplicate')").
+    Divider().
+    Item("Delete", "alert('Delete')").
+    Position("bottom-left").
+    Render()
+```
+
+**Positions**: `"bottom-left"`, `"bottom-right"`, `"top-left"`, `"top-right"`
+
+**Methods**:
+- `.Trigger(html string)` - Set the trigger button/element
+- `.Item(label string, action string)` - Add menu item (action is inline JS)
+- `.Divider()` - Add separator line
+- `.Position(position string)` - Set dropdown position
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
 
 ---
 
