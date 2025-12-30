@@ -193,9 +193,9 @@ func (c *Captcha3Component) Render(ctx *Context) string {
 			Div("flex flex-wrap gap-2 justify-center items-center m-4", Attr{ID: targetID})(),
 			Div("flex flex-wrap gap-3 justify-center items-center rounded-b-lg border bg-gray-200 shadow-sm p-4 min-h-[7.5rem] transition-colors duration-300", Attr{ID: tilesID})(),
 		),
-		Hidden(c.SessionFieldName(), "string", sessionID),
-		Hidden(c.ArrangementFieldName(), "string", scrambled, Attr{ID: arrangementFieldID}),
-		Hidden(c.ClientVerifiedFieldName(), "bool", "false", Attr{ID: clientFlagID}),
+		Hidden(c.SessionFieldName(), sessionID),
+		Hidden(c.ArrangementFieldName(), scrambled, Attr{ID: arrangementFieldID}),
+		Hidden(c.ClientVerifiedFieldName(), "false", Attr{ID: clientFlagID}),
 		Script(fmt.Sprintf(`
             setTimeout(function () {
                 var root = document.getElementById('%s');

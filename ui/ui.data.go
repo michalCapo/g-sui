@@ -561,7 +561,7 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 			),
 
 			Form("flex flex-col", ctx.Submit(collate.onSearch).Replace(collate.Target))(
-				Hidden("Search", "string", query.Search),
+				Hidden("Search", query.Search),
 
 				// Filters content
 				Div("flex flex-col gap-2 mt-2")(
@@ -575,16 +575,16 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 						return []string{
 							Iff(item.As == ZERO_DATE)(
 								Div("flex items-center")(
-									Hidden(position+".Field", "string", item.DB),
-									Hidden(position+".As", "uint", item.As),
+									Hidden(position+".Field", item.DB),
+									Hidden(position+".As", item.As),
 									ICheckbox(position+".Bool", query).Render(item.Text),
 								),
 							),
 
 							Iff(item.As == NOT_ZERO_DATE)(
 								Div("flex items-center")(
-									Hidden(position+".Field", "string", item.DB),
-									Hidden(position+".As", "uint", item.As),
+									Hidden(position+".Field", item.DB),
+									Hidden(position+".As", item.As),
 									ICheckbox(position+".Bool", query).Render(item.Text),
 								),
 							),
@@ -593,8 +593,8 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 								Div("")(
 									Label(nil).Class("text-xs mt-1 font-bold").Render(item.Text),
 									Div("grid grid-cols-2 gap-2")(
-										Hidden(position+".Field", "string", item.DB),
-										Hidden(position+".As", "uint", item.As),
+										Hidden(position+".Field", item.DB),
+										Hidden(position+".As", item.As),
 										IDate(position+".Dates.From", query).Class("").Render("From"),
 										IDate(position+".Dates.To", query).Class("").Render("To"),
 									),
@@ -603,17 +603,17 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 
 							Iff(item.As == BOOL)(
 								Div("flex items-center")(
-									Hidden(position+".Field", "string", item.DB),
-									Hidden(position+".As", "uint", item.As),
-									Hidden(position+".Condition", "string", item.Condition),
+									Hidden(position+".Field", item.DB),
+									Hidden(position+".As", item.As),
+									Hidden(position+".Condition", item.Condition),
 									ICheckbox(position+".Bool", query).Render(item.Text),
 								),
 							),
 
 							Iff(item.As == SELECT && len(item.Options) > 0)(
 								Div("")(
-									Hidden(position+".Field", "string", item.DB),
-									Hidden(position+".As", "uint", item.As),
+									Hidden(position+".Field", item.DB),
+									Hidden(position+".As", item.As),
 									ISelect(position+".Value", query).
 										Class("flex-1").
 										Options(item.Options).
@@ -674,34 +674,34 @@ func Searching[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 
 				return []string{
 					Iff(item.As == ZERO_DATE)(
-						Hidden(position+".Field", "string", item.DB),
-						Hidden(position+".As", "uint", item.As),
-						Hidden(position+".Value", "string", item.Value),
+						Hidden(position+".Field", item.DB),
+						Hidden(position+".As", item.As),
+						Hidden(position+".Value", item.Value),
 					),
 
 					Iff(item.As == NOT_ZERO_DATE)(
-						Hidden(position+".Field", "string", item.DB),
-						Hidden(position+".As", "uint", item.As),
-						Hidden(position+".Value", "string", item.Value),
+						Hidden(position+".Field", item.DB),
+						Hidden(position+".As", item.As),
+						Hidden(position+".Value", item.Value),
 					),
 
 					Iff(item.As == DATES)(
-						Hidden(position+".Field", "string", item.DB),
-						Hidden(position+".As", "uint", item.As),
-						Hidden(position+".Value", "string", item.Value),
+						Hidden(position+".Field", item.DB),
+						Hidden(position+".As", item.As),
+						Hidden(position+".Value", item.Value),
 					),
 
 					Iff(item.As == BOOL)(
-						Hidden(position+".Field", "string", item.DB),
-						Hidden(position+".As", "uint", item.As),
-						Hidden(position+".Condition", "string", item.Condition),
-						Hidden(position+".Value", "string", item.Value),
+						Hidden(position+".Field", item.DB),
+						Hidden(position+".As", item.As),
+						Hidden(position+".Condition", item.Condition),
+						Hidden(position+".Value", item.Value),
 					),
 
 					Iff(item.As == SELECT && len(item.Options) > 0)(
-						Hidden(position+".Field", "string", item.DB),
-						Hidden(position+".As", "uint", item.As),
-						Hidden(position+".Value", "string", item.Value),
+						Hidden(position+".Field", item.DB),
+						Hidden(position+".As", item.As),
+						Hidden(position+".Value", item.Value),
 					),
 				}
 			}),

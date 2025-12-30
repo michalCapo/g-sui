@@ -339,14 +339,14 @@ func (c *Captcha2Component) Render(ctx *Context) string {
 
 			IText(c.AnswerFieldName()).
 				Class("w-full").
-				ClassLabel("text-sm text-gray-700").
+				ClassLabel("text-gray-600").
 				ClassInput("w-full").
 				Autocomplete("off").
 				Required().
 				Render("Enter text from image"),
 		),
-		Hidden(c.SessionFieldName(), "string", sessionID),
-		Hidden(c.ClientVerifiedFieldName(), "bool", "false", Attr{ID: hiddenFieldID}),
+		Hidden(c.SessionFieldName(), sessionID),
+		Hidden(c.ClientVerifiedFieldName(), "false", Attr{ID: hiddenFieldID}),
 		Script(fmt.Sprintf(`
             setTimeout(function() {
                 var root = document.getElementById('%s');

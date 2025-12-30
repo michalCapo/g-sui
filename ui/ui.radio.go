@@ -89,7 +89,7 @@ func IRadio(name string, data ...any) *TInput {
 
 			Label(&c.target).
 				Required(c.required).
-				ClassLabel("hover:cursor-pointer").
+				ClassLabel("text-gray-600 hover:cursor-pointer").
 				Render(text),
 		)
 	}
@@ -116,7 +116,6 @@ type ARadio struct {
 	visible        bool
 	empty          bool
 	radioPosition  string
-	dataType       string
 }
 
 func (c *ARadio) Error(errs *error) *ARadio {
@@ -190,13 +189,7 @@ func (c *ARadio) Empty() *ARadio {
 	return c
 }
 
-func (c *ARadio) Options(options []AOption, dataType ...string) *ARadio {
-	c.dataType = "text"
-
-	if len(dataType) > 0 && dataType[0] != "" {
-		c.dataType = dataType[0]
-	}
-
+func (c *ARadio) Options(options []AOption) *ARadio {
 	c.options = options
 	return c
 }
@@ -208,11 +201,6 @@ func (c *ARadio) Form(form string) *ARadio {
 
 func (c *ARadio) RadioPosition(class string) *ARadio {
 	c.radioPosition = class
-	return c
-}
-
-func (c *ARadio) Type(dataType string) *ARadio {
-	c.dataType = dataType
 	return c
 }
 
@@ -235,20 +223,16 @@ func (c *ARadio) Render(text string) string {
 		}
 	}
 
-	valueType := "radio"
-	if c.dataType != "" {
-		valueType = c.dataType
-	}
-
 	return Div(c.class)(
 		If(text != "", func() string {
 			return Label(&c.target).
 				Class(c.classLabel).
+				ClassLabel("text-gray-600").
 				Required(c.required).
 				Render(text)
 		}),
 
-		Hidden(c.name, valueType, value, Attr{
+		Hidden(c.name, value, Attr{
 			ID:       c.target.ID,
 			OnChange: c.onchange,
 			Form:     c.target.Form,
@@ -360,7 +344,7 @@ func IRadioButtons(name string, data ...any) *ARadio {
 		target:         Target(),
 		visible:        true,
 		data:           temp,
-		classLabel:     "text-sm text-xs mt-3 font-bold relative",
+		classLabel:     "",
 		button:         "border cursor-pointer flex items-center justify-center text-center",
 		buttonActive:   "bg-gray-600 text-white border-black",
 		buttonInactive: "bg-white text-black hover:bg-gray-600 hover:text-white",
@@ -380,7 +364,7 @@ func IRadioDiv(name string, data ...any) *ARadio {
 		target:         Target(),
 		visible:        true,
 		data:           temp,
-		classLabel:     "text-sm text-xs mt-3 font-bold relative",
+		classLabel:     "",
 		button:         "cursor-pointer grid rounded-xl",
 		buttonActive:   "border border-blue-400",
 		buttonInactive: "",

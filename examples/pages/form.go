@@ -11,11 +11,13 @@ import (
 )
 
 type formData struct {
-	Title   string `validate:"required"`
-	Some    int    `validate:"required"`
-	Gender  string `validate:"required"`
-	Number  int    `validate:"required"`
-	Country uint   `validate:"required"`
+	Title      string `validate:"required"`
+	Some       int    `validate:"required"`
+	Gender     string `validate:"required"`
+	GenderNext string `validate:"required"`
+	Number     int    `validate:"required"`
+	Country    uint   `validate:"required"`
+	Agree      bool
 }
 
 func Submit(ctx *ui.Context) string {
@@ -46,7 +48,11 @@ func render(ctx *ui.Context, data *formData, err *error) string {
 	}
 
 	genders := []ui.AOption{{ID: "male", Value: "Male"}, {ID: "female", Value: "Female"}, {ID: "other", Value: "Other"}}
-	numbers := []ui.AOption{{ID: "1", Value: "1"}, {ID: "2", Value: "2"}, {ID: "3", Value: "3"}}
+	numbers := []ui.AOption{
+		{ID: "1", Value: ui.Div("h-10 py-2 px-4 rounded-md border border-gray-300")("1")},
+		{ID: "2", Value: ui.Div("h-10 py-2 px-4 rounded-md border border-gray-300")("2")},
+		{ID: "3", Value: ui.Div("h-10 py-2 px-4 rounded-md border border-gray-300")("3")},
+	}
 	countries := []ui.AOption{{ID: "1", Value: "USA"}, {ID: "2", Value: "Slovakia"}, {ID: "3", Value: "Germany"}, {ID: "4", Value: "Japan"}}
 
 	return ui.Div("max-w-5xl mx-auto flex flex-col gap-4", target)(
@@ -67,10 +73,13 @@ func render(ctx *ui.Context, data *formData, err *error) string {
 
 			form.Render(),
 			form.Text("Title", data).Required().Render("Title"),
-			form.RadioButtons("Gender", data).Options(genders).Render("Male"),
-			form.RadioButtons("Number", data).Options(numbers, "int").Render("Number"),
-			form.Select("Country", data).Options(countries, "uint").Render("Country"),
-			form.Hidden("Some", "int", 123),
+			form.Radio("GenderNext", data).Value("male").Render("Male"),
+			form.Radio("GenderNext", data).Value("female").Render("Female"),
+			form.Checkbox("Agree", data).Render("I agree"),
+			form.RadioButtons("Gender", data).Options(genders).Render("Gender"),
+			form.Select("Country", data).Options(countries).Render("Country"),
+			form.Hidden("Some", 123),
+			form.RadioDiv("Number", data).Options(numbers).Render("Number"),
 			form.Button().Color(ui.Blue).Submit().Render("Submit"),
 		),
 	)

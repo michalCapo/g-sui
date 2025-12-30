@@ -70,8 +70,8 @@ func (f *FormInstance) Email(name string, data ...any) *TInput {
 	return IEmail(name, data...).Form(f.FormId)
 }
 
-func (f *FormInstance) Hidden(name string, typ string, value any, attr ...Attr) string {
-	attr = append(attr, Attr{Name: name, Type: typ, Value: fmt.Sprintf("%v", value), Form: f.FormId})
+func (f *FormInstance) Hidden(name string, value any, attr ...Attr) string {
+	attr = append(attr, Attr{Name: name, Type: "hidden", Value: fmt.Sprintf("%v", value), Form: f.FormId})
 	return Input("hidden", attr...)
 }
 

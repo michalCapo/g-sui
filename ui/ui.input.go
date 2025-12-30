@@ -232,6 +232,7 @@ func IText(name string, data ...any) *TInput {
 		return Div(c.class)(
 			Label(&c.target).
 				Class(c.classLabel).
+				ClassLabel("text-gray-600").
 				Required(c.required).
 				Render(text),
 
@@ -328,6 +329,7 @@ func IArea(name string, data ...any) *TInput {
 		return Div(c.class)(
 			Label(&c.target).
 				Class(c.classLabel).
+				ClassLabel("text-gray-600").
 				Required(c.required).
 				Render(text),
 
@@ -399,6 +401,7 @@ func IPassword(name string, data ...any) *TInput {
 		return Div("")(
 			Label(&c.target).
 				Class(c.classLabel).
+				ClassLabel("text-gray-600").
 				Required(c.required).
 				Render(text),
 
@@ -511,6 +514,7 @@ func IDate(name string, data ...any) *TInput {
 		return Div(Classes(c.class, "min-w-0"))(
 			Label(&c.target).
 				Class(c.classLabel).
+				ClassLabel("text-gray-600").
 				Required(c.required).
 				Render(text),
 
@@ -594,6 +598,7 @@ func ITime(name string, data ...any) *TInput {
 		return Div("")(
 			Label(&c.target).
 				Class(c.classLabel).
+				ClassLabel("text-gray-600").
 				Required(c.required).
 				Render(text),
 
@@ -673,6 +678,7 @@ func IDateTime(name string, data ...any) *TInput {
 		return Div("")(
 			Label(&c.target).
 				Class(c.classLabel).
+				ClassLabel("text-gray-600").
 				Required(c.required).
 				Render(text),
 
@@ -756,6 +762,7 @@ func INumber(name string, data ...any) *TInput {
 		return Div(c.class)(
 			Label(&c.target).
 				Class(c.classLabel).
+				ClassLabel("text-gray-600").
 				Required(c.required).
 				Render(text),
 
@@ -791,8 +798,8 @@ func INumber(name string, data ...any) *TInput {
 	return c
 }
 
-var Hidden = func(name string, typ string, value any, attr ...Attr) string {
-	return Input("hidden", append(attr, Attr{Name: name, Type: typ, Value: fmt.Sprintf("%v", value)})...)
+var Hidden = func(name string, value any, attr ...Attr) string {
+	return Input("hidden", append(attr, Attr{Name: name, Type: "hidden", Value: fmt.Sprintf("%v", value)})...)
 }
 
 // func IValue(name string, data ...any) *TInput {
@@ -870,6 +877,7 @@ func IValue(attr ...Attr) *TInput {
 		return Div(c.class)(
 			Label(&c.target).
 				Class(c.classLabel).
+				ClassLabel("text-gray-600").
 				Required(c.required).
 				Render(text),
 

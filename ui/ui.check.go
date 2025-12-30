@@ -63,6 +63,7 @@ func ICheckbox(name string, data ...any) *TInput {
 					Required: c.required,
 					Disabled: c.disabled,
 					OnClick:  c.onclick,
+					Form:     c.form,
 					OnChange: Trim(fmt.Sprintf(`
 						const el = document.getElementById('%s');
 
@@ -85,7 +86,7 @@ func ICheckbox(name string, data ...any) *TInput {
 
 			Label(&c.target).
 				Required(c.required).
-				ClassLabel("cursor-pointer select-none").
+				ClassLabel("text-gray-600 cursor-pointer select-none").
 				Render(text),
 		)
 	}

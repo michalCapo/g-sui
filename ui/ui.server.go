@@ -40,8 +40,8 @@ var (
 
 type BodyItem struct {
 	Name  string `json:"name"`
-	Type  string `json:"type"`
 	Value string `json:"value"`
+	Type  string `json:"type"`
 }
 
 type CSS struct {
@@ -276,7 +276,7 @@ func (ctx *Context) Body(output any) error {
 			}
 
 			// Try to set the value based on the field type
-			if err := setFieldValue(structFieldValue, value, ""); err != nil {
+			if err := setFieldValue(structFieldValue, value); err != nil {
 				fmt.Printf("Warning: Error setting field %s: %v\n", name, err)
 			}
 		}
@@ -323,7 +323,7 @@ func (ctx *Context) Body(output any) error {
 			continue
 		}
 
-		if err := setFieldValue(structFieldValue, item.Value, item.Type); err != nil {
+		if err := setFieldValue(structFieldValue, item.Value); err != nil {
 			fmt.Printf("Warning: Error setting field %s at index %d: %v\n", item.Name, i, err)
 		}
 	}
@@ -331,111 +331,169 @@ func (ctx *Context) Body(output any) error {
 	return nil
 }
 
-// setFieldValue sets a struct field value based on the value string and optional type hint
-func setFieldValue(structFieldValue *reflect.Value, value string, typeHint string) error {
-	val := reflect.ValueOf(value)
+// parseTimeValue tries multiple time formats to parse a string value into time.Time
+func parseTimeValue(value string) (time.Time, error) {
+	formats := []string{
+		"2006-01-02",                    // HTML date input
+		"2006-01-02T15:04",              // HTML datetime-local
+		"15:04",                         // HTML time input
+		"2006-01-02 15:04:05 -0700 UTC", // Go full timestamp
+		time.RFC3339,                    // ISO 8601
+		time.RFC3339Nano,                // ISO 8601 with nanoseconds
+	}
+	for _, fmt := range formats {
+		if t, err := time.Parse(fmt, value); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot parse time: %s", value)
+}
 
-	if structFieldValue.Type() == val.Type() {
-		structFieldValue.Set(val)
+// setFieldValue sets a struct field value by inferring the type from the Go struct field
+func setFieldValue(structFieldValue *reflect.Value, value string) error {
+	fieldType := structFieldValue.Type()
+	fieldKind := structFieldValue.Kind()
+
+	// Direct string assignment
+	if fieldKind == reflect.String {
+		structFieldValue.SetString(value)
 		return nil
 	}
 
-	// Infer type from struct field if no type hint provided
-	if typeHint == "" {
-		switch structFieldValue.Kind() {
-		case reflect.String:
-			structFieldValue.SetString(value)
-			return nil
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			typeHint = "int64"
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			typeHint = "uint"
-		case reflect.Float32, reflect.Float64:
-			typeHint = "float64"
-		case reflect.Bool:
-			typeHint = "bool"
-		}
+	// Handle type aliases (e.g., type MyString string, type Skeleton string)
+	if fieldType == reflect.TypeFor[Skeleton]() {
+		structFieldValue.Set(reflect.ValueOf(Skeleton(value)))
+		return nil
 	}
 
-	switch typeHint {
-	case "Skeleton":
-		val = reflect.ValueOf(Skeleton(value))
-
-	case "date":
-		if len(value) > 10 {
-			return fmt.Errorf("date value too long")
-		}
-		t, err := time.Parse("2006-01-02", value)
+	// Handle gorm.DeletedAt specially
+	if fieldType == reflect.TypeFor[gorm.DeletedAt]() {
+		t, err := parseTimeValue(value)
 		if err != nil {
-			return fmt.Errorf("error parsing date: %w", err)
+			return fmt.Errorf("error parsing date for DeletedAt: %w", err)
 		}
-		if structFieldValue.Type() == reflect.TypeFor[gorm.DeletedAt]() {
-			val = reflect.ValueOf(gorm.DeletedAt{Time: t, Valid: true})
-		} else {
-			val = reflect.ValueOf(t)
-		}
+		structFieldValue.Set(reflect.ValueOf(gorm.DeletedAt{Time: t, Valid: true}))
+		return nil
+	}
 
-	case "bool", "checkbox":
-		if value != "true" && value != "false" {
-			return fmt.Errorf("invalid boolean value: %s", value)
-		}
-		val = reflect.ValueOf(value == "true")
-
-	case "radio", "string":
-		val = reflect.ValueOf(value)
-
-	case "time":
-		if len(value) > 5 {
-			return fmt.Errorf("time value too long")
-		}
-		t, err := time.Parse("15:04", value)
+	// Handle time.Time
+	if fieldType == reflect.TypeFor[time.Time]() {
+		t, err := parseTimeValue(value)
 		if err != nil {
 			return fmt.Errorf("error parsing time: %w", err)
 		}
-		val = reflect.ValueOf(t)
-
-	case "Time":
-		if len(value) > 50 {
-			return fmt.Errorf("timestamp value too long")
-		}
-		t, err := time.Parse("2006-01-02 15:04:05 -0700 UTC", value)
-		if err != nil {
-			return fmt.Errorf("error parsing timestamp: %w", err)
-		}
-		val = reflect.ValueOf(t)
-
-	case "uint", "int", "int64", "number", "decimal", "float64":
-		parsedVal, err := validateNumericInput(value, typeHint)
-		if err != nil {
-			return fmt.Errorf("invalid numeric value: %w", err)
-		}
-		val = reflect.ValueOf(parsedVal)
-
-	case "datetime-local":
-		if len(value) > 16 {
-			return fmt.Errorf("datetime value too long")
-		}
-		t, err := time.Parse("2006-01-02T15:04", value)
-		if err != nil {
-			return fmt.Errorf("error parsing datetime-local: %w", err)
-		}
-		val = reflect.ValueOf(t)
-
-	case "", "Model":
+		structFieldValue.Set(reflect.ValueOf(t))
 		return nil
-
-	default:
-		return fmt.Errorf("unknown field type: %s", typeHint)
 	}
 
-	// Safe reflection assignment with error handling
-	if val.IsValid() && val.Type().ConvertibleTo(structFieldValue.Type()) {
-		structFieldValue.Set(val.Convert(structFieldValue.Type()))
-	} else if val.IsValid() {
-		return fmt.Errorf("cannot convert %s to %s", val.Type(), structFieldValue.Type())
+	// Handle boolean types
+	if fieldKind == reflect.Bool {
+		if value != "true" && value != "false" {
+			return fmt.Errorf("invalid boolean value: %s (must be 'true' or 'false')", value)
+		}
+		structFieldValue.SetBool(value == "true")
+		return nil
 	}
 
-	return nil
+	// Handle signed integers
+	if fieldKind >= reflect.Int && fieldKind <= reflect.Int64 {
+		cleanedValue := strings.ReplaceAll(value, "_", "")
+		if len(cleanedValue) > 20 {
+			return fmt.Errorf("integer value too long: %d characters", len(cleanedValue))
+		}
+		n, err := strconv.ParseInt(cleanedValue, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid integer value: %w", err)
+		}
+		// Check bounds for specific int types
+		switch fieldKind {
+		case reflect.Int8:
+			if n < -128 || n > 127 {
+				return fmt.Errorf("value %d out of range for int8", n)
+			}
+		case reflect.Int16:
+			if n < -32768 || n > 32767 {
+				return fmt.Errorf("value %d out of range for int16", n)
+			}
+		case reflect.Int32:
+			if n < -2147483648 || n > 2147483647 {
+				return fmt.Errorf("value %d out of range for int32", n)
+			}
+		}
+		structFieldValue.SetInt(n)
+		return nil
+	}
+
+	// Handle unsigned integers
+	if fieldKind >= reflect.Uint && fieldKind <= reflect.Uint64 {
+		cleanedValue := strings.ReplaceAll(value, "_", "")
+		if len(cleanedValue) > 20 {
+			return fmt.Errorf("unsigned integer value too long: %d characters", len(cleanedValue))
+		}
+		n, err := strconv.ParseUint(cleanedValue, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid unsigned integer value: %w", err)
+		}
+		// Check bounds for specific uint types
+		switch fieldKind {
+		case reflect.Uint8:
+			if n > 255 {
+				return fmt.Errorf("value %d out of range for uint8", n)
+			}
+		case reflect.Uint16:
+			if n > 65535 {
+				return fmt.Errorf("value %d out of range for uint16", n)
+			}
+		case reflect.Uint32:
+			if n > 4294967295 {
+				return fmt.Errorf("value %d out of range for uint32", n)
+			}
+		}
+		structFieldValue.SetUint(n)
+		return nil
+	}
+
+	// Handle floating point numbers
+	if fieldKind == reflect.Float32 || fieldKind == reflect.Float64 {
+		cleanedValue := strings.ReplaceAll(value, "_", "")
+		if len(cleanedValue) > 50 {
+			return fmt.Errorf("float value too long: %d characters", len(cleanedValue))
+		}
+		f, err := strconv.ParseFloat(cleanedValue, 64)
+		if err != nil {
+			return fmt.Errorf("invalid float value: %w", err)
+		}
+		// Check bounds for float32
+		if fieldKind == reflect.Float32 {
+			if f > 3.40282346638528859811704183484516925440e+38 || f < -3.40282346638528859811704183484516925440e+38 {
+				return fmt.Errorf("value %g out of range for float32", f)
+			}
+		}
+		structFieldValue.SetFloat(f)
+		return nil
+	}
+
+	// Handle pointer types
+	if fieldKind == reflect.Ptr {
+		elemType := fieldType.Elem()
+		// Create a new value of the element type
+		elemValue := reflect.New(elemType).Elem()
+		// Recursively set the element value
+		if err := setFieldValue(&elemValue, value); err != nil {
+			return err
+		}
+		structFieldValue.Set(elemValue.Addr())
+		return nil
+	}
+
+	// Try type conversion for other types (e.g., type aliases)
+	val := reflect.ValueOf(value)
+	if val.Type().ConvertibleTo(fieldType) {
+		structFieldValue.Set(val.Convert(fieldType))
+		return nil
+	}
+
+	return fmt.Errorf("cannot convert string to %s", fieldType)
 }
 
 func (ctx *Context) Action(uid string, action Callable) **Callable {
@@ -2175,6 +2233,11 @@ var __submit = Trim(`
 				
 				if (name == null) return;
 
+				// For radio buttons, only include the checked one
+				if (type === "radio" && !item.checked) {
+					return;
+				}
+
 				if (type === "file") {
 					if (item.files && item.files.length > 0) {
 						formData.append(name, item.files[0]);
@@ -2197,6 +2260,11 @@ var __submit = Trim(`
 				
 				if (type === 'checkbox') {
 					value = String(item.checked)
+				}
+
+				// For radio buttons, only include the checked one
+				if (type === 'radio' && !item.checked) {
+					return;
 				}
 
 				if(name != null) {
