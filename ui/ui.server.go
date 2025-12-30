@@ -311,6 +311,7 @@ func (ctx *Context) Body(output any) error {
 		return fmt.Errorf("input validation failed: %w", err)
 	}
 
+	var firstErr error
 	for i, item := range data {
 		structFieldValue, err := PathValue(output, item.Name)
 		if err != nil {
@@ -325,10 +326,13 @@ func (ctx *Context) Body(output any) error {
 
 		if err := setFieldValue(structFieldValue, item.Value); err != nil {
 			fmt.Printf("Warning: Error setting field %s at index %d: %v\n", item.Name, i, err)
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 
-	return nil
+	return firstErr
 }
 
 // parseTimeValue tries multiple time formats to parse a string value into time.Time
@@ -337,7 +341,8 @@ func parseTimeValue(value string) (time.Time, error) {
 		"2006-01-02",                    // HTML date input
 		"2006-01-02T15:04",              // HTML datetime-local
 		"15:04",                         // HTML time input
-		"2006-01-02 15:04:05 -0700 UTC", // Go full timestamp
+		"2006-01-02 15:04:05 -0700 MST", // Go full timestamp with timezone abbreviation
+		"2006-01-02 15:04:05 -0700 UTC", // Go full timestamp with UTC
 		time.RFC3339,                    // ISO 8601
 		time.RFC3339Nano,                // ISO 8601 with nanoseconds
 	}

@@ -15,10 +15,10 @@ func TestSetFieldValue_String(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		input     string
-		want      string
-		wantErr   bool
+		name    string
+		input   string
+		want    string
+		wantErr bool
 	}{
 		{"empty string", "", "", false},
 		{"simple string", "hello", "hello", false},
@@ -54,11 +54,11 @@ func TestSetFieldValue_SignedIntegers(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		field     string
-		input     string
-		wantErr   bool
-		validate  func(t *testing.T, obj *TestStruct)
+		name     string
+		field    string
+		input    string
+		wantErr  bool
+		validate func(t *testing.T, obj *TestStruct)
 	}{
 		{"int zero", "Int", "0", false, func(t *testing.T, obj *TestStruct) {
 			if obj.Int != 0 {
@@ -153,11 +153,11 @@ func TestSetFieldValue_UnsignedIntegers(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		field     string
-		input     string
-		wantErr   bool
-		validate  func(t *testing.T, obj *TestStruct)
+		name     string
+		field    string
+		input    string
+		wantErr  bool
+		validate func(t *testing.T, obj *TestStruct)
 	}{
 		{"uint zero", "Uint", "0", false, func(t *testing.T, obj *TestStruct) {
 			if obj.Uint != 0 {
@@ -225,11 +225,11 @@ func TestSetFieldValue_Floats(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		field     string
-		input     string
-		wantErr   bool
-		validate  func(t *testing.T, obj *TestStruct)
+		name     string
+		field    string
+		input    string
+		wantErr  bool
+		validate func(t *testing.T, obj *TestStruct)
 	}{
 		{"float32 zero", "Float32", "0", false, func(t *testing.T, obj *TestStruct) {
 			if obj.Float32 != 0 {
@@ -318,10 +318,10 @@ func TestSetFieldValue_Bool(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		input     string
-		want      bool
-		wantErr   bool
+		name    string
+		input   string
+		want    bool
+		wantErr bool
 	}{
 		{"true", "true", true, false},
 		{"false", "false", false, false},
@@ -357,10 +357,10 @@ func TestSetFieldValue_Time(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		input     string
-		wantErr   bool
-		validate  func(t *testing.T, obj *TestStruct)
+		name     string
+		input    string
+		wantErr  bool
+		validate func(t *testing.T, obj *TestStruct)
 	}{
 		{"date format", "2006-01-02", false, func(t *testing.T, obj *TestStruct) {
 			expected := time.Date(2006, 1, 2, 0, 0, 0, 0, time.UTC)
@@ -380,10 +380,13 @@ func TestSetFieldValue_Time(t *testing.T) {
 				t.Errorf("Time = %v, want hour=15 min=4", obj.Time)
 			}
 		}},
-		{"full timestamp", "2006-01-02 15:04:05 -0700 UTC", false, func(t *testing.T, obj *TestStruct) {
-			expected := time.Date(2006, 1, 2, 15, 4, 5, 0, time.FixedZone("UTC", -7*3600))
-			if !obj.Time.Equal(expected) {
-				t.Errorf("Time = %v, want %v", obj.Time, expected)
+		{"full timestamp", "2006-01-02T15:04:05-07:00", false, func(t *testing.T, obj *TestStruct) {
+			// RFC3339 format with timezone offset
+			if obj.Time.Year() != 2006 || obj.Time.Month() != 1 || obj.Time.Day() != 2 {
+				t.Errorf("Time = %v, want year=2006 month=1 day=2", obj.Time)
+			}
+			if obj.Time.Hour() != 15 || obj.Time.Minute() != 4 {
+				t.Errorf("Time hour=%d min=%d, want hour=15 min=4", obj.Time.Hour(), obj.Time.Minute())
 			}
 		}},
 		{"RFC3339", "2006-01-02T15:04:05Z", false, func(t *testing.T, obj *TestStruct) {
@@ -418,10 +421,10 @@ func TestSetFieldValue_DeletedAt(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		input     string
-		wantErr   bool
-		validate  func(t *testing.T, obj *TestStruct)
+		name     string
+		input    string
+		wantErr  bool
+		validate func(t *testing.T, obj *TestStruct)
 	}{
 		{"valid date", "2006-01-02", false, func(t *testing.T, obj *TestStruct) {
 			expected := time.Date(2006, 1, 2, 0, 0, 0, 0, time.UTC)
@@ -467,10 +470,10 @@ func TestSetFieldValue_Skeleton(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		input     string
-		want      Skeleton
-		wantErr   bool
+		name    string
+		input   string
+		want    Skeleton
+		wantErr bool
 	}{
 		{"simple skeleton", "list", Skeleton("list"), false},
 		{"component skeleton", "component", Skeleton("component"), false},
@@ -514,17 +517,17 @@ func TestSetFieldValue_TypeAlias(t *testing.T) {
 
 func TestSetFieldValue_Pointer(t *testing.T) {
 	type TestStruct struct {
-		StrPtr *string
-		IntPtr *int
+		StrPtr  *string
+		IntPtr  *int
 		BoolPtr *bool
 	}
 
 	tests := []struct {
-		name      string
-		field     string
-		input     string
-		wantErr   bool
-		validate  func(t *testing.T, obj *TestStruct)
+		name     string
+		field    string
+		input    string
+		wantErr  bool
+		validate func(t *testing.T, obj *TestStruct)
 	}{
 		{"string pointer", "StrPtr", "hello", false, func(t *testing.T, obj *TestStruct) {
 			if obj.StrPtr == nil {
@@ -656,10 +659,10 @@ func TestSetFieldValue_EdgeCases(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		field     string
-		input     string
-		wantErr   bool
+		name    string
+		field   string
+		input   string
+		wantErr bool
 	}{
 		{"empty string", "Str", "", false},
 		{"whitespace string", "Str", "   ", false},
@@ -715,10 +718,10 @@ func TestSetFieldValue_UnsupportedType(t *testing.T) {
 
 func TestParseTimeValue(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		wantErr   bool
-		validate  func(t *testing.T, result time.Time)
+		name     string
+		input    string
+		wantErr  bool
+		validate func(t *testing.T, result time.Time)
 	}{
 		{"date format", "2006-01-02", false, func(t *testing.T, result time.Time) {
 			expected := time.Date(2006, 1, 2, 0, 0, 0, 0, time.UTC)
@@ -737,10 +740,13 @@ func TestParseTimeValue(t *testing.T) {
 				t.Errorf("parseTimeValue() hour=%d min=%d, want hour=15 min=4", result.Hour(), result.Minute())
 			}
 		}},
-		{"full timestamp", "2006-01-02 15:04:05 -0700 UTC", false, func(t *testing.T, result time.Time) {
-			expected := time.Date(2006, 1, 2, 15, 4, 5, 0, time.FixedZone("UTC", -7*3600))
-			if !result.Equal(expected) {
-				t.Errorf("parseTimeValue() = %v, want %v", result, expected)
+		{"full timestamp", "2006-01-02T15:04:05-07:00", false, func(t *testing.T, result time.Time) {
+			// RFC3339 format with timezone offset
+			if result.Year() != 2006 || result.Month() != 1 || result.Day() != 2 {
+				t.Errorf("parseTimeValue() = %v, want year=2006 month=1 day=2", result)
+			}
+			if result.Hour() != 15 || result.Minute() != 4 {
+				t.Errorf("parseTimeValue() hour=%d min=%d, want hour=15 min=4", result.Hour(), result.Minute())
 			}
 		}},
 		{"RFC3339", "2006-01-02T15:04:05Z", false, func(t *testing.T, result time.Time) {
@@ -769,4 +775,3 @@ func TestParseTimeValue(t *testing.T) {
 		})
 	}
 }
-

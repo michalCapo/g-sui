@@ -205,6 +205,10 @@ func (c *ARadio) RadioPosition(class string) *ARadio {
 }
 
 func (c *ARadio) Render(text string) string {
+	if !c.visible {
+		return ""
+	}
+
 	value := ""
 
 	if c.data != nil && c.data != "" {

@@ -227,6 +227,11 @@ func IText(name string, data ...any) *TInput {
 			}
 		}
 
+		// Use c.value as fallback if value is still empty
+		if value == "" && c.value != "" {
+			value = c.value
+		}
+
 		// if c.error != nil { c.class = Classes(c.class, "border-4 border-red-600") }
 
 		return Div(c.class)(
@@ -250,6 +255,7 @@ func IText(name string, data ...any) *TInput {
 					OnClick:      c.onclick,
 					Required:     c.required,
 					Disabled:     c.disabled,
+					Readonly:     c.readonly,
 					Value:        value,
 					Pattern:      c.pattern,
 					Placeholder:  c.placeholder,
@@ -742,12 +748,45 @@ func INumber(name string, data ...any) *TInput {
 
 			tmp, err := PathValue(c.data, c.name)
 			if err == nil {
-				// value = fmt.Sprintf("%0.2f", tmp.Interface())
-				value = fmt.Sprintf(c.valueFormat, tmp.Interface())
+				// Convert to float64 if format requires it (e.g., %.2f)
+				val := tmp.Interface()
+				if c.valueFormat != "%v" && c.valueFormat != "" {
+					// Try to convert to float64 for numeric formatting
+					switch v := val.(type) {
+					case int:
+						val = float64(v)
+					case int8:
+						val = float64(v)
+					case int16:
+						val = float64(v)
+					case int32:
+						val = float64(v)
+					case int64:
+						val = float64(v)
+					case uint:
+						val = float64(v)
+					case uint8:
+						val = float64(v)
+					case uint16:
+						val = float64(v)
+					case uint32:
+						val = float64(v)
+					case uint64:
+						val = float64(v)
+					case float32:
+						val = float64(v)
+					}
+				}
+				value = fmt.Sprintf(c.valueFormat, val)
 			}
 		}
 
-		if c.numbers.Min != 0 {
+		// Check if Numbers() was called by checking if max or step are set
+		// (min can be 0, so we can't rely on it alone)
+		hasNumbers := c.numbers.Max != 0 || c.numbers.Step != 0 || c.numbers.Min != 0
+
+		if hasNumbers {
+			// If Numbers() was called, render min even if it's 0
 			min = fmt.Sprintf("%v", c.numbers.Min)
 		}
 

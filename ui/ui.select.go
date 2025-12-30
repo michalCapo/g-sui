@@ -101,6 +101,10 @@ func (c *ASelect) Form(form string) *ASelect {
 }
 
 func (c *ASelect) Render(text string) string {
+	if !c.visible {
+		return ""
+	}
+
 	value := ""
 
 	if c.data != nil {

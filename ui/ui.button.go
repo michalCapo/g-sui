@@ -121,10 +121,11 @@ func (b *button) Render(text string) string {
 		class,
 		append(b.attr,
 			Attr{
-				ID:      b.target.ID,
-				Type:    b.as,
-				OnClick: b.onclick,
-				Form:    b.form,
+				ID:       b.target.ID,
+				Type:     b.as,
+				OnClick:  b.onclick,
+				Form:     b.form,
+				Disabled: b.disabled,
 			})...,
 	)(text)
 }
