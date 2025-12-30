@@ -519,6 +519,13 @@ ui.IRadio("Gender", &data).Value("male").Render("Male")
 ui.IRadio("Gender", &data).Value("female").Render("Female")
 // OR radio button group:
 ui.IRadioButtons("Gender", &data).Options(genderOptions).Render("Gender")
+
+// RadioDiv - Card-based radio selection (custom HTML options)
+cardOptions := []ui.AOption{
+    {ID: "1", Value: ui.Div("p-4 border rounded")("Card 1")},
+    {ID: "2", Value: ui.Div("p-4 border rounded")("Card 2")},
+}
+ui.IRadioDiv("Plan", &data).Options(cardOptions).Render("Choose a plan")
 ```
 
 ### Common Input Methods
@@ -677,6 +684,7 @@ func FormContent(ctx *ui.Context) string {
 | `.Checkbox(name, data...)` | `*TInput` | Checkbox |
 | `.Radio(name, data...)` | `*TInput` | Radio button |
 | `.RadioButtons(name, data...)` | `*ARadio` | Radio button group |
+| `.RadioDiv(name, data...)` | `*ARadio` | Card-based radio (custom HTML) |
 | `.Button()` | `*button` | Submit button |
 | `.Render()` | `string` | Hidden form element |
 
@@ -1720,6 +1728,7 @@ import (
 | `ui.ICheckbox()` | checkbox |
 | `ui.IRadio()` | radio |
 | `ui.IRadioButtons()` | radio group |
+| `ui.IRadioDiv()` | card-based radio (custom HTML) |
 
 ### Skeleton Types
 | Type | Description |
@@ -2032,7 +2041,19 @@ ui.IRadio("Gender", &data).
 ui.IRadioButtons("Gender", &data).
     Options(options).
     Render("Gender")
+
+// RadioDiv - Card-based selection with custom HTML
+cardOptions := []ui.AOption{
+    {ID: "1", Value: ui.Div("h-20 w-full bg-blue-100 flex items-center justify-center")("Option 1")},
+    {ID: "2", Value: ui.Div("h-20 w-full bg-green-100 flex items-center justify-center")("Option 2")},
+    {ID: "3", Value: ui.Div("h-20 w-full bg-purple-100 flex items-center justify-center")("Option 3")},
+}
+ui.IRadioDiv("Plan", &data).
+    Options(cardOptions).
+    Render("Choose a plan")
 ```
+
+**RadioDiv** renders radio buttons as selectable cards with custom HTML content. Each option's `Value` can be any HTML string, allowing rich visual selections like pricing cards, color swatches, or image thumbnails.
 
 ### Select Component
 
@@ -2162,6 +2183,7 @@ func FormContent(ctx *ui.Context) string {
 | `.Checkbox(name, data...)` | `*TInput` | Checkbox |
 | `.Radio(name, data...)` | `*TInput` | Radio button |
 | `.RadioButtons(name, data...)` | `*ARadio` | Radio button group |
+| `.RadioDiv(name, data...)` | `*ARadio` | Card-based radio (custom HTML) |
 | `.Button()` | `*button` | Submit button |
 | `.Render()` | `string` | Hidden form element |
 

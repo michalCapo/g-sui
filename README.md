@@ -21,7 +21,7 @@ See documentation at [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) for a comp
 - Deferred fragments with skeletons via WebSocket patches (`ctx.Patch` + skeleton helpers)
 - Query/Collate helper for data UIs: search, sort, filters, paging, and XLS export (works with `gorm`)
 - Form helpers with validation (uses `go-playground/validator`)
-- A small set of UI inputs (text, email, phone, password, number, date/time/datetime, select, checkbox, radio, textarea), buttons, tables, icons
+- A small set of UI inputs (text, email, phone, password, number, date/time/datetime, select, checkbox, radio, radio cards, textarea), buttons, tables, icons
 - Toast messages: `Success`, `Error`, `Info`, and an error toast with a Reload button
 - Built-in live status via WebSocket (`/__ws`) with an offline banner, automatic reconnect, and auto-reload on reconnect
 - Built-in dark mode with a tiny theme switcher (`ui.ThemeSwitcher`) cycling System → Light → Dark
@@ -94,7 +94,7 @@ go run examples/main.go
 
 The examples include:
 - Showcase form with validations
-- Inputs: text/email/phone/password/number/date/time/datetime/textarea/select/checkbox/radio
+- Inputs: text/email/phone/password/number/date/time/datetime/textarea/select/checkbox/radio/radio cards
 - Buttons and color variants (solid/outline)
 - Tables with simple helpers (including colspan and empty cells)
 - Icons helpers and Hello demo (success/info/error/crash)
@@ -275,7 +275,7 @@ Notes:
 ## Components (selection)
 
 - Buttons: `ui.Button().Color(...).Size(...).Class(...).Href(...).Submit().Reset().Click(...)`
-- Inputs: `ui.IText`, `ui.IEmail`, `ui.IPhone`, `ui.IPassword`, `ui.INumber`, `ui.IDate`, `ui.ITime`, `ui.IDateTime`, `ui.IArea`, `ui.ISelect`, `ui.ICheckbox`, `ui.IRadio`, `ui.IRadioButtons`
+- Inputs: `ui.IText`, `ui.IEmail`, `ui.IPhone`, `ui.IPassword`, `ui.INumber`, `ui.IDate`, `ui.ITime`, `ui.IDateTime`, `ui.IArea`, `ui.ISelect`, `ui.ICheckbox`, `ui.IRadio`, `ui.IRadioButtons`, `ui.IRadioDiv`
 - Table: `ui.SimpleTable(cols, classes...)` with `Field`, `Empty`, `Class`, `Attr` (supports `colspan`)
 - Icons: `ui.Icon`, `ui.Icon2`, `ui.Icon3`, `ui.Icon4`
 - Markdown: `ui.Markdown(classes...)(content)`
