@@ -157,6 +157,44 @@ type TQuery struct {
 	Filter []TField
 }
 
+// QueryHiddenFields generates hidden form fields for preserving query state
+// including all filter values. This ensures filter state persists across form submissions.
+func QueryHiddenFields(query *TQuery) string {
+	var fields []string
+
+	fields = append(fields, Hidden("Limit", query.Limit))
+	fields = append(fields, Hidden("Offset", query.Offset))
+	fields = append(fields, Hidden("Order", query.Order))
+	fields = append(fields, Hidden("Search", query.Search))
+	fields = append(fields, FilterHiddenFields(query))
+
+	return strings.Join(fields, "")
+}
+
+// FilterHiddenFields generates hidden form fields for filter state only.
+// Use this when other query fields (Search, Order, etc.) are handled separately.
+func FilterHiddenFields(query *TQuery) string {
+	var fields []string
+
+	for i, filter := range query.Filter {
+		position := fmt.Sprintf("Filter[%d]", i)
+		fields = append(fields, Hidden(position+".DB", filter.DB))
+		fields = append(fields, Hidden(position+".Field", filter.Field))
+		fields = append(fields, Hidden(position+".As", filter.As))
+		fields = append(fields, Hidden(position+".Condition", filter.Condition))
+		fields = append(fields, Hidden(position+".Value", filter.Value))
+		fields = append(fields, Hidden(position+".Bool", filter.Bool))
+		if !filter.Dates.From.IsZero() {
+			fields = append(fields, Hidden(position+".Dates.From", filter.Dates.From.Format("2006-01-02")))
+		}
+		if !filter.Dates.To.IsZero() {
+			fields = append(fields, Hidden(position+".Dates.To", filter.Dates.To.Format("2006-01-02")))
+		}
+	}
+
+	return strings.Join(fields, "")
+}
+
 type TCollateResult[T any] struct {
 	Total    int64
 	Filtered int64
@@ -276,12 +314,24 @@ func (collate *collate[T]) onXLS(ctx *Context) string {
 func (collate *collate[T]) onResize(ctx *Context) string {
 	query := makeQuery(collate.Init)
 
-	err := ctx.Body(query)
+	body := &TQuery{}
+	err := ctx.Body(body)
 	if err != nil {
 		log.Printf("Error: %v", err)
 	}
 
-	query.Limit *= 2
+	// Preserve all state from the request body
+	query.Offset = body.Offset
+	query.Order = body.Order
+	query.Filter = body.Filter
+	query.Search = body.Search
+
+	// Double the limit, with fallback to init value
+	if body.Limit > 0 {
+		query.Limit = body.Limit * 2
+	} else {
+		query.Limit = collate.Init.Limit * 2
+	}
 
 	return collate.ui(ctx, query)
 }
@@ -295,7 +345,17 @@ func (collate *collate[T]) onSort(ctx *Context) string {
 		log.Printf("Error: %v", err)
 	}
 
+	// Preserve all state from the request body
+	query.Limit = body.Limit
+	query.Offset = body.Offset
 	query.Order = body.Order
+	query.Filter = body.Filter
+	query.Search = body.Search
+
+	// Ensure valid limit
+	if query.Limit <= 0 {
+		query.Limit = collate.Init.Limit
+	}
 
 	return collate.ui(ctx, query)
 }
@@ -648,63 +708,13 @@ func Searching[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 		return ""
 	}
 
-	// reset := TQuery{
-	// 	Search: "",
-	// 	Filter: query.Filter,
-	// 	Order:  query.Order,
-	// 	Offset: query.Offset,
-	// 	Limit:  query.Limit,
-	// }
-
 	return Div("flex-1 xl:flex gap-px hidden")(
-
-		// Button().
-		// 	Class("rounded shadow bg-white").
-		// 	Color(Blue).
-		// 	Click(ctx.Call(collate.onSearch, reset).Replace(collate.Target)).
-		// 	Render(Icon("fa fa-times")),
-
 		Form("flex-1 flex bg-blue-800 rounded-l-lg", ctx.Submit(collate.onSearch).Replace(collate.Target))(
-			Map2(collate.FilterFields, func(item TField, index int) []string {
-				if item.DB == "" {
-					item.DB = item.Field
-				}
-
-				position := fmt.Sprintf("Filter[%d]", index)
-
-				return []string{
-					Iff(item.As == ZERO_DATE)(
-						Hidden(position+".Field", item.DB),
-						Hidden(position+".As", item.As),
-						Hidden(position+".Value", item.Value),
-					),
-
-					Iff(item.As == NOT_ZERO_DATE)(
-						Hidden(position+".Field", item.DB),
-						Hidden(position+".As", item.As),
-						Hidden(position+".Value", item.Value),
-					),
-
-					Iff(item.As == DATES)(
-						Hidden(position+".Field", item.DB),
-						Hidden(position+".As", item.As),
-						Hidden(position+".Value", item.Value),
-					),
-
-					Iff(item.As == BOOL)(
-						Hidden(position+".Field", item.DB),
-						Hidden(position+".As", item.As),
-						Hidden(position+".Condition", item.Condition),
-						Hidden(position+".Value", item.Value),
-					),
-
-					Iff(item.As == SELECT && len(item.Options) > 0)(
-						Hidden(position+".Field", item.DB),
-						Hidden(position+".As", item.As),
-						Hidden(position+".Value", item.Value),
-					),
-				}
-			}),
+			// Preserve current filter state using hidden fields
+			Hidden("Limit", query.Limit),
+			Hidden("Offset", query.Offset),
+			Hidden("Order", query.Order),
+			FilterHiddenFields(query),
 
 			IText("Search", query).
 				Class("flex-1 p-1 w-72").
@@ -751,10 +761,10 @@ func Sorting[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 			direction := ""
 			color := GrayOutline
 			field := strings.ToLower(sort.DB)
-			query := strings.ToLower(query.Order)
+			orderStr := strings.ToLower(query.Order)
 
-			if strings.Contains(query, field) {
-				if strings.Contains(query, "asc") {
+			if strings.Contains(orderStr, field) {
+				if strings.Contains(orderStr, "asc") {
 					direction = "asc"
 				} else {
 					direction = "desc"
@@ -769,18 +779,26 @@ func Sorting[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				reverse = "asc"
 			}
 
-			return Button().
-				Class("rounded bg-white").
-				Color(color).
-				Click(ctx.Call(collate.onSort, TQuery{Order: sort.DB + " " + reverse}).Replace(collate.Target)).
-				Render(
-					Div("flex gap-2 items-center")(
-						Iff(direction == "asc")(Icon("fa fa-fw fa-sort-amount-asc")),
-						Iff(direction == "desc")(Icon("fa fa-fw fa-sort-amount-desc")),
-						Iff(direction == "")(Icon("fa fa-fw fa-sort")),
-						sort.Text,
+			// Create a copy of the current query with updated order to preserve filters and search
+			sortQuery := *query
+			sortQuery.Order = sort.DB + " " + reverse
+
+			// Use form to properly preserve filter state across sort changes
+			return Form("inline-flex", ctx.Submit(collate.onSort).Replace(collate.Target))(
+				QueryHiddenFields(&sortQuery),
+				Button().
+					Submit().
+					Class("rounded bg-white").
+					Color(color).
+					Render(
+						Div("flex gap-2 items-center")(
+							Iff(direction == "asc")(Icon("fa fa-fw fa-sort-amount-asc")),
+							Iff(direction == "desc")(Icon("fa fa-fw fa-sort-amount-desc")),
+							Iff(direction == "")(Icon("fa fa-fw fa-sort")),
+							sort.Text,
+						),
 					),
-				)
+			)
 		}),
 	)
 }
@@ -811,22 +829,22 @@ func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T])
 				Click(ctx.Call(collate.onReset).Replace(collate.Target)).
 				Render(
 					Icon("fa fa-fw fa-undo"),
-					// Div("flex gap-2 items-center")(
-					// 	Icon("fa fa-repeat"), reset,
-					// ),
 				),
 
-			// load more
-			Button().
-				Class("rounded-r").
-				Color(Purple).
-				Disabled(size >= int(result.Filtered)).
-				Click(ctx.Call(collate.onResize, result.Query).Replace(collate.Target)).
-				Render(
-					Div("flex gap-2 items-center")(
-						Icon("fa fa-arrow-down"), more,
+			// load more - use form to properly preserve filter state
+			Form("inline-flex", ctx.Submit(collate.onResize).Replace(collate.Target))(
+				QueryHiddenFields(result.Query),
+				Button().
+					Submit().
+					Class("rounded-r").
+					Color(Purple).
+					Disabled(size >= int(result.Filtered)).
+					Render(
+						Div("flex gap-2 items-center")(
+							Icon("fa fa-arrow-down"), more,
+						),
 					),
-				),
+			),
 		),
 	)
 }
