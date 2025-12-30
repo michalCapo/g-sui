@@ -36,10 +36,11 @@ type TInput struct {
 		Max  float64
 		Step float64
 	}
-	visible  bool
-	required bool
-	disabled bool
-	readonly bool
+	visible        bool
+	required       bool
+	disabled       bool
+	readonly       bool
+	emptyOnDefault bool
 }
 
 func (c *TInput) Format(value string) *TInput {
@@ -150,6 +151,11 @@ func (c *TInput) Disabled(value ...bool) *TInput {
 	}
 
 	c.disabled = value[0]
+	return c
+}
+
+func (c *TInput) EmptyOnDefault() *TInput {
+	c.emptyOnDefault = true
 	return c
 }
 
@@ -710,6 +716,36 @@ func IDateTime(name string, data ...any) *TInput {
 	return c
 }
 
+func isZeroValue(val any) bool {
+	switch v := val.(type) {
+	case int:
+		return v == 0
+	case int8:
+		return v == 0
+	case int16:
+		return v == 0
+	case int32:
+		return v == 0
+	case int64:
+		return v == 0
+	case uint:
+		return v == 0
+	case uint8:
+		return v == 0
+	case uint16:
+		return v == 0
+	case uint32:
+		return v == 0
+	case uint64:
+		return v == 0
+	case float32:
+		return v == 0
+	case float64:
+		return v == 0
+	}
+	return false
+}
+
 func INumber(name string, data ...any) *TInput {
 	c := &TInput{
 		as:          "number",
@@ -750,34 +786,40 @@ func INumber(name string, data ...any) *TInput {
 			if err == nil {
 				// Convert to float64 if format requires it (e.g., %.2f)
 				val := tmp.Interface()
-				if c.valueFormat != "%v" && c.valueFormat != "" {
-					// Try to convert to float64 for numeric formatting
-					switch v := val.(type) {
-					case int:
-						val = float64(v)
-					case int8:
-						val = float64(v)
-					case int16:
-						val = float64(v)
-					case int32:
-						val = float64(v)
-					case int64:
-						val = float64(v)
-					case uint:
-						val = float64(v)
-					case uint8:
-						val = float64(v)
-					case uint16:
-						val = float64(v)
-					case uint32:
-						val = float64(v)
-					case uint64:
-						val = float64(v)
-					case float32:
-						val = float64(v)
+				
+				// Check if we should skip zero values
+				if c.emptyOnDefault && isZeroValue(val) {
+					// Leave value empty to show placeholder
+				} else {
+					if c.valueFormat != "%v" && c.valueFormat != "" {
+						// Try to convert to float64 for numeric formatting
+						switch v := val.(type) {
+						case int:
+							val = float64(v)
+						case int8:
+							val = float64(v)
+						case int16:
+							val = float64(v)
+						case int32:
+							val = float64(v)
+						case int64:
+							val = float64(v)
+						case uint:
+							val = float64(v)
+						case uint8:
+							val = float64(v)
+						case uint16:
+							val = float64(v)
+						case uint32:
+							val = float64(v)
+						case uint64:
+							val = float64(v)
+						case float32:
+							val = float64(v)
+						}
 					}
+					value = fmt.Sprintf(c.valueFormat, val)
 				}
-				value = fmt.Sprintf(c.valueFormat, val)
 			}
 		}
 
