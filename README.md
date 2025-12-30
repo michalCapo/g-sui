@@ -17,6 +17,7 @@ See documentation at [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) for a comp
 - Partial updates: re-render, replace, append, or prepend only the target
 - Smooth navigation with background loading and delayed loader (50ms threshold)
 - Optional automatic link interception for seamless SPA-like navigation (`app.SmoothNavigation(true)`)
+- Built-in PWA support with manifest and service worker generation (`app.PWA()`)
 - Deferred fragments with skeletons via WebSocket patches (`ctx.Patch` + skeleton helpers)
 - Query/Collate helper for data UIs: search, sort, filters, paging, and XLS export (works with `gorm`)
 - Form helpers with validation (uses `go-playground/validator`)
@@ -156,6 +157,34 @@ With `app.SmoothNavigation(true)`, you can omit `ctx.Load()` and regular links w
 ```go
 return ui.A(cls, ui.Href(r.Path))(r.Title) // Works automatically!
 ```
+
+## Progressive Web App (PWA)
+
+g-sui provides built-in support for Progressive Web Apps, allowing your application to be installed on mobile and desktop devices. Enable it by providing a config:
+
+```go
+app.PWA(ui.PWAConfig{
+    Name:                  "My App",
+    ShortName:             "App",
+    Description:           "My awesome g-sui app",
+    ThemeColor:            "#1d4ed8",
+    BackgroundColor:       "#ffffff",
+    GenerateServiceWorker: true,
+})
+```
+
+This automatically:
+- Generates and serves `/manifest.webmanifest` with proper JSON formatting
+- Generates and serves a basic `/sw.js` (Service Worker) for offline support
+- Adds necessary meta tags and manifest link to the `<head>`
+- Registers the service worker in the browser automatically
+- Provides basic offline caching for the root path when service worker is enabled
+
+The PWA feature includes:
+- **Manifest Generation**: Automatic creation of a Web App Manifest with configurable app name, icons, theme colors, and display mode
+- **Service Worker**: Optional service worker generation with basic caching strategy
+- **Meta Tags**: Automatic addition of mobile web app capable tags for iOS and Android
+- **Theme Color Support**: Configurable theme color for browser UI matching
 
 ## Server actions and partial updates
 

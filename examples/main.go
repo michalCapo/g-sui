@@ -39,12 +39,29 @@ var routes = []route{
 	{Path: "/deferred", Title: "Deferred"},
 	{Path: "/shared", Title: "Shared"},
 	{Path: "/collate", Title: "Collate"},
+	{Path: "/spa", Title: "SPA"},
 }
 
 func main() {
 	app := ui.MakeApp("en")
+	app.Assets(assets, "assets", 24*time.Hour)
 	app.Favicon(assets, "assets/favicon.svg", 24*time.Hour)
 	app.SmoothNavigation(true)
+
+	// Enable PWA
+	app.PWA(ui.PWAConfig{
+		Name:                  "g-sui Showcase",
+		ShortName:             "g-sui",
+		Description:           "Go Server-Rendered UI Showcase",
+		ThemeColor:            "#1d4ed8",
+		BackgroundColor:       "#ffffff",
+		Display:               "standalone",
+		GenerateServiceWorker: true,
+		Icons: []ui.PWAIcon{
+			{Src: "/favicon.ico", Sizes: "any", Type: "image/x-icon"},
+		},
+	})
+
 	// app.AutoRestart(true) // enable if you want the examples to rebuild on changes
 	app.HTMLHead = append(app.HTMLHead,
 		`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
@@ -98,6 +115,7 @@ func main() {
 	app.Page("/deferred", layout("Deferred", pages.Deffered))
 	app.Page("/shared", layout("Shared", pages.Shared))
 	app.Page("/collate", layout("Collate", pages.Collate))
+	app.Page("/spa", layout("SPA", pages.SpaExample))
 
 	app.Listen(":1422")
 }

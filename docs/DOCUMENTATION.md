@@ -53,9 +53,11 @@ This document combines the LLM Reference Guide and Architecture Documentation fo
 44. [CAPTCHA Components](#captcha-components)
 45. [Security Model](#security-model)
 46. [Extension Points](#extension-points)
-47. [Performance Considerations](#performance-considerations)
-48. [Testing Patterns](#testing-patterns)
-49. [Future Considerations](#future-considerations)
+47. [SPA (Single Page Application)](#spa-single-page-application)
+48. [PWA (Progressive Web App)](#pwa-progressive-web-app)
+49. [Performance Considerations](#performance-considerations)
+50. [Testing Patterns](#testing-patterns)
+51. [Future Considerations](#future-considerations)
 
 ---
 
@@ -2339,6 +2341,88 @@ With `app.SmoothNavigation(true)`, you can simplify to:
 ```go
 return ui.A(cls, ui.Href(r.Path))(r.Title) // Smooth navigation works automatically!
 ```
+
+---
+
+## PWA (Progressive Web App)
+
+g-sui has built-in support for Progressive Web App capabilities, allowing your app to be "installed" on mobile and desktop devices.
+
+### Enabling PWA
+
+```go
+app.PWA(ui.PWAConfig{
+    Name:                  "My Application",
+    ShortName:             "MyApp",
+    Description:           "A full-featured g-sui application",
+    ThemeColor:            "#1d4ed8",
+    BackgroundColor:       "#ffffff",
+    Display:               "standalone",
+    Icons: []ui.PWAIcon{
+        {Src: "/favicon.ico", Sizes: "any", Type: "image/x-icon"},
+        {Src: "/icon-192.png", Sizes: "192x192", Type: "image/png"},
+        {Src: "/icon-512.png", Sizes: "512x512", Type: "image/png"},
+    },
+    GenerateServiceWorker: true,
+})
+```
+
+### Manifest Generation
+The framework automatically generates a `manifest.webmanifest` file and serves it at `/manifest.webmanifest`. The manifest includes:
+- App name, short name, and description
+- Theme color and background color
+- Display mode (standalone, fullscreen, etc.)
+- Icons configuration
+- Start URL
+
+The framework also automatically adds the necessary `<link>` and `<meta>` tags to the HTML head:
+- `<link rel="manifest" href="/manifest.webmanifest">`
+- Mobile web app capable meta tags for iOS and Android
+- Theme color meta tag
+
+### Service Worker
+When `GenerateServiceWorker` is `true`, g-sui:
+- Generates and serves a basic service worker at `/sw.js`
+- Automatically registers the service worker in the client via inline script
+- Provides basic offline support by caching the root path (`/`)
+- Uses cache-first strategy: checks cache first, falls back to network
+
+The generated service worker includes:
+- Cache name versioning (`app-v1`)
+- Install event handler for initial caching
+- Fetch event handler for cache-first strategy
+
+### PWA Configuration Options
+
+The `PWAConfig` struct supports the following fields:
+
+```go
+type PWAConfig struct {
+    Name                  string    // Full application name
+    ShortName             string    // Short name for app launcher
+    Description           string    // App description
+    ThemeColor            string    // Theme color (hex format, e.g., "#1d4ed8")
+    BackgroundColor       string    // Background color (hex format)
+    Display               string    // Display mode: "standalone", "fullscreen", "minimal-ui", "browser"
+    StartURL              string    // Start URL (defaults to "/")
+    GenerateServiceWorker bool      // Enable service worker generation
+    Icons                 []PWAIcon // Array of app icons
+}
+
+type PWAIcon struct {
+    Src    string // Icon source path
+    Sizes  string // Icon sizes (e.g., "192x192", "512x512", "any")
+    Type   string // MIME type (e.g., "image/png", "image/x-icon")
+}
+```
+
+### Benefits of PWA Support
+
+- **Installable**: Users can install your app on their devices
+- **Offline Support**: Basic offline functionality with service worker caching
+- **App-like Experience**: Standalone display mode removes browser UI
+- **Branding**: Custom icons and theme colors for a native app feel
+- **Cross-platform**: Works on iOS, Android, and desktop browsers
 
 ---
 

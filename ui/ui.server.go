@@ -919,12 +919,32 @@ func cacheControlMiddleware(next http.Handler, maxAge time.Duration) http.Handle
 	})
 }
 
+type PWAIcon struct {
+	Src   string `json:"src"`
+	Sizes string `json:"sizes"`
+	Type  string `json:"type"`
+}
+
+type PWAConfig struct {
+	Name                  string    `json:"name"`
+	ShortName             string    `json:"short_name"`
+	Description           string    `json:"description,omitempty"`
+	ThemeColor            string    `json:"theme_color,omitempty"`
+	BackgroundColor       string    `json:"background_color,omitempty"`
+	Display               string    `json:"display,omitempty"`
+	StartURL              string    `json:"start_url,omitempty"`
+	Icons                 []PWAIcon `json:"icons,omitempty"`
+	GenerateServiceWorker bool      `json:"-"`
+}
+
 type App struct {
 	Lanugage      string
 	HTMLBody      func(string) string
 	HTMLHead      []string
 	DebugEnabled  bool
 	SmoothNav     bool
+	pwaConfig     *PWAConfig
+	pwaManifest   []byte
 	sessMu        sync.Mutex
 	sessions      map[string]*sessRec
 	wsMu          sync.RWMutex
@@ -1177,12 +1197,12 @@ func (app *App) Assets(assets embed.FS, path string, maxAge time.Duration) {
 	path = strings.TrimPrefix(path, "/")
 	handler := http.FileServer(http.FS(assets))
 	wrappedHandler := mimeTypeMiddleware(cacheControlMiddleware(handler, maxAge))
-	
+
 	// Initialize the map if it doesn't exist
 	if app.assetHandlers == nil {
 		app.assetHandlers = make(map[string]http.Handler)
 	}
-	
+
 	// Store the handler for this path prefix
 	app.assetHandlers["/"+path+"/"] = wrappedHandler
 }
@@ -1391,6 +1411,83 @@ func (app *App) TestHandler() http.Handler {
 
 		http.Error(w, "Not found", http.StatusNotFound)
 	})
+}
+
+// PWA enables Progressive Web App capabilities.
+// Call this to generate manifest.webmanifest and optionally a service worker.
+// The manifest will be served at /manifest.webmanifest
+// The service worker will be served at /sw.js
+func (app *App) PWA(config PWAConfig) {
+	if config.StartURL == "" {
+		config.StartURL = "/"
+	}
+	if config.Display == "" {
+		config.Display = "standalone"
+	}
+
+	app.pwaConfig = &config
+
+	// Generate manifest JSON
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		log.Printf("gsui: failed to generate pwa manifest: %v", err)
+	} else {
+		app.pwaManifest = data
+	}
+
+	// Add HTML head tags
+	app.HTMLHead = append(app.HTMLHead,
+		`<link rel="manifest" href="/manifest.webmanifest">`,
+		`<meta name="mobile-web-app-capable" content="yes">`,
+		`<meta name="apple-mobile-web-app-capable" content="yes">`,
+		`<meta name="apple-mobile-web-app-status-bar-style" content="default">`,
+	)
+
+	if config.ThemeColor != "" {
+		app.HTMLHead = append(app.HTMLHead, fmt.Sprintf(`<meta name="theme-color" content="%s">`, config.ThemeColor))
+	}
+
+	// Register manifest route
+	http.HandleFunc("/manifest.webmanifest", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/manifest+json")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Write(app.pwaManifest)
+	})
+
+	// Register service worker route if requested
+	if config.GenerateServiceWorker {
+		app.HTMLHead = append(app.HTMLHead,
+			`<script>
+                if ('serviceWorker' in navigator) {
+                    window.addEventListener('load', () => {
+                        navigator.serviceWorker.register('/sw.js');
+                    });
+                }
+            </script>`,
+		)
+
+		http.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/javascript")
+			w.Header().Set("Cache-Control", "no-cache")
+			sw := `const CACHE_NAME = 'app-v1';
+const urlsToCache = ['/'];
+
+self.addEventListener('install', event => {
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then(cache => cache.addAll(urlsToCache))
+    );
+});
+
+self.addEventListener('fetch', event => {
+    event.respondWith(
+        caches.match(event.request)
+            .then(response => response || fetch(event.request))
+    );
+});`
+			w.Write([]byte(sw))
+		})
+	}
 }
 
 // initWS registers the WebSocket endpoint for server-initiated patches.
