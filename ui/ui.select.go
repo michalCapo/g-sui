@@ -8,7 +8,6 @@ import (
 )
 
 type ASelect struct {
-	as          string
 	data        any
 	error       validator.FieldError
 	name        string
@@ -23,6 +22,7 @@ type ASelect struct {
 	required    bool
 	visible     bool
 	form        string
+	dataType    string
 }
 
 func (c *ASelect) Error(errs *error) *ASelect {
@@ -41,8 +41,8 @@ func (c *ASelect) Error(errs *error) *ASelect {
 	return c
 }
 
-func (c *ASelect) Type(value string) *ASelect {
-	c.as = value
+func (c *ASelect) Type(dataType string) *ASelect {
+	c.dataType = dataType
 	return c
 }
 
@@ -125,6 +125,11 @@ func (c *ASelect) Render(text string) string {
 		}
 	}
 
+	valueType := "text"
+	if c.dataType != "" {
+		valueType = c.dataType
+	}
+
 	return Div(c.class)(
 		Label(&c.target).
 			Required(c.required).
@@ -134,7 +139,7 @@ func (c *ASelect) Render(text string) string {
 			Classes(INPUT, c.size, If(c.disabled, func() string { return "cursor-text bg-gray-100" }), If(c.error != nil, func() string { return "border-l-8 border-red-600" })),
 			Attr{
 				Form:        c.form,
-				Type:        c.as,
+				Type:        valueType,
 				ID:          c.target.ID,
 				Name:        c.name,
 				Required:    c.required,
@@ -159,11 +164,11 @@ func ISelect(name string, data ...any) *ASelect {
 	}
 
 	return &ASelect{
-		as:      "text",
-		name:    name,
-		size:    MD,
-		target:  Target(),
-		visible: true,
-		data:    temp,
+		dataType: "text",
+		name:     name,
+		size:     MD,
+		target:   Target(),
+		visible:  true,
+		data:     temp,
 	}
 }

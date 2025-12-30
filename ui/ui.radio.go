@@ -116,6 +116,7 @@ type ARadio struct {
 	visible        bool
 	empty          bool
 	radioPosition  string
+	dataType       string
 }
 
 func (c *ARadio) Error(errs *error) *ARadio {
@@ -204,6 +205,11 @@ func (c *ARadio) RadioPosition(class string) *ARadio {
 	return c
 }
 
+func (c *ARadio) Type(dataType string) *ARadio {
+	c.dataType = dataType
+	return c
+}
+
 func (c *ARadio) Render(text string) string {
 	value := ""
 
@@ -223,6 +229,11 @@ func (c *ARadio) Render(text string) string {
 		}
 	}
 
+	valueType := "radio"
+	if c.dataType != "" {
+		valueType = c.dataType
+	}
+
 	return Div(c.class)(
 		If(text != "", func() string {
 			return Label(&c.target).
@@ -231,7 +242,7 @@ func (c *ARadio) Render(text string) string {
 				Render(text)
 		}),
 
-		Hidden(c.name, "radio", value, Attr{
+		Hidden(c.name, valueType, value, Attr{
 			ID:       c.target.ID,
 			OnChange: c.onchange,
 			Form:     c.target.Form,
