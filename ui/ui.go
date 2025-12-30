@@ -81,6 +81,13 @@ type Attr struct {
 	Disabled     bool
 	Required     bool
 	Readonly     bool
+	// Custom data attributes for component state
+	DataAccordion       string
+	DataAccordionItem   string
+	DataAccordionContent string
+	DataTabs            string
+	DataTabsIndex       string
+	DataTabsPanel       string
 }
 
 // TargetSwap pairs a target id with a swap strategy for convenient patch calls.
@@ -256,6 +263,30 @@ func attributes(attrs ...Attr) string {
 
 		if attr.Readonly {
 			result = append(result, `readonly="readonly"`)
+		}
+
+		if attr.DataAccordion != "" {
+			result = append(result, fmt.Sprintf(`data-accordion="%s"`, escapeAttr(attr.DataAccordion)))
+		}
+
+		if attr.DataAccordionItem != "" {
+			result = append(result, fmt.Sprintf(`data-accordion-item="%s"`, escapeAttr(attr.DataAccordionItem)))
+		}
+
+		if attr.DataAccordionContent != "" {
+			result = append(result, fmt.Sprintf(`data-accordion-content="%s"`, escapeAttr(attr.DataAccordionContent)))
+		}
+
+		if attr.DataTabs != "" {
+			result = append(result, fmt.Sprintf(`data-tabs="%s"`, escapeAttr(attr.DataTabs)))
+		}
+
+		if attr.DataTabsIndex != "" {
+			result = append(result, fmt.Sprintf(`data-tabs-index="%s"`, escapeAttr(attr.DataTabsIndex)))
+		}
+
+		if attr.DataTabsPanel != "" {
+			result = append(result, fmt.Sprintf(`data-tabs-panel="%s"`, escapeAttr(attr.DataTabsPanel)))
 		}
 	}
 
