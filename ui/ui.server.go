@@ -991,14 +991,16 @@ func cacheControlMiddleware(next http.Handler, maxAge time.Duration) http.Handle
 }
 
 type PWAIcon struct {
-	Src   string `json:"src"`
-	Sizes string `json:"sizes"`
-	Type  string `json:"type"`
+	Src     string `json:"src"`
+	Sizes   string `json:"sizes"`
+	Type    string `json:"type"`
+	Purpose string `json:"purpose,omitempty"` // "any", "maskable", or "any maskable"
 }
 
 type PWAConfig struct {
 	Name                  string    `json:"name"`
 	ShortName             string    `json:"short_name"`
+	ID                    string    `json:"id,omitempty"`                    // App ID - defaults to StartURL if empty
 	Description           string    `json:"description,omitempty"`
 	ThemeColor            string    `json:"theme_color,omitempty"`
 	BackgroundColor       string    `json:"background_color,omitempty"`
@@ -1494,6 +1496,10 @@ func (app *App) PWA(config PWAConfig) {
 	}
 	if config.Display == "" {
 		config.Display = "standalone"
+	}
+	// Default ID to StartURL if not specified (per PWA best practices)
+	if config.ID == "" {
+		config.ID = config.StartURL
 	}
 
 	app.pwaConfig = &config

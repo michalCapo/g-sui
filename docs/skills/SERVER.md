@@ -63,16 +63,39 @@ app.HTMLHead = []string{
 
 ```go
 app.PWA(ui.PWAConfig{
-    Name:        "My App",
-    ShortName:   "App",
-    Description: "My Progressive Web App",
-    Background:  "#ffffff",
-    Theme:       "#000000",
-    Icon:        "assets/icon-192.png",
-    Icon512:     "assets/icon-512.png",
-    Display:     "standalone",  // standalone, fullscreen, minimal-ui
+    Name:                  "My App",
+    ShortName:             "App",
+    ID:                    "/",                              // App ID (defaults to StartURL)
+    Description:           "My Progressive Web App",
+    ThemeColor:            "#ffffff",
+    BackgroundColor:       "#000000",
+    Display:               "standalone",                     // standalone, fullscreen, minimal-ui
+    StartURL:              "/",
+    GenerateServiceWorker: true,
+    Icons: []ui.PWAIcon{
+        {Src: "/icon-192.png", Sizes: "192x192", Type: "image/png", Purpose: "any"},
+        {Src: "/icon-512.png", Sizes: "512x512", Type: "image/png", Purpose: "any maskable"},
+    },
 })
 ```
+
+**PWAConfig Fields:**
+- `Name` - Full application name
+- `ShortName` - Short name for home screen
+- `ID` - App identity (defaults to `StartURL` if empty)
+- `Description` - App description
+- `ThemeColor` - Theme color (hex)
+- `BackgroundColor` - Splash screen background (hex)
+- `Display` - Display mode: `standalone`, `fullscreen`, `minimal-ui`, `browser`
+- `StartURL` - Launch URL (defaults to `/`)
+- `GenerateServiceWorker` - Generate service worker for offline support
+- `Icons` - Array of app icons
+
+**PWAIcon Fields:**
+- `Src` - Icon path
+- `Sizes` - Size (e.g., `192x192`, `512x512`, `any`)
+- `Type` - MIME type (e.g., `image/png`, `image/x-icon`)
+- `Purpose` - Icon purpose: `any`, `maskable`, or `any maskable`
 
 ## Testing Handler
 
@@ -178,10 +201,17 @@ func main() {
 
     // PWA
     app.PWA(ui.PWAConfig{
-        Name:      "My App",
-        ShortName: "App",
-        Icon:      "assets/icon-192.png",
-        Icon512:   "assets/icon-512.png",
+        Name:                  "My App",
+        ShortName:             "App",
+        ID:                    "/",
+        Description:           "My Application",
+        ThemeColor:            "#1d4ed8",
+        BackgroundColor:       "#ffffff",
+        GenerateServiceWorker: true,
+        Icons: []ui.PWAIcon{
+            {Src: "/icon-192.png", Sizes: "192x192", Type: "image/png", Purpose: "any"},
+            {Src: "/icon-512.png", Sizes: "512x512", Type: "image/png", Purpose: "any maskable"},
+        },
     })
 
     // Dev mode

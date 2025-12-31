@@ -2662,25 +2662,28 @@ g-sui has built-in support for Progressive Web App capabilities, allowing your a
 app.PWA(ui.PWAConfig{
     Name:                  "My Application",
     ShortName:             "MyApp",
+    ID:                    "/",                              // App ID (defaults to StartURL if empty)
     Description:           "A full-featured g-sui application",
     ThemeColor:            "#1d4ed8",
     BackgroundColor:       "#ffffff",
     Display:               "standalone",
+    StartURL:              "/",
+    GenerateServiceWorker: true,
     Icons: []ui.PWAIcon{
         {Src: "/favicon.ico", Sizes: "any", Type: "image/x-icon"},
-        {Src: "/icon-192.png", Sizes: "192x192", Type: "image/png"},
-        {Src: "/icon-512.png", Sizes: "512x512", Type: "image/png"},
+        {Src: "/icon-192.png", Sizes: "192x192", Type: "image/png", Purpose: "any"},
+        {Src: "/icon-512.png", Sizes: "512x512", Type: "image/png", Purpose: "any maskable"},
     },
-    GenerateServiceWorker: true,
 })
 ```
 
 ### Manifest Generation
 The framework automatically generates a `manifest.webmanifest` file and serves it at `/manifest.webmanifest`. The manifest includes:
 - App name, short name, and description
+- **App ID** - Unique identifier for the app (defaults to `StartURL`)
 - Theme color and background color
 - Display mode (standalone, fullscreen, etc.)
-- Icons configuration
+- Icons configuration with **purpose attribute** for adaptive/maskable icons
 - Start URL
 
 The framework also automatically adds the necessary `<link>` and `<meta>` tags to the HTML head:
@@ -2708,6 +2711,7 @@ The `PWAConfig` struct supports the following fields:
 type PWAConfig struct {
     Name                  string    // Full application name
     ShortName             string    // Short name for app launcher
+    ID                    string    // App ID (defaults to StartURL if empty)
     Description           string    // App description
     ThemeColor            string    // Theme color (hex format, e.g., "#1d4ed8")
     BackgroundColor       string    // Background color (hex format)
@@ -2718,11 +2722,21 @@ type PWAConfig struct {
 }
 
 type PWAIcon struct {
-    Src    string // Icon source path
-    Sizes  string // Icon sizes (e.g., "192x192", "512x512", "any")
-    Type   string // MIME type (e.g., "image/png", "image/x-icon")
+    Src     string // Icon source path
+    Sizes   string // Icon sizes (e.g., "192x192", "512x512", "any")
+    Type    string // MIME type (e.g., "image/png", "image/x-icon")
+    Purpose string // Icon purpose: "any", "maskable", or "any maskable"
 }
 ```
+
+### Icon Purpose Values
+
+The `Purpose` field specifies how an icon can be used by the browser:
+- `"any"` - Icon can be used as a standard app icon
+- `"maskable"` - Icon can be masked/safely cropped for adaptive icons (Android)
+- `"any maskable"` - Icon serves both purposes
+
+Using maskable icons ensures your app displays correctly on Android devices with adaptive icon layouts.
 
 ### Benefits of PWA Support
 
@@ -2731,6 +2745,7 @@ type PWAIcon struct {
 - **App-like Experience**: Standalone display mode removes browser UI
 - **Branding**: Custom icons and theme colors for a native app feel
 - **Cross-platform**: Works on iOS, Android, and desktop browsers
+- **Modern Standards**: Complies with latest PWA specifications (eliminates Chrome DevTools warnings)
 
 ---
 
