@@ -1518,12 +1518,16 @@ func (app *App) PWA(config PWAConfig) {
 		app.HTMLHead = append(app.HTMLHead, fmt.Sprintf(`<meta name="theme-color" content="%s">`, config.ThemeColor))
 	}
 
-	// Register manifest route
-	http.HandleFunc("/manifest.webmanifest", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/manifest+json")
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		w.Write(app.pwaManifest)
-	})
+	// Register manifest route using the framework's routing system
+	manifestHandler := func(ctx *Context) string {
+		ctx.Response.Header().Set("Content-Type", "application/manifest+json")
+		ctx.Response.Header().Set("Cache-Control", "public, max-age=3600")
+		ctx.Response.Write(app.pwaManifest)
+		return ""
+	}
+	mu.Lock()
+	stored[&manifestHandler] = "/manifest.webmanifest"
+	mu.Unlock()
 
 	// Register service worker route if requested
 	if config.GenerateServiceWorker {
@@ -1537,9 +1541,9 @@ func (app *App) PWA(config PWAConfig) {
             </script>`,
 		)
 
-		http.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/javascript")
-			w.Header().Set("Cache-Control", "no-cache")
+		swHandler := func(ctx *Context) string {
+			ctx.Response.Header().Set("Content-Type", "application/javascript")
+			ctx.Response.Header().Set("Cache-Control", "no-cache")
 			sw := `const CACHE_NAME = 'app-v1';
 const urlsToCache = ['/'];
 
@@ -1556,8 +1560,12 @@ self.addEventListener('fetch', event => {
             .then(response => response || fetch(event.request))
     );
 });`
-			w.Write([]byte(sw))
-		})
+			ctx.Response.Write([]byte(sw))
+			return ""
+		}
+		mu.Lock()
+		stored[&swHandler] = "/sw.js"
+		mu.Unlock()
 	}
 }
 

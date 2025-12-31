@@ -50,14 +50,11 @@ func TestPWA(t *testing.T) {
 		t.Error("HTML head missing service worker registration")
 	}
 
-	// Test Manifest Endpoint
+	// Test Manifest Endpoint using app's TestHandler()
+	handler := app.TestHandler()
 	req := httptest.NewRequest("GET", "/manifest.webmanifest", nil)
 	w := httptest.NewRecorder()
-
-	// We need to use http.DefaultServeMux or a custom handler because http.HandleFunc registers globally
-	// In g-sui, Listen() starts the real server. For testing endpoints, we can call the handler directly if we expose it.
-	// Since PWA() uses http.HandleFunc, we check the default mux.
-	http.DefaultServeMux.ServeHTTP(w, req)
+	handler.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status OK for manifest, got %d", w.Code)
@@ -69,7 +66,7 @@ func TestPWA(t *testing.T) {
 	// Test Service Worker Endpoint
 	reqSW := httptest.NewRequest("GET", "/sw.js", nil)
 	wSW := httptest.NewRecorder()
-	http.DefaultServeMux.ServeHTTP(wSW, reqSW)
+	handler.ServeHTTP(wSW, reqSW)
 
 	if wSW.Code != http.StatusOK {
 		t.Errorf("Expected status OK for sw.js, got %d", wSW.Code)
