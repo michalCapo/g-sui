@@ -10,6 +10,8 @@ Build interactive, component‑styled pages in Go with server actions, simple pa
 
 See documentation at [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) for a comprehensive reference guide and architecture documentation. See [`examples/`](examples/) for working examples.
 
+**Claude Code users**: Install the [g-sui skills](#claude-code-skills) to help Claude understand the framework better.
+
 ## Highlights
 
 - Server-rendered HTML components with a small helper DSL
@@ -456,6 +458,35 @@ func handler(ctx *ui.Context) string {
 - Autorestart: `app.AutoRestart(true)` watches your main package for file changes and rebuilds + restarts the app process. The built‑in WS client then reloads the page automatically on reconnect, so you get a smooth local DX without any extra setup.
 - The library favors simple strings for HTML; helpers build class names and attributes for you.
 - Validation uses `go-playground/validator`; see the login and showcase examples.
+
+## Claude Code Skills
+
+[g-sui](https://github.com/michalCapo/g-sui) includes **Claude Code skills** to help Claude (and other LLMs) understand the framework better. These skills provide comprehensive documentation that Claude can reference when answering questions or generating code.
+
+### Quick Install
+
+**Personal (recommended):** Available across all your projects
+```bash
+mkdir -p ~/.claude/skills/g-sui && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SKILL.md -o ~/.claude/skills/g-sui/SKILL.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CORE.md -o ~/.claude/skills/g-sui/CORE.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/COMPONENTS.md -o ~/.claude/skills/g-sui/COMPONENTS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/DATA.md -o ~/.claude/skills/g-sui/DATA.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SERVER.md -o ~/.claude/skills/g-sui/SERVER.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/PATTERNS.md -o ~/.claude/skills/g-sui/PATTERNS.md
+```
+
+**Project-local:** Shared with your team via git
+```bash
+mkdir -p .claude/skills/g-sui && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SKILL.md -o .claude/skills/g-sui/SKILL.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CORE.md -o .claude/skills/g-sui/CORE.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/COMPONENTS.md -o .claude/skills/g-sui/COMPONENTS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/DATA.md -o .claude/skills/g-sui/DATA.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SERVER.md -o .claude/skills/g-sui/SERVER.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/PATTERNS.md -o .claude/skills/g-sui/PATTERNS.md
+```
+
+Then restart Claude Code to load the skills.
+
+### What's Included
+
+| Skill | Description |
+|-------|-------------|
+| **SKILL.md** | Main entry point with quick start and navigation |
+| **CORE.md** | Architecture, Context API, Actions, Targets, WebSocket patches |
+| **COMPONENTS.md** | Buttons, inputs, forms, tables, alerts, cards, tabs, dropdowns, etc. |
+| **DATA.md** | Data collation (TQuery/TCollate), search, sort, filter, pagination, Excel |
+| **SERVER.md** | App initialization, routes, WebSocket, PWA, assets |
+| **PATTERNS.md** | Testing, validation, security, state management patterns |
 
 ## License
 
