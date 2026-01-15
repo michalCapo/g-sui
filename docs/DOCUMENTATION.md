@@ -2669,6 +2669,8 @@ app.PWA(ui.PWAConfig{
     Display:               "standalone",
     StartURL:              "/",
     GenerateServiceWorker: true,
+    CacheAssets:           []string{"/assets/app.css", "/assets/app.js"}, // Assets to pre-cache
+    OfflinePage:           "/offline",                       // Fallback when offline
     Icons: []ui.PWAIcon{
         {Src: "/favicon.ico", Sizes: "any", Type: "image/x-icon"},
         {Src: "/icon-192.png", Sizes: "192x192", Type: "image/png", Purpose: "any"},
@@ -2693,15 +2695,18 @@ The framework also automatically adds the necessary `<link>` and `<meta>` tags t
 
 ### Service Worker
 When `GenerateServiceWorker` is `true`, g-sui:
-- Generates and serves a basic service worker at `/sw.js`
+- Generates and serves a service worker at `/sw.js`
 - Automatically registers the service worker in the client via inline script
-- Provides basic offline support by caching the root path (`/`)
-- Uses cache-first strategy: checks cache first, falls back to network
+- Uses **network-first** strategy for pages (always fresh content from server)
+- Uses **cache-first** strategy for assets in `CacheAssets` (fast loading)
+- Generates a unique cache key on each server restart (auto-invalidation)
+- Cleans up old caches automatically on activation
+- Uses `skipWaiting()` and `clients.claim()` for immediate activation
 
-The generated service worker includes:
-- Cache name versioning (`app-v1`)
-- Install event handler for initial caching
-- Fetch event handler for cache-first strategy
+The service worker ensures:
+- **Pages always get fresh content** from the server on new deployments
+- **Offline fallback** to `OfflinePage` (or `/`) when network fails
+- **Fast asset loading** from cache
 
 ### PWA Configuration Options
 
@@ -2718,6 +2723,8 @@ type PWAConfig struct {
     Display               string    // Display mode: "standalone", "fullscreen", "minimal-ui", "browser"
     StartURL              string    // Start URL (defaults to "/")
     GenerateServiceWorker bool      // Enable service worker generation
+    CacheAssets           []string  // Asset URLs to pre-cache (cache-first strategy)
+    OfflinePage           string    // Fallback page when offline (e.g., "/offline")
     Icons                 []PWAIcon // Array of app icons
 }
 

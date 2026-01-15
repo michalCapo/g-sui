@@ -72,6 +72,8 @@ app.PWA(ui.PWAConfig{
     Display:               "standalone",                     // standalone, fullscreen, minimal-ui
     StartURL:              "/",
     GenerateServiceWorker: true,
+    CacheAssets:           []string{"/assets/app.css", "/assets/app.js"}, // Assets to pre-cache
+    OfflinePage:           "/offline",                       // Fallback when offline
     Icons: []ui.PWAIcon{
         {Src: "/icon-192.png", Sizes: "192x192", Type: "image/png", Purpose: "any"},
         {Src: "/icon-512.png", Sizes: "512x512", Type: "image/png", Purpose: "any maskable"},
@@ -88,8 +90,15 @@ app.PWA(ui.PWAConfig{
 - `BackgroundColor` - Splash screen background (hex)
 - `Display` - Display mode: `standalone`, `fullscreen`, `minimal-ui`, `browser`
 - `StartURL` - Launch URL (defaults to `/`)
-- `GenerateServiceWorker` - Generate service worker for offline support
+- `GenerateServiceWorker` - Generate service worker (network-first pages, cache-first assets)
+- `CacheAssets` - Asset URLs to pre-cache (e.g., `["/assets/app.css"]`)
+- `OfflinePage` - Fallback page when offline (e.g., `"/offline"`)
 - `Icons` - Array of app icons
+
+**Service Worker Behavior:**
+- **Pages**: Network-first (always fresh content, cache only when offline)
+- **Assets**: Cache-first (fast loading from cache)
+- **Cache versioning**: New cache on each server restart, old caches auto-cleaned
 
 **PWAIcon Fields:**
 - `Src` - Icon path

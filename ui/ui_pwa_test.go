@@ -16,6 +16,8 @@ func TestPWA(t *testing.T) {
 		ThemeColor:            "#ff0000",
 		BackgroundColor:       "#ffffff",
 		GenerateServiceWorker: true,
+		CacheAssets:           []string{"/assets/style.css", "/assets/app.js"},
+		OfflinePage:           "/offline",
 	}
 
 	app.PWA(config)
@@ -74,8 +76,43 @@ func TestPWA(t *testing.T) {
 	if wSW.Header().Get("Content-Type") != "application/javascript" {
 		t.Errorf("Expected content-type application/javascript, got %s", wSW.Header().Get("Content-Type"))
 	}
-	if !strings.Contains(wSW.Body.String(), "CACHE_NAME") {
-		t.Error("Service worker body missing expected content")
+
+	swBody := wSW.Body.String()
+
+	// Test dynamic cache name (contains timestamp)
+	if !strings.Contains(swBody, "CACHE_NAME = 'app-") {
+		t.Error("Service worker missing dynamic CACHE_NAME")
+	}
+
+	// Test activate handler for cache cleanup
+	if !strings.Contains(swBody, "self.addEventListener('activate'") {
+		t.Error("Service worker missing activate handler")
+	}
+	if !strings.Contains(swBody, "caches.delete") {
+		t.Error("Service worker missing cache cleanup in activate")
+	}
+
+	// Test skipWaiting and clients.claim
+	if !strings.Contains(swBody, "self.skipWaiting()") {
+		t.Error("Service worker missing skipWaiting()")
+	}
+	if !strings.Contains(swBody, "self.clients.claim()") {
+		t.Error("Service worker missing clients.claim()")
+	}
+
+	// Test assets are included
+	if !strings.Contains(swBody, "/assets/style.css") {
+		t.Error("Service worker missing configured asset")
+	}
+
+	// Test offline page fallback
+	if !strings.Contains(swBody, "'/offline'") {
+		t.Error("Service worker missing offline page fallback")
+	}
+
+	// Test network-first for navigation
+	if !strings.Contains(swBody, "req.mode === 'navigate'") {
+		t.Error("Service worker missing navigation mode check for network-first")
 	}
 }
 
@@ -142,7 +179,7 @@ func TestPWA_ID(t *testing.T) {
 func TestPWA_IconPurpose(t *testing.T) {
 	app := MakeApp("en")
 	config := PWAConfig{
-		Name:  "Test App",
+		Name: "Test App",
 		Icons: []PWAIcon{
 			{Src: "/icon-192.png", Sizes: "192x192", Type: "image/png", Purpose: "any"},
 			{Src: "/icon-512.png", Sizes: "512x512", Type: "image/png", Purpose: "any maskable"},
@@ -173,7 +210,7 @@ func TestPWA_IconPurpose(t *testing.T) {
 func TestPWA_IconPurpose_OmittedWhenEmpty(t *testing.T) {
 	app := MakeApp("en")
 	config := PWAConfig{
-		Name:  "Test App",
+		Name: "Test App",
 		Icons: []PWAIcon{
 			{Src: "/icon.png", Sizes: "192x192", Type: "image/png"},
 		},

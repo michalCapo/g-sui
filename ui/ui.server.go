@@ -1000,7 +1000,7 @@ type PWAIcon struct {
 type PWAConfig struct {
 	Name                  string    `json:"name"`
 	ShortName             string    `json:"short_name"`
-	ID                    string    `json:"id,omitempty"`                    // App ID - defaults to StartURL if empty
+	ID                    string    `json:"id,omitempty"` // App ID - defaults to StartURL if empty
 	Description           string    `json:"description,omitempty"`
 	ThemeColor            string    `json:"theme_color,omitempty"`
 	BackgroundColor       string    `json:"background_color,omitempty"`
@@ -1008,6 +1008,8 @@ type PWAConfig struct {
 	StartURL              string    `json:"start_url,omitempty"`
 	Icons                 []PWAIcon `json:"icons,omitempty"`
 	GenerateServiceWorker bool      `json:"-"`
+	CacheAssets           []string  `json:"-"` // Asset URLs to pre-cache, e.g., ["/assets/style.css"]
+	OfflinePage           string    `json:"-"` // Optional offline fallback page URL
 }
 
 type App struct {
@@ -1018,6 +1020,7 @@ type App struct {
 	SmoothNav     bool
 	pwaConfig     *PWAConfig
 	pwaManifest   []byte
+	swCacheKey    string // Generated on startup for cache versioning
 	sessMu        sync.Mutex
 	sessions      map[string]*sessRec
 	wsMu          sync.RWMutex
@@ -1537,6 +1540,9 @@ func (app *App) PWA(config PWAConfig) {
 
 	// Register service worker route if requested
 	if config.GenerateServiceWorker {
+		// Generate unique cache key based on startup time
+		app.swCacheKey = fmt.Sprintf("app-%d", time.Now().Unix())
+
 		app.HTMLHead = append(app.HTMLHead,
 			`<script>
                 if ('serviceWorker' in navigator) {
@@ -1550,22 +1556,70 @@ func (app *App) PWA(config PWAConfig) {
 		swHandler := func(ctx *Context) string {
 			ctx.Response.Header().Set("Content-Type", "application/javascript")
 			ctx.Response.Header().Set("Cache-Control", "no-cache")
-			sw := `const CACHE_NAME = 'app-v1';
-const urlsToCache = ['/'];
 
+			// Build assets array for JS
+			assetsJSON := "[]"
+			if len(config.CacheAssets) > 0 {
+				if data, err := json.Marshal(config.CacheAssets); err == nil {
+					assetsJSON = string(data)
+				}
+			}
+
+			// Determine offline fallback
+			offlineFallback := "'/'"
+			if config.OfflinePage != "" {
+				offlineFallback = fmt.Sprintf("'%s'", config.OfflinePage)
+			}
+
+			sw := fmt.Sprintf(`
+const CACHE_NAME = '%s';
+const ASSETS_TO_CACHE = %s;
+
+// Install: pre-cache assets and skip waiting
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then(cache => cache.addAll(urlsToCache))
+            .then(cache => cache.addAll(ASSETS_TO_CACHE))
+            .then(() => self.skipWaiting())
     );
 });
 
-self.addEventListener('fetch', event => {
-    event.respondWith(
-        caches.match(event.request)
-            .then(response => response || fetch(event.request))
+// Activate: cleanup old caches and claim clients
+self.addEventListener('activate', event => {
+    event.waitUntil(
+        caches.keys()
+            .then(names => Promise.all(
+                names.filter(n => n !== CACHE_NAME).map(n => caches.delete(n))
+            ))
+            .then(() => self.clients.claim())
     );
-});`
+});
+
+// Fetch: network-first for pages, cache-first for assets
+self.addEventListener('fetch', event => {
+    const req = event.request;
+
+    // Skip non-GET requests
+    if (req.method !== 'GET') return;
+
+    // Skip WebSocket upgrades
+    if (req.headers.get('Upgrade') === 'websocket') return;
+
+    // Navigation (pages): network-first with offline fallback
+    if (req.mode === 'navigate') {
+        event.respondWith(
+            fetch(req).catch(() => caches.match(%s) || caches.match('/'))
+        );
+        return;
+    }
+
+    // Assets: cache-first, then network
+    event.respondWith(
+        caches.match(req).then(cached => cached || fetch(req))
+    );
+});
+`, app.swCacheKey, assetsJSON, offlineFallback)
+
 			ctx.Response.Write([]byte(sw))
 			return ""
 		}

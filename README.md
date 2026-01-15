@@ -173,21 +173,22 @@ app.PWA(ui.PWAConfig{
     ThemeColor:            "#1d4ed8",
     BackgroundColor:       "#ffffff",
     GenerateServiceWorker: true,
+    CacheAssets:           []string{"/assets/app.css", "/assets/app.js"}, // Assets to pre-cache
+    OfflinePage:           "/offline",                                     // Fallback when offline
 })
 ```
 
 This automatically:
 - Generates and serves `/manifest.webmanifest` with proper JSON formatting
-- Generates and serves a basic `/sw.js` (Service Worker) for offline support
+- Generates and serves `/sw.js` (Service Worker) with smart caching
 - Adds necessary meta tags and manifest link to the `<head>`
 - Registers the service worker in the browser automatically
-- Provides basic offline caching for the root path when service worker is enabled
 
-The PWA feature includes:
-- **Manifest Generation**: Automatic creation of a Web App Manifest with configurable app name, icons, theme colors, and display mode
-- **Service Worker**: Optional service worker generation with basic caching strategy
-- **Meta Tags**: Automatic addition of mobile web app capable tags for iOS and Android
-- **Theme Color Support**: Configurable theme color for browser UI matching
+The service worker provides:
+- **Network-first for pages**: Always fresh content from server, cache as offline fallback
+- **Cache-first for assets**: Fast loading for files in `CacheAssets`
+- **Auto-versioning**: New cache on each server restart, old caches auto-cleaned
+- **Immediate activation**: `skipWaiting()` + `clients.claim()` for instant updates
 
 ## Server actions and partial updates
 
