@@ -604,8 +604,23 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 		return ""
 	}
 
+	// Calculate dynamic width based on content
+	// Base width for minimal content, then add for each filter/sort field
+	totalFields := len(collate.FilterFields) + len(collate.SortFields)
+	widthClass := "w-96" // default width for minimal content
+
+	if totalFields > 8 {
+		widthClass = "w-[38rem]" // extra large for many fields
+	} else if totalFields > 5 {
+		widthClass = "w-[28rem]" // large for several fields
+	} else if totalFields > 2 {
+		widthClass = "w-96" // medium for a few fields
+	} else {
+		widthClass = "w-[22rem]" // small for minimal fields
+	}
+
 	return Div("col-span-2 relative h-0 hidden z-20", collate.TargetFilter)(
-		Div("absolute top-2 right-0 rounded-xl bg-white border border-gray-200 shadow-2xl p-4")(
+		Div(fmt.Sprintf("absolute top-2 right-0 rounded-xl bg-white border border-gray-200 shadow-2xl p-4 %s", widthClass))(
 			// Header with title and close button
 			Div("flex items-center justify-between mb-2")(
 				Div("text-sm font-semibold text-gray-700")("Filters & Options"),
@@ -790,7 +805,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 
 			Button().
 				Submit().
-				Class("rounded shadow bg-white").
+				Class("rounded shadow").
 				Color(Blue).
 				Render(Icon("fa fa-fw fa-search")),
 		),
@@ -798,7 +813,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 		If(len(collate.FilterFields) > 0 || len(collate.SortFields) > 0 || len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
 			return Button().
 				Submit().
-				Class("rounded-r-lg shadow bg-white").
+				Class("rounded-r-lg shadow").
 				Color(Blue).
 				Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
 				Render(IconLeft("fa fa-fw fa-sliders", "Filter"))

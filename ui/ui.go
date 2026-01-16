@@ -32,7 +32,7 @@ const (
 	INPUT         = " cursor-pointer bg-white border border-gray-300 hover:border-blue-500 rounded-lg block w-full h-12"
 	VALUE         = " bg-white border border-gray-300 hover:border-blue-500 rounded-lg block h-12"
 	BTN           = " cursor-pointer font-bold text-center select-none"
-	DISABLED      = " cursor-text pointer-events-none bg-gray-50"
+	DISABLED      = " cursor-text pointer-events-none bg-gray-50 text-gray-500"
 	Yellow        = " bg-yellow-400 text-gray-800 hover:text-gray-200 hover:bg-yellow-600 font-bold border-gray-300 flex items-center justify-center"
 	YellowOutline = " border border-yellow-500 text-yellow-600 hover:text-gray-700 hover:bg-yellow-500 flex items-center justify-center"
 	Green         = " bg-green-600 text-white hover:bg-green-700 checked:bg-green-600 border-gray-300 flex items-center justify-center"

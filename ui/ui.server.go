@@ -2786,9 +2786,14 @@ func MakeApp(defaultLanguage string) *App {
                     }
                 }
             </style>`,
-			`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" integrity="sha512-wnea99uKIC3TJF7v4eKk4Y+lMz2Mklv18+r4na2Gn1abDRPPOeef95xTzdwGD9e6zXJBteMIhZ1+68QC5byJZw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
-			// Dark mode CSS overrides (after Tailwind so they take precedence)
-			`<style id="gsui-dark-overrides">
+			`<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>`,
+			// CSS overrides (after Tailwind so they take precedence)
+			`<style id="gsui-overrides">
+                /* Light mode background override */
+                html.bg-gray-200 { background-color: rgba(235, 235, 235, 1); }
+                /* Disabled buttons - ensure text is visible */
+                .pointer-events-none.bg-gray-50 { color: #6b7280 !important; }
+                /* Dark mode overrides */
                 html.dark{ color-scheme: dark; }
                 /* Global text color fallback */
                 .dark body { color:#e5e7eb; }
