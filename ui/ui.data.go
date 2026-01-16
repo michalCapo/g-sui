@@ -150,11 +150,12 @@ var BOOL_ZERO_OPTIONS = []AOption{
 }
 
 type TQuery struct {
-	Limit  int64
-	Offset int64
-	Order  string
-	Search string
-	Filter []TField
+	Limit        int64
+	Offset       int64
+	Order        string
+	PendingOrder string // Pending sort order that will be applied on "Apply" click
+	Search       string
+	Filter       []TField
 }
 
 // QueryHiddenFields generates hidden form fields for preserving query state
@@ -165,6 +166,7 @@ func QueryHiddenFields(query *TQuery) string {
 	fields = append(fields, Hidden("Limit", query.Limit))
 	fields = append(fields, Hidden("Offset", query.Offset))
 	fields = append(fields, Hidden("Order", query.Order))
+	fields = append(fields, Hidden("PendingOrder", query.PendingOrder))
 	fields = append(fields, Hidden("Search", query.Search))
 	fields = append(fields, FilterHiddenFields(query))
 
@@ -323,6 +325,7 @@ func (collate *collate[T]) onResize(ctx *Context) string {
 	// Preserve all state from the request body
 	query.Offset = body.Offset
 	query.Order = body.Order
+	query.PendingOrder = body.PendingOrder
 	query.Filter = body.Filter
 	query.Search = body.Search
 
@@ -349,6 +352,7 @@ func (collate *collate[T]) onSort(ctx *Context) string {
 	query.Limit = body.Limit
 	query.Offset = body.Offset
 	query.Order = body.Order
+	query.PendingOrder = body.PendingOrder
 	query.Filter = body.Filter
 	query.Search = body.Search
 
@@ -366,6 +370,11 @@ func (collate *collate[T]) onSearch(ctx *Context) string {
 	err := ctx.Body(query)
 	if err != nil {
 		log.Printf("Error: %v", err)
+	}
+
+	// Apply pending order when Apply button is clicked
+	if query.PendingOrder != "" {
+		query.Order = query.PendingOrder
 	}
 
 	return collate.ui(ctx, query)
@@ -564,11 +573,17 @@ func makeQuery(def *TQuery) *TQuery {
 	}
 
 	query := &TQuery{
-		Limit:  def.Limit,
-		Offset: def.Offset,
-		Order:  def.Order,
-		Search: def.Search,
-		Filter: def.Filter,
+		Limit:        def.Limit,
+		Offset:       def.Offset,
+		Order:        def.Order,
+		PendingOrder: def.PendingOrder,
+		Search:       def.Search,
+		Filter:       def.Filter,
+	}
+
+	// Initialize PendingOrder to Order if not set
+	if query.PendingOrder == "" {
+		query.PendingOrder = query.Order
 	}
 
 	return query
@@ -628,54 +643,126 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 
 			Form("flex flex-col", ctx.Submit(collate.onSearch).Replace(collate.Target))(
 				Hidden("Search", query.Search),
+				Hidden("PendingOrder", query.PendingOrder),
 
 				// Sort section
 				Iff(len(collate.SortFields) > 0)(
 					Div("flex flex-col gap-2 mb-3")(
 						Div("text-xs font-bold text-gray-600 mb-1")("Sort By"),
-						Div("flex flex-wrap gap-1")(
+						Div("flex flex-wrap gap-1", Attr{ID: "sort-buttons-container"})(
 							Map(collate.SortFields, func(sort *TField, index int) string {
 								if sort.DB == "" {
 									sort.DB = sort.Field
 								}
 
+								// Use PendingOrder for visual state instead of Order
 								direction := ""
-								color := GrayOutline
-								field := strings.ToLower(sort.DB)
-								orderStr := strings.ToLower(query.Order)
+								pendingOrderStr := query.PendingOrder
+								if pendingOrderStr == "" {
+									pendingOrderStr = query.Order
+								}
 
-								if strings.Contains(orderStr, field) {
-									if strings.Contains(orderStr, "asc") {
-										direction = "asc"
-									} else {
-										direction = "desc"
+								// Parse order string: "field asc" or "field desc"
+								orderParts := strings.Fields(strings.TrimSpace(pendingOrderStr))
+								if len(orderParts) >= 2 {
+									orderField := strings.ToLower(orderParts[0])
+									orderDir := strings.ToLower(orderParts[1])
+									if orderField == strings.ToLower(sort.DB) {
+										if orderDir == "asc" {
+											direction = "asc"
+										} else if orderDir == "desc" {
+											direction = "desc"
+										}
 									}
-
-									color = Blue
 								}
 
-								reverse := "desc"
+								// Each button will have a unique ID
+								btnID := fmt.Sprintf("sort-btn-%s", sort.DB)
+								iconID := fmt.Sprintf("sort-icon-%s", sort.DB)
 
-								if direction == "desc" {
-									reverse = "asc"
+								// JavaScript to cycle through: none -> asc -> desc -> none
+								jsUpdateOrder := fmt.Sprintf(
+									`(function(){
+var form=document.getElementById('sort-btn-%s').closest('form');
+if(!form){console.log('no form');return;}
+var hidden=form.querySelector('input[name="PendingOrder"]');
+if(!hidden){console.log('no hidden');return;}
+
+var field='%s';
+var current=(hidden.value||'').trim();
+var parts=current.split(/\s+/);
+var currentField=parts[0]||'';
+var currentDir=(parts[1]||'').toLowerCase();
+var newOrder='';
+var newDir='';
+
+if(currentField.toLowerCase()===field.toLowerCase()){
+	if(currentDir==='asc'){
+		newOrder=field+' desc';
+		newDir='desc';
+	}else if(currentDir==='desc'){
+		newOrder='';
+		newDir='';
+	}else{
+		newOrder=field+' asc';
+		newDir='asc';
+	}
+}else{
+	newOrder=field+' asc';
+	newDir='asc';
+}
+hidden.value=newOrder;
+
+var allBtns=form.querySelectorAll('[id^="sort-btn-"]');
+for(var i=0;i<allBtns.length;i++){
+	var w=allBtns[i];
+	var f=w.id.replace('sort-btn-','');
+	var ic=document.getElementById('sort-icon-'+f);
+	var bt=w.querySelector('[onclick]');
+	if(!bt)continue;
+	
+	var isActive=(f.toLowerCase()===field.toLowerCase() && newDir!=='');
+	var dir=(f.toLowerCase()===field.toLowerCase())?newDir:'';
+	
+	if(ic){
+		if(dir==='asc'){
+			ic.className='fa fa-fw fa-sort-amount-asc';
+		}else if(dir==='desc'){
+			ic.className='fa fa-fw fa-sort-amount-desc';
+		}else{
+			ic.className='fa fa-fw fa-sort';
+		}
+	}
+	
+	if(isActive){
+		bt.className='rounded text-sm bg-blue-600 border-blue-600 text-white hover:bg-blue-700 cursor-pointer font-bold text-center select-none p-3 flex items-center justify-center';
+	}else{
+		bt.className='rounded text-sm border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 cursor-pointer font-bold text-center select-none p-3 flex items-center justify-center';
+	}
+}
+})();`,
+									sort.DB, sort.DB,
+								)
+
+								buttonClass := "rounded text-sm border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+								if direction == "asc" || direction == "desc" {
+									buttonClass = "rounded text-sm bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
 								}
 
-								// Create a copy of the current query with updated order to preserve filters and search
-								sortQuery := *query
-								sortQuery.Order = sort.DB + " " + reverse
+								iconClass := "fa fa-fw fa-sort"
+								if direction == "asc" {
+									iconClass = "fa fa-fw fa-sort-amount-asc"
+								} else if direction == "desc" {
+									iconClass = "fa fa-fw fa-sort-amount-desc"
+								}
 
-								// Use form to properly preserve filter state across sort changes
-								return Form("inline-flex", ctx.Submit(collate.onSort).Replace(collate.Target))(
-									QueryHiddenFields(&sortQuery),
+								return Div("", Attr{ID: btnID})(
 									Button().
-										Submit().
-										Class("rounded text-sm").
-										Color(color).
+										Class(buttonClass).
+										Click(jsUpdateOrder).
 										Render(
 											Div("flex gap-2 items-center")(
-												Iff(direction == "asc")(Icon("fa fa-fw fa-sort-amount-asc")),
-												Iff(direction == "desc")(Icon("fa fa-fw fa-sort-amount-desc")),
-												Iff(direction == "")(Icon("fa fa-fw fa-sort")),
+												I(iconClass, Attr{ID: iconID})(),
 												sort.Text,
 											),
 										),
@@ -790,6 +877,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				Hidden("Limit", query.Limit),
 				Hidden("Offset", query.Offset),
 				Hidden("Order", query.Order),
+				Hidden("PendingOrder", query.PendingOrder),
 				FilterHiddenFields(query),
 
 				IText("Search", query).
