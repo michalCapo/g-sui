@@ -154,6 +154,7 @@ func Collate(ctx *ui.Context) string {
 
 	// Collate
 	collate := ui.Collate[Person](init)
+	collate.SetColor(ui.CollateGray)
 	collate.Search(
 		surname,
 		name,

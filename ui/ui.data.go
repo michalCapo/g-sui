@@ -204,6 +204,69 @@ type TCollateResult[T any] struct {
 	Query    *TQuery
 }
 
+// CollateColors holds all color-related CSS classes for theming collate components.
+// Use predefined color sets (CollateBlue, CollateGreen, etc.) or create custom ones.
+type CollateColors struct {
+	Button        string // Button color constant (e.g., Blue, Green)
+	ButtonOutline string // Outline button color constant (e.g., BlueOutline, GreenOutline)
+	FormBg        string // Form background class (e.g., "bg-blue-800")
+	ActiveBg      string // Active state background (e.g., "bg-blue-600")
+	ActiveBorder  string // Active state border (e.g., "border-blue-600")
+	ActiveHover   string // Active state hover (e.g., "hover:bg-blue-700")
+}
+
+// Predefined color schemes for collate components
+var (
+	CollateBlue = CollateColors{
+		Button:        Blue,
+		ButtonOutline: BlueOutline,
+		FormBg:        "bg-blue-800",
+		ActiveBg:      "bg-blue-600",
+		ActiveBorder:  "border-blue-600",
+		ActiveHover:   "hover:bg-blue-700",
+	}
+	CollateGreen = CollateColors{
+		Button:        Green,
+		ButtonOutline: GreenOutline,
+		FormBg:        "bg-green-800",
+		ActiveBg:      "bg-green-600",
+		ActiveBorder:  "border-green-600",
+		ActiveHover:   "hover:bg-green-700",
+	}
+	CollatePurple = CollateColors{
+		Button:        Purple,
+		ButtonOutline: PurpleOutline,
+		FormBg:        "bg-purple-800",
+		ActiveBg:      "bg-purple-500",
+		ActiveBorder:  "border-purple-500",
+		ActiveHover:   "hover:bg-purple-700",
+	}
+	CollateRed = CollateColors{
+		Button:        Red,
+		ButtonOutline: RedOutline,
+		FormBg:        "bg-red-800",
+		ActiveBg:      "bg-red-600",
+		ActiveBorder:  "border-red-600",
+		ActiveHover:   "hover:bg-red-700",
+	}
+	CollateYellow = CollateColors{
+		Button:        Yellow,
+		ButtonOutline: YellowOutline,
+		FormBg:        "bg-yellow-600",
+		ActiveBg:      "bg-yellow-400",
+		ActiveBorder:  "border-yellow-400",
+		ActiveHover:   "hover:bg-yellow-500",
+	}
+	CollateGray = CollateColors{
+		Button:        Gray,
+		ButtonOutline: GrayOutline,
+		FormBg:        "bg-gray-800",
+		ActiveBg:      "bg-gray-600",
+		ActiveBorder:  "border-gray-600",
+		ActiveHover:   "hover:bg-gray-700",
+	}
+)
+
 type collate[T any] struct {
 	Init         *TQuery
 	Target       Attr
@@ -215,15 +278,25 @@ type collate[T any] struct {
 	ExcelFields  []TField
 	OnRow        func(*T, int) string
 	OnExcel      func(*[]T) (string, io.Reader, error)
+	Colors       CollateColors
 }
 
 // Collate constructs a new collate with sensible defaults using the provided init query.
+// Default color scheme is blue.
 func Collate[T any](init *TQuery) *collate[T] {
 	return &collate[T]{
 		Init:         init,
 		Target:       Target(),
 		TargetFilter: Target(),
+		Colors:       CollateBlue,
 	}
+}
+
+// SetColor sets the color scheme for the collate component.
+// Use predefined schemes: CollateBlue, CollateGreen, CollatePurple, CollateRed, CollateYellow, CollateGray.
+func (c *collate[T]) SetColor(colors CollateColors) *collate[T] {
+	c.Colors = colors
+	return c
 }
 
 func (collate *collate[T]) onXLS(ctx *Context) string {
@@ -681,6 +754,11 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 								iconID := fmt.Sprintf("sort-icon-%s", sort.DB)
 
 								// JavaScript to cycle through: none -> asc -> desc -> none
+								// Use configured colors for active state
+								activeClass := fmt.Sprintf("rounded text-sm %s %s text-white %s cursor-pointer font-bold text-center select-none p-3 flex items-center justify-center",
+									collate.Colors.ActiveBg, collate.Colors.ActiveBorder, collate.Colors.ActiveHover)
+								inactiveClass := "rounded text-sm border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 cursor-pointer font-bold text-center select-none p-3 flex items-center justify-center"
+
 								jsUpdateOrder := fmt.Sprintf(
 									`(function(){
 var form=document.getElementById('sort-btn-%s').closest('form');
@@ -735,18 +813,18 @@ for(var i=0;i<allBtns.length;i++){
 	}
 	
 	if(isActive){
-		bt.className='rounded text-sm bg-blue-600 border-blue-600 text-white hover:bg-blue-700 cursor-pointer font-bold text-center select-none p-3 flex items-center justify-center';
+		bt.className='%s';
 	}else{
-		bt.className='rounded text-sm border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 cursor-pointer font-bold text-center select-none p-3 flex items-center justify-center';
+		bt.className='%s';
 	}
 }
 })();`,
-									sort.DB, sort.DB,
+									sort.DB, sort.DB, activeClass, inactiveClass,
 								)
 
-								buttonClass := "rounded text-sm border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+								buttonClass := inactiveClass
 								if direction == "asc" || direction == "desc" {
-									buttonClass = "rounded text-sm bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
+									buttonClass = activeClass
 								}
 
 								iconClass := "fa fa-fw fa-sort"
@@ -847,7 +925,7 @@ for(var i=0;i<allBtns.length;i++){
 					Button().
 						Submit().
 						Class("flex items-center gap-2 rounded-full px-4 h-10").
-						Color(Blue).
+						Color(collate.Colors.Button).
 						Render(IconLeft("fa fa-fw fa-check", "Apply")),
 				),
 			),
@@ -856,15 +934,15 @@ for(var i=0;i<allBtns.length;i++){
 }
 
 func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
-	// Build form class conditionally
-	formClass := "flex bg-blue-800 rounded-lg"
+	// Build form class conditionally using configured color
+	formClass := fmt.Sprintf("flex %s rounded-lg", collate.Colors.FormBg)
 
 	return Div("flex gap-px w-full")(
 		// Excel button at the start of the row
 		If(len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
 			return Button().
 				Class("rounded-lg shadow").
-				Color(Blue).
+				Color(collate.Colors.Button).
 				Click(ctx.Call(collate.onXLS, query).None()).
 				Render(IconLeft("fa fa-download", "Excel"))
 		}),
@@ -889,7 +967,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				Button().
 					Submit().
 					Class("shadow").
-					Color(Blue).
+					Color(collate.Colors.Button).
 					Render(Icon("fa fa-fw fa-search")),
 			)
 		}),
@@ -898,7 +976,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 			return Button().
 				Submit().
 				Class("rounded-r-lg shadow").
-				Color(Blue).
+				Color(collate.Colors.Button).
 				Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
 				Render(IconLeft("fa fa-fw fa-sliders", "Filter"))
 		}),
@@ -928,7 +1006,7 @@ func Sorting[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 					direction = "desc"
 				}
 
-				color = Purple
+				color = collate.Colors.Button
 			}
 
 			reverse := "desc"
@@ -982,7 +1060,7 @@ func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T])
 			// reset
 			Button().
 				Class("bg-white rounded-l").
-				Color(BlueOutline).
+				Color(collate.Colors.ButtonOutline).
 				Disabled(size == 0 || size <= int(collate.Init.Limit)).
 				Click(ctx.Call(collate.onReset).Replace(collate.Target)).
 				Render(
@@ -995,7 +1073,7 @@ func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T])
 				Button().
 					Submit().
 					Class("rounded-r bg-white").
-					Color(BlueOutline).
+					Color(collate.Colors.ButtonOutline).
 					Disabled(size >= int(result.Filtered)).
 					Render(
 						Div("flex gap-2 items-center")(
