@@ -546,10 +546,8 @@ func (collate *collate[T]) ui(ctx *Context, query *TQuery) string {
 
 	return Div("flex flex-col gap-2 mt-2", collate.Target)(
 		Div("flex flex-col")(
-			Div("flex gap-x-2")(
-				Sorting(ctx, collate, query),
-				Flex1,
-				Searching(ctx, collate, query),
+			Div("flex gap-x-2 justify-end")(
+				Header(ctx, collate, query),
 			),
 			Div("flex justify-end")(
 				Filtering(ctx, collate, query),
@@ -602,18 +600,15 @@ func Empty[T any](result *TCollateResult[T]) string {
 }
 
 func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
-	if len(collate.FilterFields) == 0 {
+	if len(collate.FilterFields) == 0 && len(collate.SortFields) == 0 && len(collate.ExcelFields) == 0 && collate.OnExcel == nil {
 		return ""
 	}
 
-	// c.Query = Query(def)
-	// ctx.Session(database, name, c.Query)
-
 	return Div("col-span-2 relative h-0 hidden z-20", collate.TargetFilter)(
-		Div("absolute top-2 right-0 w-96 rounded-xl bg-white border border-gray-200 shadow-2xl p-4")(
+		Div("absolute top-2 right-0 rounded-xl bg-white border border-gray-200 shadow-2xl p-4")(
 			// Header with title and close button
 			Div("flex items-center justify-between mb-2")(
-				Div("text-sm font-semibold text-gray-700")("Filters"),
+				Div("text-sm font-semibold text-gray-700")("Filters & Options"),
 				Button().
 					Class("rounded-full w-9 h-9 border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center").
 					Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
@@ -623,65 +618,136 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 			Form("flex flex-col", ctx.Submit(collate.onSearch).Replace(collate.Target))(
 				Hidden("Search", query.Search),
 
-				// Filters content
-				Div("flex flex-col gap-2 mt-2")(
-					Map2(collate.FilterFields, func(item TField, index int) []string {
-						if item.DB == "" {
-							item.DB = item.Field
-						}
+				// Sort section
+				Iff(len(collate.SortFields) > 0)(
+					Div("flex flex-col gap-2 mb-3")(
+						Div("text-xs font-bold text-gray-600 mb-1")("Sort By"),
+						Div("flex flex-wrap gap-1")(
+							Map(collate.SortFields, func(sort *TField, index int) string {
+								if sort.DB == "" {
+									sort.DB = sort.Field
+								}
 
-						position := fmt.Sprintf("Filter[%d]", index)
+								direction := ""
+								color := GrayOutline
+								field := strings.ToLower(sort.DB)
+								orderStr := strings.ToLower(query.Order)
 
-						return []string{
-							Iff(item.As == ZERO_DATE)(
-								Div("flex items-center")(
-									Hidden(position+".Field", item.DB),
-									Hidden(position+".As", item.As),
-									ICheckbox(position+".Bool", query).Render(item.Text),
-								),
-							),
+								if strings.Contains(orderStr, field) {
+									if strings.Contains(orderStr, "asc") {
+										direction = "asc"
+									} else {
+										direction = "desc"
+									}
 
-							Iff(item.As == NOT_ZERO_DATE)(
-								Div("flex items-center")(
-									Hidden(position+".Field", item.DB),
-									Hidden(position+".As", item.As),
-									ICheckbox(position+".Bool", query).Render(item.Text),
-								),
-							),
+									color = Purple
+								}
 
-							Iff(item.As == DATES)(
-								Div("")(
-									Label(nil).Class("text-xs mt-1 font-bold").Render(item.Text),
-									Div("grid grid-cols-2 gap-2")(
+								reverse := "desc"
+
+								if direction == "desc" {
+									reverse = "asc"
+								}
+
+								// Create a copy of the current query with updated order to preserve filters and search
+								sortQuery := *query
+								sortQuery.Order = sort.DB + " " + reverse
+
+								// Use form to properly preserve filter state across sort changes
+								return Form("inline-flex", ctx.Submit(collate.onSort).Replace(collate.Target))(
+									QueryHiddenFields(&sortQuery),
+									Button().
+										Submit().
+										Class("rounded bg-white text-sm").
+										Color(color).
+										Render(
+											Div("flex gap-2 items-center")(
+												Iff(direction == "asc")(Icon("fa fa-fw fa-sort-amount-asc")),
+												Iff(direction == "desc")(Icon("fa fa-fw fa-sort-amount-desc")),
+												Iff(direction == "")(Icon("fa fa-fw fa-sort")),
+												sort.Text,
+											),
+										),
+								)
+							}),
+						),
+					),
+				),
+
+				// Export section
+				Iff(len(collate.ExcelFields) > 0 || collate.OnExcel != nil)(
+					Div("flex flex-col gap-2 mb-3")(
+						Div("text-xs font-bold text-gray-600 mb-1")("Export"),
+						Button().
+							Color(Blue).
+							Class("w-full").
+							Click(ctx.Call(collate.onXLS, query).None()).
+							Render(IconLeft("fa fa-download", "Download Excel")),
+					),
+				),
+
+				// Filters section
+				Iff(len(collate.FilterFields) > 0)(
+					Div("flex flex-col gap-2 mt-2 pt-3 border-t border-gray-200")(
+						Div("text-xs font-bold text-gray-600 mb-1")("Filters"),
+						Map2(collate.FilterFields, func(item TField, index int) []string {
+							if item.DB == "" {
+								item.DB = item.Field
+							}
+
+							position := fmt.Sprintf("Filter[%d]", index)
+
+							return []string{
+								Iff(item.As == ZERO_DATE)(
+									Div("flex items-center")(
 										Hidden(position+".Field", item.DB),
 										Hidden(position+".As", item.As),
-										IDate(position+".Dates.From", query).Class("").Render("From"),
-										IDate(position+".Dates.To", query).Class("").Render("To"),
+										ICheckbox(position+".Bool", query).Render(item.Text),
 									),
 								),
-							),
 
-							Iff(item.As == BOOL)(
-								Div("flex items-center")(
-									Hidden(position+".Field", item.DB),
-									Hidden(position+".As", item.As),
-									Hidden(position+".Condition", item.Condition),
-									ICheckbox(position+".Bool", query).Render(item.Text),
+								Iff(item.As == NOT_ZERO_DATE)(
+									Div("flex items-center")(
+										Hidden(position+".Field", item.DB),
+										Hidden(position+".As", item.As),
+										ICheckbox(position+".Bool", query).Render(item.Text),
+									),
 								),
-							),
 
-							Iff(item.As == SELECT && len(item.Options) > 0)(
-								Div("")(
-									Hidden(position+".Field", item.DB),
-									Hidden(position+".As", item.As),
-									ISelect(position+".Value", query).
-										Class("flex-1").
-										Options(item.Options).
-										Render(item.Text),
+								Iff(item.As == DATES)(
+									Div("")(
+										Label(nil).Class("text-xs mt-1 font-bold").Render(item.Text),
+										Div("grid grid-cols-2 gap-2")(
+											Hidden(position+".Field", item.DB),
+											Hidden(position+".As", item.As),
+											IDate(position+".Dates.From", query).Class("").Render("From"),
+											IDate(position+".Dates.To", query).Class("").Render("To"),
+										),
+									),
 								),
-							),
-						}
-					}),
+
+								Iff(item.As == BOOL)(
+									Div("flex items-center")(
+										Hidden(position+".Field", item.DB),
+										Hidden(position+".As", item.As),
+										Hidden(position+".Condition", item.Condition),
+										ICheckbox(position+".Bool", query).Render(item.Text),
+									),
+								),
+
+								Iff(item.As == SELECT && len(item.Options) > 0)(
+									Div("")(
+										Hidden(position+".Field", item.DB),
+										Hidden(position+".As", item.As),
+										ISelect(position+".Value", query).
+											Class("flex-1").
+											Options(item.Options).
+											Render(item.Text),
+									),
+								),
+							}
+						}),
+					),
 				),
 
 				// Footer actions
@@ -703,13 +769,13 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 	)
 }
 
-func Searching[T any](ctx *Context, collate *collate[T], query *TQuery) string {
+func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 	if collate.SearchFields == nil {
 		return ""
 	}
 
-	return Div("flex-1 xl:flex gap-px hidden")(
-		Form("flex-1 flex bg-blue-800 rounded-l-lg", ctx.Submit(collate.onSearch).Replace(collate.Target))(
+	return Div("flex gap-px")(
+		Form("flex bg-blue-800 rounded-l-lg", ctx.Submit(collate.onSearch).Replace(collate.Target))(
 			// Preserve current filter state using hidden fields
 			Hidden("Limit", query.Limit),
 			Hidden("Offset", query.Offset),
@@ -717,7 +783,7 @@ func Searching[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 			FilterHiddenFields(query),
 
 			IText("Search", query).
-				Class("flex-1 p-1 w-72").
+				Class("p-1").
 				ClassInput("cursor-pointer bg-white border-gray-300 hover:border-blue-500 block w-full p-3").
 				Placeholder(ctx.Translate("Search")).
 				Render(""),
@@ -729,20 +795,13 @@ func Searching[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				Render(Icon("fa fa-fw fa-search")),
 		),
 
-		If(len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
-			return Button().
-				Color(Blue).
-				Click(ctx.Call(collate.onXLS, query).None()).
-				Render(IconStart("fa fa-download", "XLS"))
-		}),
-
-		If(len(collate.FilterFields) > 0, func() string {
+		If(len(collate.FilterFields) > 0 || len(collate.SortFields) > 0 || len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
 			return Button().
 				Submit().
 				Class("rounded-r-lg shadow bg-white").
 				Color(Blue).
 				Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
-				Render(IconLeft("fa fa-fw fa-chevron-down", "Filter"))
+				Render(IconLeft("fa fa-fw fa-sliders", "Filter"))
 		}),
 	)
 }
