@@ -776,7 +776,7 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 					Button().
 						Submit().
 						Class("flex items-center gap-2 rounded-lg px-4 h-10").
-						Color(Purple).
+						Color(Blue).
 						Render(IconLeft("fa fa-fw fa-check", "Apply")),
 				),
 			),
@@ -898,7 +898,7 @@ func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T])
 			// reset
 			Button().
 				Class("bg-white rounded-l").
-				Color(PurpleOutline).
+				Color(BlueOutline).
 				Disabled(size == 0 || size <= int(collate.Init.Limit)).
 				Click(ctx.Call(collate.onReset).Replace(collate.Target)).
 				Render(
@@ -910,8 +910,8 @@ func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T])
 				QueryHiddenFields(result.Query),
 				Button().
 					Submit().
-					Class("rounded-r").
-					Color(Purple).
+					Class("rounded-r bg-white").
+					Color(BlueOutline).
 					Disabled(size >= int(result.Filtered)).
 					Render(
 						Div("flex gap-2 items-center")(

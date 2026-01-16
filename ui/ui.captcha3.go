@@ -240,7 +240,6 @@ func (c *Captcha3Component) Render(ctx *Context) string {
                 function updateContainerAppearance() {
                     if (!tilesContainer) { return; }
                     tilesContainer.classList.toggle('border-slate-300', !solved);
-                    tilesContainer.classList.toggle('bg-white', !solved);
                     tilesContainer.classList.toggle('border-green-500', solved);
                     tilesContainer.classList.toggle('bg-emerald-50', solved);
                 }
