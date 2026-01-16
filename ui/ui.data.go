@@ -546,12 +546,8 @@ func (collate *collate[T]) ui(ctx *Context, query *TQuery) string {
 
 	return Div("flex flex-col gap-2 mt-2", collate.Target)(
 		Div("flex flex-col")(
-			Div("flex gap-x-2 justify-end")(
-				Header(ctx, collate, query),
-			),
-			Div("flex justify-end")(
-				Filtering(ctx, collate, query),
-			),
+			Header(ctx, collate, query),
+			Filtering(ctx, collate, query),
 		),
 		Map(result.Data, collate.OnRow),
 		Paging(ctx, collate, result),
@@ -600,7 +596,7 @@ func Empty[T any](result *TCollateResult[T]) string {
 }
 
 func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
-	if len(collate.FilterFields) == 0 && len(collate.SortFields) == 0 && len(collate.ExcelFields) == 0 && collate.OnExcel == nil {
+	if len(collate.FilterFields) == 0 && len(collate.SortFields) == 0 {
 		return ""
 	}
 
@@ -655,7 +651,7 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 										direction = "desc"
 									}
 
-									color = Purple
+									color = Blue
 								}
 
 								reverse := "desc"
@@ -673,7 +669,7 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 									QueryHiddenFields(&sortQuery),
 									Button().
 										Submit().
-										Class("rounded bg-white text-sm").
+										Class("rounded text-sm").
 										Color(color).
 										Render(
 											Div("flex gap-2 items-center")(
@@ -686,18 +682,6 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 								)
 							}),
 						),
-					),
-				),
-
-				// Export section
-				Iff(len(collate.ExcelFields) > 0 || collate.OnExcel != nil)(
-					Div("flex flex-col gap-2 mb-3")(
-						Div("text-xs font-bold text-gray-600 mb-1")("Export"),
-						Button().
-							Color(Blue).
-							Class("w-full").
-							Click(ctx.Call(collate.onXLS, query).None()).
-							Render(IconLeft("fa fa-download", "Download Excel")),
 					),
 				),
 
@@ -775,7 +759,7 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 
 					Button().
 						Submit().
-						Class("flex items-center gap-2 rounded-lg px-4 h-10").
+						Class("flex items-center gap-2 rounded-full px-4 h-10").
 						Color(Blue).
 						Render(IconLeft("fa fa-fw fa-check", "Apply")),
 				),
@@ -785,32 +769,44 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 }
 
 func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
-	if collate.SearchFields == nil {
-		return ""
-	}
+	// Build form class conditionally
+	formClass := "flex bg-blue-800 rounded-lg"
 
-	return Div("flex gap-px")(
-		Form("flex bg-blue-800 rounded-l-lg", ctx.Submit(collate.onSearch).Replace(collate.Target))(
-			// Preserve current filter state using hidden fields
-			Hidden("Limit", query.Limit),
-			Hidden("Offset", query.Offset),
-			Hidden("Order", query.Order),
-			FilterHiddenFields(query),
-
-			IText("Search", query).
-				Class("p-1").
-				ClassInput("cursor-pointer bg-white border-gray-300 hover:border-blue-500 block w-full p-3").
-				Placeholder(ctx.Translate("Search")).
-				Render(""),
-
-			Button().
-				Submit().
-				Class("rounded shadow").
+	return Div("flex gap-px w-full")(
+		// Excel button at the start of the row
+		If(len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
+			return Button().
+				Class("rounded-lg shadow").
 				Color(Blue).
-				Render(Icon("fa fa-fw fa-search")),
-		),
+				Click(ctx.Call(collate.onXLS, query).None()).
+				Render(IconLeft("fa fa-download", "Excel"))
+		}),
 
-		If(len(collate.FilterFields) > 0 || len(collate.SortFields) > 0 || len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
+		Flex1,
+
+		If(collate.SearchFields != nil, func() string {
+			return Form(formClass, ctx.Submit(collate.onSearch).Replace(collate.Target))(
+				// Preserve current filter state using hidden fields
+				Hidden("Limit", query.Limit),
+				Hidden("Offset", query.Offset),
+				Hidden("Order", query.Order),
+				FilterHiddenFields(query),
+
+				IText("Search", query).
+					Class("p-1").
+					ClassInput("cursor-pointer bg-white border-gray-300 hover:border-blue-500 block w-full p-3").
+					Placeholder(ctx.Translate("Search")).
+					Render(""),
+
+				Button().
+					Submit().
+					Class("shadow").
+					Color(Blue).
+					Render(Icon("fa fa-fw fa-search")),
+			)
+		}),
+
+		If(len(collate.FilterFields) > 0 || len(collate.SortFields) > 0, func() string {
 			return Button().
 				Submit().
 				Class("rounded-r-lg shadow").

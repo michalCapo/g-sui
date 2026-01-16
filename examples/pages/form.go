@@ -59,7 +59,7 @@ func render(ctx *ui.Context, data *formData, err *error) string {
 		ui.Div("text-2xl font-bold")("Form association"),
 		ui.Div("text-gray-600")("Form input fields and submit button is defined outside html form element. This is useful when you want to reuse the form in multiple places."),
 
-		ui.Div("border rounded-lg p-4 bg-white dark:bg-gray-900 shadow-lg border rounded-lg flex flex-col gap-4")(
+		ui.Div("rounded-lg p-4 bg-white dark:bg-gray-900 shadow-lg flex flex-col gap-4")(
 			ui.Div("flex flex-col")(
 				ui.Div("text-lg font-semibold")("Form creation example"),
 				ui.Div("text-gray-600 text-sm mb-4")("Form example with input fields and submit button."),

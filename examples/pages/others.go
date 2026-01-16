@@ -3,27 +3,27 @@ package pages
 import "github.com/michalCapo/g-sui/ui"
 
 func Others(ctx *ui.Context) string {
-	hello := ui.Div("bg-white p-6 rounded-lg shadow w-full border")(
+	hello := ui.Div("bg-white p-6 rounded-lg shadow w-full")(
 		ui.Div("text-lg font-bold")("Hello"),
 		ui.Div("flex flex-row gap-4")(
 			HelloContent(ctx),
 		),
 	)
-	counter := ui.Div("bg-white p-6 rounded-lg shadow w-full border")(
+	counter := ui.Div("bg-white p-6 rounded-lg shadow w-full")(
 		ui.Div("text-lg font-bold")("Counter"),
 		ui.Div("flex flex-row gap-4")(
 			Counter(3).render(ctx),
 			Counter(5).render(ctx),
 		),
 	)
-	login := ui.Div("bg-white p-6 rounded-lg shadow w-full border")(
+	login := ui.Div("bg-white p-6 rounded-lg shadow w-full")(
 		ui.Div("text-lg font-bold")("Login"),
 		ui.Div("flex flex-row gap-4")(
 			LoginContent(ctx),
 		),
 	)
 
-	markdown := ui.Div("bg-white p-6 rounded-lg shadow flex flex-col gap-3 w-full border")(
+	markdown := ui.Div("bg-white p-6 rounded-lg shadow flex flex-col gap-3 w-full")(
 		ui.Div("text-xl font-bold")("Markdown"),
 		ui.Markdown("prose prose-sm sm:prose max-w-none")(`# Heading
 
