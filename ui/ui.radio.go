@@ -229,7 +229,7 @@ func (c *ARadio) Render(text string) string {
 
 	return Div(c.class)(
 		If(text != "", func() string {
-			return Label(&c.target).
+			return Label(&Attr{}).
 				Class(c.classLabel).
 				ClassLabel("text-gray-600").
 				Required(c.required).
