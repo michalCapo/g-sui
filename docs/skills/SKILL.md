@@ -67,4 +67,21 @@ go run examples/main.go      # Run example app
 go test ./...                # Run all tests
 go test ./ui/...             # Test UI package
 go build                     # Build project
+./deploy                     # Create and push new version tag
 ```
+
+## Releases
+
+To create a new version release:
+
+```bash
+./deploy
+```
+
+The `deploy` script automatically:
+- Starts at version `v0.100` if no tags exist
+- Increments the minor version by 1 (e.g., `v0.100` → `v0.101` → `v0.102`)
+- Ensures working tree is clean before tagging
+- Creates an annotated git tag and pushes to remote
+
+Version numbering: `v0.XXX` format, auto-incremented from `v0.100`.

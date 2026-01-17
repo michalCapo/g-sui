@@ -260,3 +260,27 @@ project/
 └── models/
     └── user.go
 ```
+
+## Releases and Versioning
+
+### Creating a New Release
+
+To create and push a new version tag:
+
+```bash
+./deploy
+```
+
+The `deploy` script:
+- Starts at `v0.100` if no tags exist
+- Auto-increments minor version (`v0.100` → `v0.101` → `v0.102`, etc.)
+- Validates clean working tree before tagging
+- Creates annotated git tag and pushes to remote
+
+### Version Numbering
+
+Format: `v0.XXX`
+- Major version: Fixed at `0` (pre-1.0 release)
+- Minor version: Auto-incremented starting from `100`
+
+After running `./deploy`, create a GitHub release at the repository's releases page.
