@@ -994,7 +994,7 @@ for(var i=0;i<allBtns.length;i++){
 
 func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 	// Build form class conditionally using configured color
-	formClass := fmt.Sprintf("flex %s rounded", collate.Colors.ActiveBg)
+	formClass := fmt.Sprintf("flex %s rounded-l", collate.Colors.ActiveBg)
 
 	return Div("flex w-full")(
 		// Excel button at the start of the row
@@ -1017,17 +1017,19 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				Hidden("PendingOrder", query.PendingOrder),
 				FilterHiddenFields(query),
 
-				IText("Search", query).
-					Class("p-px").
-					ClassInput("cursor-pointer bg-white border-gray-300 hover:border-blue-500 block w-full p-3").
-					Placeholder(ctx.Translate("Search")).
-					Render(""),
+				Div("relative p-px")(
+					IText("Search", query).
+						Class("").
+						ClassInput("cursor-pointer bg-white border-gray-300 hover:border-blue-500 block w-full p-3 pr-12").
+						Placeholder(ctx.Translate("Search")).
+						Render(""),
 
-				Button().
-					Submit().
-					Class("shadow").
-					Color(collate.Colors.Button).
-					Render(Icon("fa fa-fw fa-search")),
+					Button().
+						Submit().
+						Color(GrayOutline).
+						Class("absolute right-2 top-1/2 -translate-y-1/2 rounded-full w-8 h-8 flex items-center justify-center").
+						Render(Icon("fa fa-fw fa-search")),
+				),
 			)
 		}),
 
