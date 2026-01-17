@@ -67,7 +67,7 @@ type JSElement struct {
 
 // JSPatchOp represents a single patch operation
 type JSPatchOp struct {
-	Op  string     `json:"op"`            // "inline", "outline", "append", "prepend", "none", "notify", "title"
+	Op  string     `json:"op"`            // "inline", "outline", "append", "prepend", "none", "notify", "title", "reload", "redirect", "download"
 	Tgt string     `json:"tgt,omitempty"` // target element ID
 	El  *JSElement `json:"el,omitempty"`  // element to insert/replace
 	JS  string     `json:"js,omitempty"`  // raw JavaScript (for backwards compatibility)
@@ -76,6 +76,12 @@ type JSPatchOp struct {
 	Variant string `json:"variant,omitempty"` // "success", "error", "info", "error-reload"
 	// Title field (when op == "title")
 	Title string `json:"title,omitempty"` // page title
+	// Redirect field (when op == "redirect")
+	Href string `json:"href,omitempty"` // redirect URL
+	// Download fields (when op == "download")
+	Data        string `json:"data,omitempty"`         // base64-encoded file content
+	ContentType string `json:"content_type,omitempty"` // MIME type
+	Filename    string `json:"filename,omitempty"`     // download filename
 }
 
 // JSPatchMessage is the WebSocket patch message format
@@ -934,14 +940,19 @@ func (ctx *Context) Load(href string) Attr {
 	return Attr{OnClick: Trim(fmt.Sprintf(`__load("%s")`, escapeJS(href)))}
 }
 
-func (ctx *Context) Reload() string {
-	// return Normalize("<html><!DOCTYPE html><body><script>window.location.reload();</script></body></html>")
-	return Normalize("<script>window.location.reload();</script>")
+// Reload adds a reload operation that will reload the page on the client
+func (ctx *Context) Reload() {
+	ctx.ops = append(ctx.ops, &JSPatchOp{
+		Op: "reload",
+	})
 }
 
-func (ctx *Context) Redirect(href string) string {
-	// return Normalize(fmt.Sprintf("<html><!DOCTYPE html><body><script>window.location.href = '%s';</script></body></html>", href))
-	return Normalize(fmt.Sprintf("<script>window.location.href = '%s';</script>", escapeJS(href)))
+// Redirect adds a redirect operation that will navigate to the specified URL
+func (ctx *Context) Redirect(href string) {
+	ctx.ops = append(ctx.ops, &JSPatchOp{
+		Op:   "redirect",
+		Href: href,
+	})
 }
 
 // Deferred fragments removed. The previous ctx.Defer(...) builder and helpers
@@ -1073,25 +1084,13 @@ func (ctx *Context) DownloadAs(file *io.Reader, contentType string, name string)
 	// Encode the byte slice to a base64 string
 	fileBase64 := base64.StdEncoding.EncodeToString(fileBytes)
 
-	ctx.append = append(ctx.append,
-		Trim(fmt.Sprintf(`<script>
-            (function () {
-                const byteCharacters = atob("%s");
-                const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                }
-                const byteArray = new Uint8Array(byteNumbers);
-                const blob = new Blob([byteArray], { type: "%s" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "%s";
-                a.click();
-                URL.revokeObjectURL(url);
-            })();
-        </script>`, fileBase64, contentType, name)),
-	)
+	// Add download operation
+	ctx.ops = append(ctx.ops, &JSPatchOp{
+		Op:          "download",
+		Data:        fileBase64,
+		ContentType: contentType,
+		Filename:    name,
+	})
 
 	return nil
 }
@@ -3191,6 +3190,38 @@ var __engine = Trim(`
                 // Handle title operations
                 if (op.op === 'title') {
                     try { document.title = op.title || ''; } catch(_){ }
+                    continue;
+                }
+                
+                // Handle reload operations
+                if (op.op === 'reload') {
+                    try { window.location.reload(); } catch(_){ }
+                    continue;
+                }
+                
+                // Handle redirect operations
+                if (op.op === 'redirect') {
+                    try { window.location.href = op.href || '/'; } catch(_){ }
+                    continue;
+                }
+                
+                // Handle download operations
+                if (op.op === 'download') {
+                    try {
+                        var byteCharacters = atob(op.data || '');
+                        var byteNumbers = new Array(byteCharacters.length);
+                        for (var j = 0; j < byteCharacters.length; j++) {
+                            byteNumbers[j] = byteCharacters.charCodeAt(j);
+                        }
+                        var byteArray = new Uint8Array(byteNumbers);
+                        var blob = new Blob([byteArray], { type: op.content_type || 'application/octet-stream' });
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = op.filename || 'download';
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    } catch(_){ }
                     continue;
                 }
                 

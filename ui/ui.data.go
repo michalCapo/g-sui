@@ -997,13 +997,16 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 	formClass := fmt.Sprintf("flex %s rounded-l", collate.Colors.ActiveBg)
 
 	return Div("flex w-full")(
-		// Excel button at the start of the row
+		// Excel button at the start of the row - use form to properly serialize filter state
 		If(len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
-			return Button().
-				Class("rounded shadow").
-				Color(collate.Colors.Button).
-				Click(ctx.Call(collate.onXLS, query).None()).
-				Render(IconLeft("fa fa-download", "Export"))
+			return Form("inline-flex", ctx.Submit(collate.onXLS).None())(
+				QueryHiddenFields(query),
+				Button().
+					Submit().
+					Class("rounded shadow").
+					Color(collate.Colors.Button).
+					Render(IconLeft("fa fa-download", "Export")),
+			)
 		}),
 
 		Flex1,
