@@ -636,15 +636,30 @@ func nodeToJSElement(n *html.Node) *JSElement {
 		switch attr.Key {
 		case "onclick":
 			if event := parseEventHandler(attr.Val, "click"); event != nil {
-				elem.E["click"] = event
+				if event.Act == "raw" {
+					// Keep raw JavaScript as attribute so querySelector('[onclick]') works
+					elem.A["onclick"] = attr.Val
+				} else {
+					elem.E["click"] = event
+				}
 			}
 		case "onchange":
 			if event := parseEventHandler(attr.Val, "change"); event != nil {
-				elem.E["change"] = event
+				if event.Act == "raw" {
+					// Keep raw JavaScript as attribute
+					elem.A["onchange"] = attr.Val
+				} else {
+					elem.E["change"] = event
+				}
 			}
 		case "onsubmit":
 			if event := parseEventHandler(attr.Val, "submit"); event != nil {
-				elem.E["submit"] = event
+				if event.Act == "raw" {
+					// Keep raw JavaScript as attribute
+					elem.A["onsubmit"] = attr.Val
+				} else {
+					elem.E["submit"] = event
+				}
 			}
 		case "disabled", "readonly", "checked", "selected", "required":
 			// Boolean attributes - store with empty string or the value if present

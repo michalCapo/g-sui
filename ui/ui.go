@@ -28,9 +28,9 @@ const (
 
 const (
 	// DISABLED      = " cursor-text bg-gray-100 pointer-events-none"
-	AREA          = " cursor-pointer bg-white border border-gray-300 hover:border-blue-500 rounded-lg block w-full"
-	INPUT         = " cursor-pointer bg-white border border-gray-300 hover:border-blue-500 rounded-lg block w-full h-12"
-	VALUE         = " bg-white border border-gray-300 hover:border-blue-500 rounded-lg block h-12"
+	AREA          = " cursor-pointer bg-white border border-gray-300 hover:border-blue-500 rounded block w-full"
+	INPUT         = " cursor-pointer bg-white border border-gray-300 hover:border-blue-500 rounded block w-full h-12"
+	VALUE         = " bg-white border border-gray-300 hover:border-blue-500 rounded block h-12"
 	BTN           = " cursor-pointer font-bold text-center select-none"
 	DISABLED      = " cursor-text pointer-events-none bg-gray-50 text-gray-500"
 	Yellow        = " bg-yellow-400 text-gray-800 hover:text-gray-200 hover:bg-yellow-600 font-bold border-gray-300 flex items-center justify-center"
@@ -83,12 +83,12 @@ type Attr struct {
 	Required     bool
 	Readonly     bool
 	// Custom data attributes for component state
-	DataAccordion       string
-	DataAccordionItem   string
+	DataAccordion        string
+	DataAccordionItem    string
 	DataAccordionContent string
-	DataTabs            string
-	DataTabsIndex       string
-	DataTabsPanel       string
+	DataTabs             string
+	DataTabsIndex        string
+	DataTabsPanel        string
 }
 
 // TargetSwap pairs a target id with a swap strategy for convenient patch calls.

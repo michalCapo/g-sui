@@ -996,7 +996,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 	// Build form class conditionally using configured color
 	formClass := fmt.Sprintf("flex %s rounded", collate.Colors.ActiveBg)
 
-	return Div("flex gap-px w-full")(
+	return Div("flex w-full")(
 		// Excel button at the start of the row
 		If(len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
 			return Button().
@@ -1018,7 +1018,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				FilterHiddenFields(query),
 
 				IText("Search", query).
-					Class("p-1").
+					Class("p-px").
 					ClassInput("cursor-pointer bg-white border-gray-300 hover:border-blue-500 block w-full p-3").
 					Placeholder(ctx.Translate("Search")).
 					Render(""),
