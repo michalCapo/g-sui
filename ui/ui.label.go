@@ -42,13 +42,17 @@ func (c *ALabel) ClassLabel(value ...string) *ALabel {
 	return c
 }
 
+// Render generates JavaScript code that creates the label element
 func (c *ALabel) Render(text string) string {
 	if text == "" {
 		return ""
 	}
 
-	return Div(Classes(c.class, "relative"))(
-		open("label")(c.classLabel, Attr{For: c.id})(text),
-		If(c.required && !c.disabled, func() string { return Span("ml-1 text-red-700")("*") }),
-	)
+	labelJS := El("label", c.classLabel, Attr{For: c.id})(Text(text))
+	asteriskJS := ""
+	if c.required && !c.disabled {
+		asteriskJS = "," + Span("ml-1 text-red-700")(Text("*"))
+	}
+
+	return Div(Classes(c.class, "relative"))(labelJS + asteriskJS)
 }

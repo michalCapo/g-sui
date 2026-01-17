@@ -160,22 +160,12 @@ func (c *TInput) EmptyOnDefault() *TInput {
 }
 
 func (c *TInput) Change(action string) *TInput {
-	// if action.Target.Id == "" {
-	// 	action.Target = c.target
-	// }
-
 	c.onchange = action
-
 	return c
 }
 
 func (c *TInput) Click(action string) *TInput {
-	// if action.Target.Id == "" {
-	// 	action.Target = c.target
-	// }
-
 	c.onclick = action
-
 	return c
 }
 
@@ -183,14 +173,12 @@ func (c *TInput) Numbers(min float64, max float64, step float64) *TInput {
 	c.numbers.Min = min
 	c.numbers.Max = max
 	c.numbers.Step = step
-
 	return c
 }
 
 func (c *TInput) Dates(min time.Time, max time.Time) *TInput {
 	c.dates.Min = min
 	c.dates.Max = max
-
 	return c
 }
 
@@ -213,65 +201,46 @@ func IText(name string, data ...any) *TInput {
 		}
 
 		value := ""
-
 		if c.data != nil {
-			// v := reflect.ValueOf(c.data)
-
-			// if v.Kind() == reflect.Ptr {
-			// 	v = v.Elem()
-			// }
-
-			// tmp := v.FieldByName(c.name)
-
-			// if tmp.IsValid() {
-			// 	value = tmp.String()
-			// }
-
 			tmp, err := PathValue(c.data, c.name)
 			if err == nil {
 				value = fmt.Sprintf("%v", tmp.Interface())
 			}
 		}
-
-		// Use c.value as fallback if value is still empty
 		if value == "" && c.value != "" {
 			value = c.value
 		}
 
-		// if c.error != nil { c.class = Classes(c.class, "border-4 border-red-600") }
+		labelJS := Label(&c.target).
+			Class(c.classLabel).
+			ClassLabel("text-gray-600").
+			Required(c.required).
+			Render(text)
 
-		return Div(c.class)(
-			Label(&c.target).
-				Class(c.classLabel).
-				ClassLabel("text-gray-600").
-				Required(c.required).
-				Render(text),
-
-			Input(
-				Classes(INPUT, c.size, c.classInput,
-					If(c.disabled, func() string { return DISABLED }),
-					If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
-					If(c.readonly, func() string { return "cursor-text pointer-events-none" }),
-				),
-				Attr{
-					ID:           c.target.ID,
-					Name:         c.name,
-					Type:         c.as,
-					OnChange:     c.onchange,
-					OnClick:      c.onclick,
-					Required:     c.required,
-					Disabled:     c.disabled,
-					Readonly:     c.readonly,
-					Value:        value,
-					Pattern:      c.pattern,
-					Placeholder:  c.placeholder,
-					Autocomplete: c.autocomplete,
-					Form:         c.form,
-				},
+		inputJS := Input(
+			Classes(INPUT, c.size, c.classInput,
+				If(c.disabled, func() string { return DISABLED }),
+				If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
+				If(c.readonly, func() string { return "cursor-text pointer-events-none" }),
 			),
-
-			// ErrorField(c.error),
+			Attr{
+				ID:           c.target.ID,
+				Name:         c.name,
+				Type:         c.as,
+				OnChange:     c.onchange,
+				OnClick:      c.onclick,
+				Required:     c.required,
+				Disabled:     c.disabled,
+				Readonly:     c.readonly,
+				Value:        value,
+				Pattern:      c.pattern,
+				Placeholder:  c.placeholder,
+				Autocomplete: c.autocomplete,
+				Form:         c.form,
+			},
 		)
+
+		return Div(c.class)(labelJS, inputJS)
 	}
 
 	return c
@@ -290,7 +259,6 @@ var IEmail = func(name string, data ...any) *TInput {
 		Type("email").
 		Autocomplete("email").
 		Placeholder("name@gmail.com")
-	// Pattern("^[a-z0-9._%+-]+@[a-z0-9-]+\\.[a-z0-9]{2,}$")
 }
 
 func IArea(name string, data ...any) *TInput {
@@ -312,60 +280,45 @@ func IArea(name string, data ...any) *TInput {
 		}
 
 		value := ""
-
 		if c.data != nil {
 			tmp, err := PathValue(c.data, c.name)
 			if err == nil {
 				value = fmt.Sprintf("%v", tmp.Interface())
 			}
-
-			// v := reflect.ValueOf(c.data)
-
-			// if v.Kind() == reflect.Ptr {
-			// 	v = v.Elem()
-			// }
-
-			// tmp := v.FieldByName(c.name)
-
-			// if tmp.IsValid() {
-			// 	value = tmp.String()
-			// }
 		}
 
 		rows := uint8(5)
-
 		if c.target.Rows > 0 {
 			rows = uint8(c.target.Rows)
 		}
 
-		return Div(c.class)(
-			Label(&c.target).
-				Class(c.classLabel).
-				ClassLabel("text-gray-600").
-				Required(c.required).
-				Render(text),
+		labelJS := Label(&c.target).
+			Class(c.classLabel).
+			ClassLabel("text-gray-600").
+			Required(c.required).
+			Render(text)
 
-			Textarea(
-				Classes(AREA, c.size,
-					If(c.disabled, func() string { return DISABLED }),
-					If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
-					If(c.readonly, func() string { return "cursor-default" }),
-				),
-				Attr{
-					Rows: rows,
+		textareaJS := Textarea(
+			Classes(AREA, c.size,
+				If(c.disabled, func() string { return DISABLED }),
+				If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
+				If(c.readonly, func() string { return "cursor-default" }),
+			),
+			Attr{
+				Rows:        rows,
+				Type:        c.as,
+				ID:          c.target.ID,
+				Name:        c.name,
+				OnClick:     c.onclick,
+				Required:    c.required,
+				Disabled:    c.disabled,
+				Readonly:    c.readonly,
+				Placeholder: c.placeholder,
+				Form:        c.form,
+			},
+		)(Text(value))
 
-					Type:        c.as,
-					ID:          c.target.ID,
-					Name:        c.name,
-					OnClick:     c.onclick,
-					Required:    c.required,
-					Disabled:    c.disabled,
-					Readonly:    c.readonly,
-					Placeholder: c.placeholder,
-					Form:        c.form,
-				},
-			)(value),
-		)
+		return Div(c.class)(labelJS, textareaJS)
 	}
 
 	return c
@@ -390,49 +343,38 @@ func IPassword(name string, data ...any) *TInput {
 		}
 
 		value := ""
-
 		if c.data != nil {
-			// v := reflect.ValueOf(c.data)
-
-			// if v.Kind() == reflect.Ptr {
-			// 	v = v.Elem()
-			// }
-
-			// tmp := v.FieldByName(c.name)
-
-			// if tmp.IsValid() {
-			// 	value = tmp.String()
-			// }
-
 			tmp, err := PathValue(c.data, c.name)
 			if err == nil {
 				value = fmt.Sprintf("%v", tmp.Interface())
 			}
 		}
 
-		return Div("")(
-			Label(&c.target).
-				Class(c.classLabel).
-				ClassLabel("text-gray-600").
-				Required(c.required).
-				Render(text),
+		labelJS := Label(&c.target).
+			Class(c.classLabel).
+			ClassLabel("text-gray-600").
+			Required(c.required).
+			Render(text)
 
-			Input(
-				Classes(INPUT, c.size, c.class, If(c.disabled, func() string { return DISABLED }), If(c.error != nil, func() string { return "border-l-8 border-red-600" })),
-				Attr{
-					Value: value,
-
-					Type:        c.as,
-					ID:          c.target.ID,
-					Name:        c.name,
-					OnClick:     c.onclick,
-					Required:    c.required,
-					Disabled:    c.disabled,
-					Placeholder: c.placeholder,
-					Form:        c.form,
-				},
+		inputJS := Input(
+			Classes(INPUT, c.size, c.class,
+				If(c.disabled, func() string { return DISABLED }),
+				If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
 			),
+			Attr{
+				Value:       value,
+				Type:        c.as,
+				ID:          c.target.ID,
+				Name:        c.name,
+				OnClick:     c.onclick,
+				Required:    c.required,
+				Disabled:    c.disabled,
+				Placeholder: c.placeholder,
+				Form:        c.form,
+			},
 		)
+
+		return Div("")(labelJS, inputJS)
 	}
 
 	return c
@@ -462,21 +404,11 @@ func IDate(name string, data ...any) *TInput {
 		value := ""
 
 		if c.data != nil {
-			// v := reflect.ValueOf(c.data)
-
-			// if v.Kind() == reflect.Ptr {
-			// 	v = v.Elem()
-			// }
-
-			// tmp := v.FieldByName(c.name)
-
 			tmp, err := PathValue(c.data, c.name)
-
 			if err == nil {
 				if timeValue, ok := tmp.Interface().(time.Time); ok {
 					if !timeValue.IsZero() {
 						value = timeValue.Format(time.DateOnly)
-						// value = fmt.Sprintf("%04d-%02d-%02d", timeValue.Year(), timeValue.Month(), timeValue.Day())
 					}
 				}
 			}
@@ -485,70 +417,39 @@ func IDate(name string, data ...any) *TInput {
 		if !c.dates.Min.IsZero() {
 			min = c.dates.Min.Format(time.DateOnly)
 		}
-
 		if !c.dates.Max.IsZero() {
 			max = c.dates.Max.Format(time.DateOnly)
 		}
 
-		// Generate JavaScript validation/clamping for Safari where min/max may be ignored in picker UI
-		onChangeWithValidation := c.onchange
-		if !c.dates.Min.IsZero() || !c.dates.Max.IsZero() {
-			minDate := ""
-			maxDate := ""
-			if !c.dates.Min.IsZero() {
-				minDate = c.dates.Min.Format(time.DateOnly)
-			}
-			if !c.dates.Max.IsZero() {
-				maxDate = c.dates.Max.Format(time.DateOnly)
-			}
+		labelJS := Label(&c.target).
+			Class(c.classLabel).
+			ClassLabel("text-gray-600").
+			Required(c.required).
+			Render(text)
 
-			validationJS := fmt.Sprintf(`
-				(function(){
-					var v = this.value;
-					var min = '%s';
-					var max = '%s';
-					if (!v) { return; }
-					this.setCustomValidity('');
-					// Compare ISO dates lexicographically (YYYY-MM-DD)
-					if (min && v < min) { this.value = min; v = min; }
-					if (max && v > max) { this.value = max; v = max; }
-					if (this.reportValidity) { this.reportValidity(); }
-				}).call(this)
-			`, minDate, maxDate)
-
-			if c.onchange != "" {
-				onChangeWithValidation = validationJS + "; " + c.onchange
-			} else {
-				onChangeWithValidation = validationJS
-			}
-		}
-
-		return Div(Classes(c.class, "min-w-0"))(
-			Label(&c.target).
-				Class(c.classLabel).
-				ClassLabel("text-gray-600").
-				Required(c.required).
-				Render(text),
-
-			Input(
-				Classes(INPUT, c.size, If(c.disabled, func() string { return DISABLED }), If(c.error != nil, func() string { return "border-l-8 border-red-600" }), "min-w-0 max-w-full", c.classInput),
-				Attr{
-					Min:   min,
-					Max:   max,
-					Value: value,
-
-					Type:        c.as,
-					ID:          c.target.ID,
-					Name:        c.name,
-					OnClick:     c.onclick,
-					OnChange:    onChangeWithValidation,
-					Required:    c.required,
-					Disabled:    c.disabled,
-					Placeholder: c.placeholder,
-					Form:        c.form,
-				},
+		inputJS := Input(
+			Classes(INPUT, c.size,
+				If(c.disabled, func() string { return DISABLED }),
+				If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
+				"min-w-0 max-w-full", c.classInput,
 			),
+			Attr{
+				Min:         min,
+				Max:         max,
+				Value:       value,
+				Type:        c.as,
+				ID:          c.target.ID,
+				Name:        c.name,
+				OnClick:     c.onclick,
+				OnChange:    c.onchange,
+				Required:    c.required,
+				Disabled:    c.disabled,
+				Placeholder: c.placeholder,
+				Form:        c.form,
+			},
 		)
+
+		return Div(Classes(c.class, "min-w-0"))(labelJS, inputJS)
 	}
 	return c
 }
@@ -576,23 +477,12 @@ func ITime(name string, data ...any) *TInput {
 		value := ""
 
 		if c.data != nil {
-			// v := reflect.ValueOf(c.data)
-
-			// if v.Kind() == reflect.Ptr {
-			// 	v = v.Elem()
-			// }
-
-			// tmp := v.FieldByName(c.name)
-
 			tmp, err := PathValue(c.data, c.name)
-
 			if err == nil {
 				if timeValue, ok := tmp.Interface().(time.Time); ok {
-					// Only set value if the time is not zero
 					if !timeValue.IsZero() {
 						value = timeValue.Format("15:04")
 					} else {
-						// Set default time to 00:00 for time inputs
 						value = "00:00"
 					}
 				}
@@ -602,36 +492,37 @@ func ITime(name string, data ...any) *TInput {
 		if !c.dates.Min.IsZero() {
 			min = c.dates.Min.Format("15:04")
 		}
-
 		if !c.dates.Max.IsZero() {
 			max = c.dates.Max.Format("15:04")
 		}
 
-		return Div("")(
-			Label(&c.target).
-				Class(c.classLabel).
-				ClassLabel("text-gray-600").
-				Required(c.required).
-				Render(text),
+		labelJS := Label(&c.target).
+			Class(c.classLabel).
+			ClassLabel("text-gray-600").
+			Required(c.required).
+			Render(text)
 
-			Input(
-				Classes(INPUT, c.size, c.class, If(c.disabled, func() string { return DISABLED }), If(c.error != nil, func() string { return "border-l-8 border-red-600" })),
-				Attr{
-					Min:   min,
-					Max:   max,
-					Value: value,
-
-					Type:        c.as,
-					ID:          c.target.ID,
-					Name:        c.name,
-					OnClick:     c.onclick,
-					Required:    c.required,
-					Disabled:    c.disabled,
-					Placeholder: c.placeholder,
-					Form:        c.form,
-				},
+		inputJS := Input(
+			Classes(INPUT, c.size, c.class,
+				If(c.disabled, func() string { return DISABLED }),
+				If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
 			),
+			Attr{
+				Min:         min,
+				Max:         max,
+				Value:       value,
+				Type:        c.as,
+				ID:          c.target.ID,
+				Name:        c.name,
+				OnClick:     c.onclick,
+				Required:    c.required,
+				Disabled:    c.disabled,
+				Placeholder: c.placeholder,
+				Form:        c.form,
+			},
 		)
+
+		return Div("")(labelJS, inputJS)
 	}
 	return c
 }
@@ -659,19 +550,9 @@ func IDateTime(name string, data ...any) *TInput {
 		value := ""
 
 		if c.data != nil {
-			// v := reflect.ValueOf(c.data)
-
-			// if v.Kind() == reflect.Ptr {
-			// 	v = v.Elem()
-			// }
-
-			// tmp := v.FieldByName(c.name)
-
 			tmp, err := PathValue(c.data, c.name)
-
 			if err == nil {
 				if timeValue, ok := tmp.Interface().(time.Time); ok {
-					// Only set value if the time is not zero
 					if !timeValue.IsZero() {
 						value = timeValue.Format("2006-01-02T15:04")
 					}
@@ -682,36 +563,37 @@ func IDateTime(name string, data ...any) *TInput {
 		if !c.dates.Min.IsZero() {
 			min = c.dates.Min.Format("2006-01-02T15:04")
 		}
-
 		if !c.dates.Max.IsZero() {
 			max = c.dates.Max.Format("2006-01-02T15:04")
 		}
 
-		return Div("")(
-			Label(&c.target).
-				Class(c.classLabel).
-				ClassLabel("text-gray-600").
-				Required(c.required).
-				Render(text),
+		labelJS := Label(&c.target).
+			Class(c.classLabel).
+			ClassLabel("text-gray-600").
+			Required(c.required).
+			Render(text)
 
-			Input(
-				Classes(INPUT, c.size, c.class, If(c.disabled, func() string { return DISABLED }), If(c.error != nil, func() string { return "border-l-8 border-red-600" })),
-				Attr{
-					Min:   min,
-					Max:   max,
-					Value: value,
-
-					Type:        c.as,
-					ID:          c.target.ID,
-					Name:        c.name,
-					OnClick:     c.onclick,
-					Required:    c.required,
-					Disabled:    c.disabled,
-					Placeholder: c.placeholder,
-					Form:        c.form,
-				},
+		inputJS := Input(
+			Classes(INPUT, c.size, c.class,
+				If(c.disabled, func() string { return DISABLED }),
+				If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
 			),
+			Attr{
+				Min:         min,
+				Max:         max,
+				Value:       value,
+				Type:        c.as,
+				ID:          c.target.ID,
+				Name:        c.name,
+				OnClick:     c.onclick,
+				Required:    c.required,
+				Disabled:    c.disabled,
+				Placeholder: c.placeholder,
+				Form:        c.form,
+			},
 		)
+
+		return Div("")(labelJS, inputJS)
 	}
 	return c
 }
@@ -771,28 +653,13 @@ func INumber(name string, data ...any) *TInput {
 		value := ""
 
 		if c.data != nil {
-			// v := reflect.ValueOf(c.data)
-
-			// if v.Kind() == reflect.Ptr {
-			// 	v = v.Elem()
-			// }
-
-			// tmp := v.FieldByName(c.name)
-
-			// if tmp.IsValid() {
-			// 	value = fmt.Sprintf("%v", tmp.Interface()) }
-
 			tmp, err := PathValue(c.data, c.name)
 			if err == nil {
-				// Convert to float64 if format requires it (e.g., %.2f)
 				val := tmp.Interface()
-				
-				// Check if we should skip zero values
 				if c.emptyOnDefault && isZeroValue(val) {
-					// Leave value empty to show placeholder
+					// Leave value empty
 				} else {
 					if c.valueFormat != "%v" && c.valueFormat != "" {
-						// Try to convert to float64 for numeric formatting
 						switch v := val.(type) {
 						case int:
 							val = float64(v)
@@ -823,58 +690,45 @@ func INumber(name string, data ...any) *TInput {
 			}
 		}
 
-		// Check if Numbers() was called by checking if max or step are set
-		// (min can be 0, so we can't rely on it alone)
 		hasNumbers := c.numbers.Max != 0 || c.numbers.Step != 0 || c.numbers.Min != 0
-
 		if hasNumbers {
-			// If Numbers() was called, render min even if it's 0
 			min = fmt.Sprintf("%v", c.numbers.Min)
 		}
-
 		if c.numbers.Max != 0 {
 			max = fmt.Sprintf("%v", c.numbers.Max)
 		}
-
 		if c.numbers.Step != 0 {
 			step = fmt.Sprintf("%v", c.numbers.Step)
 		}
 
-		return Div(c.class)(
-			Label(&c.target).
-				Class(c.classLabel).
-				ClassLabel("text-gray-600").
-				Required(c.required).
-				Render(text),
+		labelJS := Label(&c.target).
+			Class(c.classLabel).
+			ClassLabel("text-gray-600").
+			Required(c.required).
+			Render(text)
 
-			Input(
-				Classes(INPUT, c.size, If(c.disabled, func() string { return DISABLED }), If(c.error != nil, func() string { return "border-l-8 border-red-600" })),
-				Attr{
-					Min:   min,
-					Max:   max,
-					Step:  step,
-					Value: value,
-
-					Type:        c.as,
-					ID:          c.target.ID,
-					Name:        c.name,
-					OnClick:     c.onclick,
-					Required:    c.required,
-					Disabled:    c.disabled,
-					Placeholder: c.placeholder,
-					Form:        c.form,
-				},
+		inputJS := Input(
+			Classes(INPUT, c.size,
+				If(c.disabled, func() string { return DISABLED }),
+				If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
 			),
-
-			// Script(fmt.Sprintf(`
-			// 	(function() {
-			// 		const input = document.getElementById('%v');
-			// 		if (input.value) {
-			// 			input.value = parseFloat(input.value).toFixed(2);
-			// 		}
-			// 	})();
-			// `, c.target.ID)),
+			Attr{
+				Min:         min,
+				Max:         max,
+				Step:        step,
+				Value:       value,
+				Type:        c.as,
+				ID:          c.target.ID,
+				Name:        c.name,
+				OnClick:     c.onclick,
+				Required:    c.required,
+				Disabled:    c.disabled,
+				Placeholder: c.placeholder,
+				Form:        c.form,
+			},
 		)
+
+		return Div(c.class)(labelJS, inputJS)
 	}
 	return c
 }
@@ -882,57 +736,6 @@ func INumber(name string, data ...any) *TInput {
 var Hidden = func(name string, value any, attr ...Attr) string {
 	return Input("hidden", append(attr, Attr{Name: name, Type: "hidden", Value: fmt.Sprintf("%v", value)})...)
 }
-
-// func IValue(name string, data ...any) *TInput {
-// 	c := &TInput{
-// 		as:      "text",
-// 		target:  Target(),
-// 		name:    name,
-// 		size:    MD,
-// 		visible: true,
-// 		data:    data[0],
-// 	}
-
-// 	c.Render = func(text string) string {
-// 		if !c.visible {
-// 			return ""
-// 		}
-
-// 		value := ""
-
-// 		if c.data != nil {
-// 			tmp, err := PathValue(c.data, c.name)
-// 			if err == nil {
-// 				value = fmt.Sprintf("%v", tmp.Interface())
-// 			}
-// 		}
-
-// 		return Div(c.class)(
-// 			Label(c.target).
-// 				Required(c.required).
-// 				Render(text),
-
-// 			Div(
-// 				Classes(VALUE, c.size, If(c.disabled, func() string { return DISABLED }), If(c.error != nil, func() string { return "border-l-8 border-red-600" })),
-// 				Attr{
-// 					Id:           c.target.Id,
-// 					Name:         c.name,
-// 					Type:         c.as,
-// 					OnChange:     c.onchange,
-// 					OnClick:      c.onclick,
-// 					Required:     c.required,
-// 					Disabled:     c.disabled,
-// 					Value:        value,
-// 					Pattern:      c.pattern,
-// 					Placeholder:  c.placeholder,
-// 					Autocomplete: c.autocomplete,
-// 				},
-// 			)(),
-// 		)
-// 	}
-
-// 	return c
-// }
 
 func IValue(attr ...Attr) *TInput {
 	c := &TInput{
@@ -955,18 +758,22 @@ func IValue(attr ...Attr) *TInput {
 			Placeholder: c.placeholder,
 		})
 
-		return Div(c.class)(
-			Label(&c.target).
-				Class(c.classLabel).
-				ClassLabel("text-gray-600").
-				Required(c.required).
-				Render(text),
+		labelJS := Label(&c.target).
+			Class(c.classLabel).
+			ClassLabel("text-gray-600").
+			Required(c.required).
+			Render(text)
 
-			Div(
-				Classes(VALUE, c.size, If(c.disabled, func() string { return DISABLED }), If(c.error != nil, func() string { return "border-l-8 border-red-600" }), c.classInput),
-				attr...,
-			)(c.value),
-		)
+		divJS := Div(
+			Classes(VALUE, c.size,
+				If(c.disabled, func() string { return DISABLED }),
+				If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
+				c.classInput,
+			),
+			attr...,
+		)(Text(c.value))
+
+		return Div(c.class)(labelJS, divJS)
 	}
 
 	return c

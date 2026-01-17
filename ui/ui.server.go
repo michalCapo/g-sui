@@ -1135,6 +1135,7 @@ func (app *App) SmoothNavigation(enable bool) {
 	app.SmoothNav = enable
 }
 
+
 func (app *App) debugf(format string, args ...any) {
 	if !app.DebugEnabled {
 		return
@@ -1733,13 +1734,12 @@ func (app *App) initWS() {
 }
 
 // sendPatch broadcasts a patch message to all connected WS clients.
-func (app *App) sendPatch(id string, swap Swap, html string) {
+func (app *App) sendPatch(jsCode string) {
 	msg := map[string]string{
 		"type": "patch",
-		"id":   id,
-		"swap": string(swap),
-		"html": Trim(html),
+		"js":   Trim(jsCode),
 	}
+
 	data, err := json.Marshal(msg)
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -1758,7 +1758,7 @@ func (app *App) sendPatch(id string, swap Swap, html string) {
 }
 
 // Patch patches using a TargetSwap descriptor (id + swap) and pushes to WS clients.
-func (ctx *Context) Patch(ts TargetSwap, html string, clear ...func()) {
+func (ctx *Context) Patch(ts TargetSwap, jsCode string, clear ...func()) {
 	if ctx == nil || ctx.App == nil {
 		return
 	}
@@ -1777,8 +1777,32 @@ func (ctx *Context) Patch(ts TargetSwap, html string, clear ...func()) {
 		rec.targets[ts.ID] = clear[0]
 		ctx.App.sessMu.Unlock()
 	}
-	ctx.App.sendPatch(ts.ID, ts.Swap, html)
+
+	// Wrap the JS code with appropriate DOM manipulation
+	wrappedJS := wrapJSForPatch(ts, jsCode)
+	ctx.App.sendPatch(wrappedJS)
 }
+
+// wrapJSForPatch wraps JS code with appropriate DOM manipulation based on swap type
+func wrapJSForPatch(ts TargetSwap, jsCode string) string {
+	var code string
+	switch ts.Swap {
+	case INLINE:
+		code = fmt.Sprintf(`(function(){var t=document.getElementById('%s');if(t){t.innerHTML='';t.appendChild(%s);}})();`, escapeJS(ts.ID), jsCode)
+	case OUTLINE:
+		code = fmt.Sprintf(`(function(){var t=document.getElementById('%s');if(t){t.outerHTML='';var p=t.parentNode;if(p){p.replaceChild(%s,t);}}})();`, escapeJS(ts.ID), jsCode)
+	case APPEND:
+		code = fmt.Sprintf(`(function(){var t=document.getElementById('%s');if(t){t.appendChild(%s);}})();`, escapeJS(ts.ID), jsCode)
+	case PREPEND:
+		code = fmt.Sprintf(`(function(){var t=document.getElementById('%s');if(t){t.insertBefore(%s,t.firstChild);}})();`, escapeJS(ts.ID), jsCode)
+	case NONE:
+		code = fmt.Sprintf(`(function(){%s})();`, jsCode)
+	default:
+		code = jsCode
+	}
+	return code
+}
+
 
 // Render renders HTML inside the given target element (replaces innerHTML).
 func (ctx *Context) Render(target Attr, html string) {
@@ -2136,7 +2160,8 @@ func (app *App) HTML(title string, class string, body ...string) string {
 	html := app.HTMLBody(class)
 	html = strings.ReplaceAll(html, "__lang__", app.Lanugage)
 	html = strings.ReplaceAll(html, "__head__", strings.Join(head, " "))
-	html = strings.ReplaceAll(html, "__body__", strings.Join(body, " "))
+
+	html = strings.ReplaceAll(html, "__body__", strings.Join(body, ""))
 
 	return Trim(html)
 }
@@ -2194,33 +2219,30 @@ var __post = Trim(`
 			body.push({ name, type, value });
 		}
 
-
 		var L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
 
 		fetch(path, {method: "POST", body: JSON.stringify(body)})
 			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
-			.then(function (html) {
-				const parser = new DOMParser();
-				const doc = parser.parseFromString(html, 'text/html');
-				const scripts = [...doc.body.querySelectorAll('script'), ...doc.head.querySelectorAll('script')];
-
-				for (let i = 0; i < scripts.length; i++) {
-					const newScript = document.createElement('script');
-					newScript.textContent = scripts[i].textContent;
-					document.body.appendChild(newScript);
-				}
-
-				const el = document.getElementById(target_id);
+			.then(function (jsCode) {
+				// Execute JS code and apply to target
+				var el = document.getElementById(target_id);
 				if (el != null) {
-					if (swap === "inline") {
-						el.innerHTML = html;
-					} else if (swap === "outline") {
-						el.outerHTML = html;
-					} else if (swap === "append") {
-						el.insertAdjacentHTML('beforeend', html);
-					} else if (swap === "prepend") {
-						el.insertAdjacentHTML('afterbegin', html);
+					var result = eval(jsCode);
+					if (result && result.nodeType) {
+						if (swap === "inline") {
+							el.innerHTML = '';
+							el.appendChild(result);
+						} else if (swap === "outline") {
+							el.parentNode.replaceChild(result, el);
+						} else if (swap === "append") {
+							el.appendChild(result);
+						} else if (swap === "prepend") {
+							el.insertBefore(result, el.firstChild);
+						}
 					}
+				} else {
+					// No target, just execute the JS
+					eval(jsCode);
 				}
 			})
 			.catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
@@ -2360,28 +2382,26 @@ var __submit = Trim(`
 
 		fetch(path, {method: "POST", body: fetchBody, headers: fetchHeaders})
 			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
-			.then(function (html) {
-				const parser = new DOMParser();
-				const doc = parser.parseFromString(html, 'text/html');
-				const scripts = [...doc.body.querySelectorAll('script'), ...doc.head.querySelectorAll('script')];
-
-				for (let i = 0; i < scripts.length; i++) {
-					const newScript = document.createElement('script');
-					newScript.textContent = scripts[i].textContent;
-					document.body.appendChild(newScript);
-				}
-
-				const el = document.getElementById(target_id);
+			.then(function (jsCode) {
+				// Execute JS code and apply to target
+				var el = document.getElementById(target_id);
 				if (el != null) {
-					if (swap === "inline") {
-						el.innerHTML = html;
-					} else if (swap === "outline") {
-						el.outerHTML = html;
-					} else if (swap === "append") {
-						el.insertAdjacentHTML('beforeend', html);
-					} else if (swap === "prepend") {
-						el.insertAdjacentHTML('afterbegin', html);
+					var result = eval(jsCode);
+					if (result && result.nodeType) {
+						if (swap === "inline") {
+							el.innerHTML = '';
+							el.appendChild(result);
+						} else if (swap === "outline") {
+							el.parentNode.replaceChild(result, el);
+						} else if (swap === "append") {
+							el.appendChild(result);
+						} else if (swap === "prepend") {
+							el.insertBefore(result, el.firstChild);
+						}
 					}
+				} else {
+					// No target, just execute the JS
+					eval(jsCode);
 				}
 			})
             .catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
@@ -2563,43 +2583,12 @@ var __ws = Trim(`
             var appPing = 0;
             // Track whether the WS has ever been closed; used to trigger a full reload once it reconnects
             try { if (!(window).__gsuiHadClose) { (window).__gsuiHadClose = false; } } catch(_){ }
-            // Track targets we've actually seen in the DOM at least once
-            // to avoid reporting them as invalid during initial load.
-            try { if (!(window).__gsuiKnownTargets) { (window).__gsuiKnownTargets = Object.create(null); } } catch(_){}
-            function markSeen(id){ try { (window).__gsuiKnownTargets[id] = true; } catch(_){ } }
-            function wasSeen(id){ try { return !!((window).__gsuiKnownTargets && (window).__gsuiKnownTargets[id]); } catch(_){ return false; } }
             function handlePatch(msg){
                 try {
-                    var html = String(msg.html||'');
-                    // execute inline scripts inside the html by extracting and re-inserting
-                    try {
-                        var tpl = document.createElement('template'); tpl.innerHTML = html;
-                        var scripts = tpl.content.querySelectorAll('script');
-                        for (var i=0;i<scripts.length;i++){
-                            var s=document.createElement('script'); s.textContent=scripts[i].textContent; document.body.appendChild(s);
-                        }
-                    } catch(_){ }
-                    var id = String(msg.id||'');
-                    var el = document.getElementById(id);
-                    if (!el) {
-                        // Only report invalid once the target was present before.
-                        // This prevents calling clear() prematurely during initial render.
-                        if (wasSeen(id)) {
-                            try {
-                                var ws2 = (window).__gsuiWS;
-                                if (ws2 && ws2.readyState === 1) {
-                                    ws2.send(JSON.stringify({ type: 'invalid', id: id }));
-                                }
-                            } catch(_){ }
-                        }
-                        return;
+                    if (msg.js) {
+                        // Execute JavaScript code directly
+                        try { eval(String(msg.js||'')); } catch(_){ }
                     }
-                    // Mark target as seen when it's present in DOM
-                    try { markSeen(id); } catch(_){ }
-                    if (msg.swap==='inline') { el.innerHTML = html; }
-                    else if (msg.swap==='outline') { el.outerHTML = html; }
-                    else if (msg.swap==='append') { el.insertAdjacentHTML('beforeend', html); }
-                    else if (msg.swap==='prepend') { el.insertAdjacentHTML('afterbegin', html); }
                 } catch(_){ }
             }
             function connect(){
@@ -2728,6 +2717,63 @@ var __offline = Trim(`
     })();
 `)
 
+// __e: DOM element creation helper for JS-based rendering
+var __e = Trim(`
+    function __e(tag, attrs, children) {
+        var el = document.createElement(tag);
+        if (attrs) {
+            if (attrs.id) el.id = attrs.id;
+            if (attrs.class) el.className = attrs.class;
+            if (attrs.style) el.setAttribute('style', attrs.style);
+            if (attrs.href) el.href = attrs.href;
+            if (attrs.src) el.src = attrs.src;
+            if (attrs.alt) el.alt = attrs.alt;
+            if (attrs.title) el.title = attrs.title;
+            if (attrs.type) el.type = attrs.type;
+            if (attrs.name) el.name = attrs.name;
+            if (attrs.value) el.value = attrs.value;
+            if (attrs.placeholder) el.placeholder = attrs.placeholder;
+            if (attrs.disabled) el.disabled = true;
+            if (attrs.required) el.required = true;
+            if (attrs.readonly) el.readOnly = true;
+            if (attrs.checked) el.checked = true;
+            if (attrs.selected) el.selected = true;
+            if (attrs.min) el.min = attrs.min;
+            if (attrs.max) el.max = attrs.max;
+            if (attrs.step) el.step = attrs.step;
+            if (attrs.rows) el.rows = attrs.rows;
+            if (attrs.cols) el.cols = attrs.cols;
+            if (attrs.width) el.width = attrs.width;
+            if (attrs.height) el.height = attrs.height;
+            if (attrs.pattern) el.pattern = attrs.pattern;
+            if (attrs.autocomplete) el.autocomplete = attrs.autocomplete;
+            if (attrs.for) el.htmlFor = attrs.for;
+            if (attrs.form) el.setAttribute('form', attrs.form);
+            if (attrs.target) el.target = attrs.target;
+            if (attrs.onclick) el.setAttribute('onclick', attrs.onclick);
+            if (attrs.onchange) el.setAttribute('onchange', attrs.onchange);
+            if (attrs.onsubmit) el.setAttribute('onsubmit', attrs.onsubmit);
+            for (var key in attrs) {
+                if (key.indexOf('data-') === 0) {
+                    el.setAttribute(key, attrs[key]);
+                }
+            }
+        }
+        if (children) {
+            for (var i = 0; i < children.length; i++) {
+                var child = children[i];
+                if (child === null || child === undefined) continue;
+                if (typeof child === 'string') {
+                    el.appendChild(document.createTextNode(child));
+                } else if (child.nodeType) {
+                    el.appendChild(child);
+                }
+            }
+        }
+        return el;
+    }
+`)
+
 var ContentID = Target()
 
 // Error UI helper injected into every page
@@ -2811,7 +2857,7 @@ func MakeApp(defaultLanguage string) *App {
                 /* Hover helpers used in nav/examples */
                 .dark .hover\:bg-gray-200:hover { background-color:#374151 !important; }
             </style>`,
-			Script(__stringify, __loader, __offline, __error, __post, __submit, __load, __theme, __ws),
+			Script(__stringify, __loader, __offline, __error, __e, __post, __submit, __load, __theme, __ws),
 		},
 		HTMLBody: func(class string) string {
 			if class == "" {

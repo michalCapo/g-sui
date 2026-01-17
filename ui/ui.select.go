@@ -76,12 +76,7 @@ func (c *ASelect) Disabled(value ...bool) *ASelect {
 }
 
 func (c *ASelect) Change(action string) *ASelect {
-	// if action.Target.Id == "" {
-	// 	action.Target = c.target
-	// }
-
 	c.onchange = action
-
 	return c
 }
 
@@ -106,47 +101,44 @@ func (c *ASelect) Render(text string) string {
 	}
 
 	value := ""
-
 	if c.data != nil {
-		// v := reflect.ValueOf(c.data)
-
-		// if v.Kind() == reflect.Ptr {
-		// 	v = v.Elem()
-		// }
-
-		// tmp := v.FieldByName(c.name)
-
 		tmp, err := PathValue(c.data, c.name)
-
 		if err == nil {
 			value = fmt.Sprintf("%v", tmp.Interface())
 		}
 	}
 
-	return Div(c.class)(
-		Label(&c.target).
-			ClassLabel("text-gray-600").
-			Required(c.required).
-			Render(text),
+	labelJS := Label(&c.target).
+		ClassLabel("text-gray-600").
+		Required(c.required).
+		Render(text)
 
-		Select(
-			Classes(INPUT, c.size, If(c.disabled, func() string { return "cursor-text bg-gray-100" }), If(c.error != nil, func() string { return "border-l-8 border-red-600" })),
-			Attr{
-				Form:        c.form,
-				ID:          c.target.ID,
-				Name:        c.name,
-				Required:    c.required,
-				Placeholder: c.placeholder,
-				Disabled:    c.disabled,
-				OnChange:    c.onchange,
-			},
-		)(
-			If(c.empty, func() string { return Option("", Attr{Value: ""})() }),
-			Map(c.options, func(option *AOption, index int) string {
-				return Option("", Attr{Value: option.ID, Selected: If(option.ID == value, func() string { return "selected" })})(option.Value)
-			}),
+	optionsJS := []string{}
+	if c.empty {
+		optionsJS = append(optionsJS, Option("", Attr{Value: ""})())
+	}
+
+	for _, option := range c.options {
+		optionsJS = append(optionsJS, Option("", Attr{Value: option.ID, Selected: If(option.ID == value, func() string { return "selected" })})(Text(option.Value)))
+	}
+
+	selectJS := Select(
+		Classes(INPUT, c.size,
+			If(c.disabled, func() string { return "cursor-text bg-gray-100" }),
+			If(c.error != nil, func() string { return "border-l-8 border-red-600" }),
 		),
-	)
+		Attr{
+			Form:        c.form,
+			ID:          c.target.ID,
+			Name:        c.name,
+			Required:    c.required,
+			Placeholder: c.placeholder,
+			Disabled:    c.disabled,
+			OnChange:    c.onchange,
+		},
+	)(strings.Join(optionsJS, ","))
+
+	return Div(c.class)(labelJS, selectJS)
 }
 
 func ISelect(name string, data ...any) *ASelect {

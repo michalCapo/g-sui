@@ -294,46 +294,11 @@ func attributes(attrs ...Attr) string {
 	return strings.Join(result, " ")
 }
 
-func open(tag string) func(class string, attr ...Attr) func(elements ...string) string {
-	return func(class string, attr ...Attr) func(elements ...string) string {
-		return func(elements ...string) string {
-			attr = append(attr, Attr{Class: class})
-			return fmt.Sprintf(`<%s %s>%s</%s>`, tag, attributes(attr...), strings.Join(elements, " "), tag)
-		}
-	}
-}
-
-func closed(tag string) func(class string, attr ...Attr) string {
-	return func(class string, attr ...Attr) string {
-		attr = append(attr, Attr{Class: class})
-		return fmt.Sprintf(`<%s %s/>`, tag, attributes(attr...))
-	}
-}
-
 var (
-	I        = open("i")
-	A        = open("a")
-	P        = open("p")
-	Div      = open("div")
-	Span     = open("span")
-	Form     = open("form")
-	Textarea = open("textarea")
-	Select   = open("select")
-	Option   = open("option")
-	List     = open("ul")
-	ListItem = open("li")
-	Canvas   = open("canvas")
-
-	Img   = closed("img")
-	Input = closed("input")
-
-	Flex1 = Div("flex-1")()
-
-	Space = "&nbsp;"
-	W35   = Attr{Style: "max-width: 35rem;"}
-	W30   = Attr{Style: "max-width: 30rem;"}
-	W25   = Attr{Style: "max-width: 25rem;"}
-	W20   = Attr{Style: "max-width: 20rem;"}
+	W35 = Attr{Style: "max-width: 35rem;"}
+	W30 = Attr{Style: "max-width: 30rem;"}
+	W25 = Attr{Style: "max-width: 25rem;"}
+	W20 = Attr{Style: "max-width: 20rem;"}
 )
 
 func mdToHTML(md []byte) string {
@@ -741,7 +706,7 @@ func Map[T any](values []T, iter func(*T, int) string) string {
 		result = append(result, iter(&value, key))
 	}
 
-	return strings.Join(result, " ")
+	return strings.Join(result, "")
 }
 
 func Map2[T any](values []T, iter func(T, int) []string) string {
@@ -750,7 +715,7 @@ func Map2[T any](values []T, iter func(T, int) []string) string {
 		result = append(result, iter(value, key)...)
 	}
 
-	return strings.Join(result, " ")
+	return strings.Join(result, "")
 }
 
 func For[T any](from, to int, iter func(int) string) string {
@@ -759,7 +724,7 @@ func For[T any](from, to int, iter func(int) string) string {
 		result = append(result, iter(i))
 	}
 
-	return strings.Join(result, " ")
+	return strings.Join(result, "")
 }
 
 func Error(err error) string {

@@ -61,12 +61,7 @@ func (b *button) Size(value string) *button {
 }
 
 func (b *button) Click(onclick string) *button {
-	// if action.Target.Id == "" {
-	// 	action.Target = b.target
-	// }
-
 	b.onclick = onclick
-
 	return b
 }
 
@@ -91,6 +86,7 @@ func (b *button) Form(value string) *button {
 	return b
 }
 
+// Render generates JavaScript code that creates the button element
 func (b *button) Render(text string) string {
 	if !b.visible {
 		return ""
@@ -99,12 +95,12 @@ func (b *button) Render(text string) string {
 	class := Classes(BTN, b.size, b.color, b.class, If(b.disabled, func() string { return DISABLED + " opacity-25" }))
 
 	if b.as == "a" {
-		return A(
+		return El("a",
 			class,
 			append(b.attr, Attr{
 				ID: b.target.ID,
 			})...,
-		)(text)
+		)(Text(text))
 	}
 
 	if b.as == "div" {
@@ -114,10 +110,10 @@ func (b *button) Render(text string) string {
 				ID:      b.target.ID,
 				OnClick: b.onclick,
 			})...,
-		)(text)
+		)(Text(text))
 	}
 
-	return open("button")(
+	return El("button",
 		class,
 		append(b.attr,
 			Attr{
@@ -127,5 +123,5 @@ func (b *button) Render(text string) string {
 				Form:     b.form,
 				Disabled: b.disabled,
 			})...,
-	)(text)
+	)(Text(text))
 }
