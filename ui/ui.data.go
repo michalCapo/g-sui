@@ -709,7 +709,7 @@ func (collate *collate[T]) renderEmpty(ctx *Context, result *TCollateResult[T]) 
 
 	icon := collate.IconEmpty
 	if icon == "" {
-		icon = "fa fa-users" // Default matching the image's users icon
+		icon = "fa fa-inbox" // Generic empty state icon
 	}
 
 	title := collate.TextEmpty
