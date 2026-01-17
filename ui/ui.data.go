@@ -219,7 +219,7 @@ var (
 	CollateBlue = CollateColors{
 		Button:        Blue,
 		ButtonOutline: BlueOutline,
-		ActiveBg:      "bg-blue-600",
+		ActiveBg:      "bg-blue-800",
 		ActiveBorder:  "border-blue-600",
 		ActiveHover:   "hover:bg-blue-700",
 	}
@@ -261,17 +261,22 @@ var (
 )
 
 type collate[T any] struct {
-	Init         *TQuery
-	Target       Attr
-	TargetFilter Attr
-	Database     *gorm.DB
-	SearchFields []TField
-	SortFields   []TField
-	FilterFields []TField
-	ExcelFields  []TField
-	OnRow        func(*T, int) string
-	OnExcel      func(*[]T) (string, io.Reader, error)
-	Colors       CollateColors
+	Init          *TQuery
+	Target        Attr
+	TargetFilter  Attr
+	Database      *gorm.DB
+	SearchFields  []TField
+	SortFields    []TField
+	FilterFields  []TField
+	ExcelFields   []TField
+	OnRow         func(*T, int) string
+	OnExcel       func(*[]T) (string, io.Reader, error)
+	Colors        CollateColors
+	OnEmpty       func(*Context) string
+	IconEmpty     string
+	TextEmpty     string
+	ActionEmpty   string
+	OnActionEmpty func(*Context, Attr) string
 }
 
 // Collate constructs a new collate with sensible defaults using the provided init query.
@@ -453,19 +458,60 @@ func (collate *collate[T]) onReset(ctx *Context) string {
 }
 
 // Search sets searchable fields.
-func (c *collate[T]) Search(fields ...TField) { c.SearchFields = fields }
+func (c *collate[T]) Search(fields ...TField) *collate[T] {
+	c.SearchFields = fields
+	return c
+}
 
 // Sort sets sortable fields.
-func (c *collate[T]) Sort(fields ...TField) { c.SortFields = fields }
+func (c *collate[T]) Sort(fields ...TField) *collate[T] {
+	c.SortFields = fields
+	return c
+}
 
 // Filter sets filterable fields.
-func (c *collate[T]) Filter(fields ...TField) { c.FilterFields = fields }
+func (c *collate[T]) Filter(fields ...TField) *collate[T] {
+	c.FilterFields = fields
+	return c
+}
 
 // Excel sets fields to be exported to Excel.
-func (c *collate[T]) Excel(fields ...TField) { c.ExcelFields = fields }
+func (c *collate[T]) Excel(fields ...TField) *collate[T] {
+	c.ExcelFields = fields
+	return c
+}
 
 // Row sets the row rendering function.
-func (c *collate[T]) Row(fn func(*T, int) string) { c.OnRow = fn }
+func (c *collate[T]) Row(fn func(*T, int) string) *collate[T] {
+	c.OnRow = fn
+	return c
+}
+
+// Empty sets a custom empty state renderer.
+func (c *collate[T]) Empty(fn func(*Context) string) *collate[T] {
+	c.OnEmpty = fn
+	return c
+}
+
+// EmptyIcon sets the icon for the default empty state.
+func (c *collate[T]) EmptyIcon(icon string) *collate[T] {
+	c.IconEmpty = icon
+	return c
+}
+
+// EmptyText sets the text for the default empty state.
+func (c *collate[T]) EmptyText(text string) *collate[T] {
+	c.TextEmpty = text
+	return c
+}
+
+// EmptyAction sets the action button for the default empty state.
+// The function receives both context and target, allowing it to create proper click handlers.
+func (c *collate[T]) EmptyAction(text string, fn func(*Context, Attr) string) *collate[T] {
+	c.ActionEmpty = text
+	c.OnActionEmpty = fn
+	return c
+}
 
 func startOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
@@ -655,25 +701,45 @@ func makeQuery(def *TQuery) *TQuery {
 	return query
 }
 
-func Empty[T any](result *TCollateResult[T]) string {
-	if result.Total == 0 {
-		return Div("mt-2 py-24 rounded text-xl flex justify-center items-center bg-white rounded-lg")(
-			Div("")(
-				Div("text-black text-2xl p-4 mb-2 font-bold flex justify-center items-center")(("No records found")),
-			),
+// renderEmpty renders the empty state when no records are found.
+func (collate *collate[T]) renderEmpty(ctx *Context, result *TCollateResult[T]) string {
+	if collate.OnEmpty != nil {
+		return collate.OnEmpty(ctx)
+	}
+
+	icon := collate.IconEmpty
+	if icon == "" {
+		icon = "fa fa-users" // Default matching the image's users icon
+	}
+
+	title := collate.TextEmpty
+	if title == "" {
+		if result.Total == 0 {
+			title = "No records found"
+		} else {
+			title = "No records found for the selected filter"
+		}
+	}
+
+	emptyStateContent := []string{
+		Div("text-gray-300 text-7xl mb-6")(Icon(icon)),
+		Div("text-gray-600 text-xl font-medium mb-6 text-center")(title),
+	}
+
+	// Only add action button if both text and handler are provided
+	if collate.ActionEmpty != "" && collate.OnActionEmpty != nil {
+		emptyStateContent = append(emptyStateContent,
+			Button().
+				Class("rounded-lg px-6 h-12 font-bold").
+				Color(Black).
+				Click(collate.OnActionEmpty(ctx, collate.Target)).
+				Render(IconLeft("fa fa-plus", collate.ActionEmpty)),
 		)
 	}
 
-	if result.Filtered == 0 {
-		return Div("mt-2 py-24 rounded text-xl flex justify-center items-center bg-white rounded-lg")(
-			Div("flex gap-x-px items-center justify-center text-2xl")(
-				Icon("fa fa-fw fa-exclamation-triangle text-yellow-500"),
-				Div("text-black p-4 mb-2 font-bold flex justify-center items-center")("No records found for the selected filter"),
-			),
-		)
-	}
-
-	return ""
+	return Div("mt-2 py-20 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center bg-white")(
+		emptyStateContent...,
+	)
 }
 
 func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
@@ -697,12 +763,12 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 	}
 
 	return Div("col-span-2 relative h-0 hidden z-20", collate.TargetFilter)(
-		Div(fmt.Sprintf("absolute top-2 right-0 rounded-xl bg-white border border-gray-200 shadow-2xl p-4 %s", widthClass))(
+		Div(fmt.Sprintf("absolute top-2 right-0 rounded-xl bg-white border shadow-2xl p-4 %s", widthClass))(
 			// Header with title and close button
 			Div("flex items-center justify-between mb-2")(
 				Div("text-sm font-semibold text-gray-700")("Filters & Options"),
 				Button().
-					Class("rounded-full w-9 h-9 border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center").
+					Class("rounded-full w-9 h-9 border bg-white hover:bg-gray-50 flex items-center justify-center").
 					Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
 					Render(Icon("fa fa-fw fa-times")),
 			),
@@ -1034,7 +1100,7 @@ func Sorting[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 
 func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T]) string {
 	if result.Filtered == 0 {
-		return Empty(result)
+		return collate.renderEmpty(ctx, result)
 	}
 
 	size := len(result.Data)

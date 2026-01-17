@@ -39,6 +39,7 @@ var routes = []route{
 	{Path: "/deferred", Title: "Deferred"},
 	{Path: "/shared", Title: "Shared"},
 	{Path: "/collate", Title: "Collate"},
+	{Path: "/collate-empty", Title: "Collate Empty"},
 	{Path: "/spa", Title: "SPA"},
 }
 
@@ -115,6 +116,7 @@ func main() {
 	app.Page("/deferred", layout("Deferred", pages.Deffered))
 	app.Page("/shared", layout("Shared", pages.Shared))
 	app.Page("/collate", layout("Collate", pages.Collate))
+	app.Page("/collate-empty", layout("Collate Empty", pages.CollateEmpty))
 	app.Page("/spa", layout("SPA", pages.SpaExample))
 
 	app.Listen(":1422")

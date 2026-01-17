@@ -46,7 +46,8 @@ const (
 	Gray          = " bg-gray-600 text-white hover:bg-gray-800 focus:bg-gray-800 border-gray-300 flex items-center justify-center"
 	GrayOutline   = " border border-gray-300 text-black hover:text-white hover:bg-gray-700 flex items-center justify-center"
 	White         = " bg-white text-black hover:bg-gray-200 border-gray-200 flex items-center justify-center"
-	WhiteOutline  = " border border-white text-balck hover:text-black hover:bg-white flex items-center justify-center"
+	WhiteOutline  = " border border-white text-black hover:text-black hover:bg-white flex items-center justify-center"
+	Black         = " bg-black text-white hover:bg-gray-900 border-black flex items-center justify-center"
 )
 
 type Attr struct {

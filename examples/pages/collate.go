@@ -222,3 +222,89 @@ func Collate(ctx *ui.Context) string {
 
 	return body
 }
+
+// initEmptyDB initializes an empty in-memory SQLite DB for empty state demo
+func initEmptyDB() (*gorm.DB, error) {
+	dsn := "file:emptycollate?mode=memory&cache=shared&_busy_timeout=5000"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Enable custom normalize() SQLite function
+	err = ui.RegisterSQLiteNormalize(db)
+	if err != nil {
+		return nil, err
+	}
+
+	// Auto-migrate schema
+	if err := db.AutoMigrate(&Person{}); err != nil {
+		return nil, err
+	}
+
+	// Don't seed - keep it empty
+	return db, nil
+}
+
+func CollateEmpty(ctx *ui.Context) string {
+	database, err := initEmptyDB()
+	if err != nil {
+		return ui.Div("text-red-700 font-semibold bg-red-50 p-3 rounded border border-red-200")(fmt.Sprintf("DB error: %v", err))
+	}
+
+	// Fields
+	name := ui.TField{DB: "name", Field: "Name", Text: "Name"}
+	email := ui.TField{DB: "email", Field: "Email", Text: "Email"}
+	surname := ui.TField{DB: "surname", Field: "Surname", Text: "Surname"}
+	active := ui.TField{DB: "active", Field: "Active", Text: "Active", As: ui.BOOL, Bool: false}
+	status := ui.TField{DB: "status", Field: "Status", Text: "Status", As: ui.SELECT, Options: ui.MakeOptions(statuses)}
+
+	// Init
+	init := &ui.TQuery{
+		Limit: 8,
+		Order: "surname asc",
+	}
+
+	// Action handler for empty state button
+	onRequestUsers := func(ctx *ui.Context) string {
+		ctx.Success("User request submitted! In a real application, this would request users from the system.")
+		return CollateEmpty(ctx) // Re-render to show the success toast
+	}
+
+	// Collate with custom empty state
+	collate := ui.Collate[Person](init).
+		SetColor(ui.CollateBlue).
+		Search(surname, name, email).
+		Sort(surname, email).
+		Filter(active, status).
+		// EmptyIcon("fa fa-users").
+		EmptyText("No users assigned to you yet.").
+		EmptyAction("Request Users", func(ctx *ui.Context, target ui.Attr) string {
+			return ctx.Call(onRequestUsers).None()
+		}).
+		Row(func(p *Person, _ int) string {
+			badges := []string{}
+			if p.Active {
+				badges = append(badges, ui.Span("w-20 text-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-700 border border-green-200")("active"))
+			} else {
+				badges = append(badges, ui.Span("w-20 text-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 border border-gray-200")("inactive"))
+			}
+
+			header := ui.Div("flex items-center justify-between")(
+				ui.Div("font-semibold")(fmt.Sprintf("%s %s", p.Surname, p.Name)),
+				ui.Div("flex-1 ml-2 text-gray-500 text-sm")(p.Email),
+				ui.Div("flex gap-1")(badges...),
+			)
+
+			return ui.Div("bg-white rounded-lg border border-gray-200 shadow-sm p-3")(header)
+		})
+
+	// Render the collate UI with custom empty state
+	body := ui.Div("max-w-full sm:max-w-5xl mx-auto flex flex-col gap-3")(
+		ui.Div("text-3xl font-bold")("Empty State Demo"),
+		ui.Div("text-gray-600")("Demonstrates the improved empty state UI with custom icon, text, and action button."),
+		collate.Render(ctx, database),
+	)
+
+	return body
+}
