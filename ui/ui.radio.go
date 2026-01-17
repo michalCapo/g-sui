@@ -317,7 +317,7 @@ func (c *ARadio) Render(text string) string {
 								const buttons = document.querySelectorAll('[target=%s]');
 								buttons.forEach(button => button.classList.value = '%s');
 
-								event.target.classList.value = '%s';
+								event.currentTarget.classList.value = '%s';
 
 								const el = document.getElementById('%s');
 								if (el == null)

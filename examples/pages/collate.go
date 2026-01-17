@@ -266,10 +266,10 @@ func CollateEmpty(ctx *ui.Context) string {
 	}
 
 	// Action handler for empty state button
-	onRequestUsers := func(ctx *ui.Context) string {
-		ctx.Success("User request submitted! In a real application, this would request users from the system.")
-		return CollateEmpty(ctx) // Re-render to show the success toast
-	}
+	// onRequestUsers := func(ctx *ui.Context) string {
+	// 	ctx.Success("User request submitted! In a real application, this would request users from the system.")
+	// 	return CollateEmpty(ctx) // Re-render to show the success toast
+	// }
 
 	// Collate with custom empty state
 	collate := ui.Collate[Person](init).
@@ -277,11 +277,9 @@ func CollateEmpty(ctx *ui.Context) string {
 		Search(surname, name, email).
 		Sort(surname, email).
 		Filter(active, status).
-		// EmptyIcon("fa fa-users").
-		EmptyText("No users assigned to you yet.").
-		EmptyAction("Request Users", func(ctx *ui.Context, target ui.Attr) string {
-			return ctx.Call(onRequestUsers).None()
-		}).
+		// EmptyAction("Request Users", func(ctx *ui.Context, target ui.Attr) string {
+		// 	return ctx.Call(onRequestUsers).None()
+		// }).
 		Row(func(p *Person, _ int) string {
 			badges := []string{}
 			if p.Active {

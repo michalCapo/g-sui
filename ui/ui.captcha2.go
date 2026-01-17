@@ -362,10 +362,19 @@ func (c *Captcha2Component) Render(ctx *Context) string {
                 var defaultSuccess = '%s';
                 var solved = false;
 
-                function injectSuccess(html) {
+                function injectSuccess(data) {
                     if (!root) { return; }
-                    var output = (html && html.trim()) ? html : defaultSuccess;
-                    root.innerHTML = output;
+                    // Handle JSON response from server
+                    if (data && data.el) {
+                        root.innerHTML = '';
+                        var element = __engine.create(data.el);
+                        if (element) {
+                            root.appendChild(element);
+                            return;
+                        }
+                    }
+                    // Fallback to default success message
+                    root.innerHTML = defaultSuccess;
                 }
 
                 function sizeCanvas() {
@@ -430,11 +439,11 @@ func (c *Captcha2Component) Render(ctx *Context) string {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: '[]'
                             })
-                                .then(function(resp) { if (!resp.ok) { throw new Error('HTTP ' + resp.status); } return resp.text(); })
+                                .then(function(resp) { if (!resp.ok) { throw new Error('HTTP ' + resp.status); } return resp.json(); })
                                 .then(injectSuccess)
-                                .catch(function() { injectSuccess(defaultSuccess); });
+                                .catch(function() { injectSuccess(null); });
                         } else {
-                            injectSuccess(defaultSuccess);
+                            injectSuccess(null);
                         }
                     } else {
                         if (hiddenField) { hiddenField.value = 'false'; }

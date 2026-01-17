@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"bytes"
 	"crypto/rand"
 	"embed"
 	"encoding/base64"
@@ -24,6 +23,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"golang.org/x/net/html"
 	"golang.org/x/net/websocket"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -43,6 +43,51 @@ type BodyItem struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 	Type  string `json:"type"`
+}
+
+// JSON DOM Protocol Types
+
+// JSEvent represents a declarative event handler in JSON format
+type JSEvent struct {
+	Act  string     `json:"act"`            // "post", "form", or "raw"
+	Swap string     `json:"swap,omitempty"` // "inline", "outline", "append", "prepend", "none"
+	Tgt  string     `json:"tgt,omitempty"`  // target element ID
+	Path string     `json:"path,omitempty"` // server endpoint path
+	Vals []BodyItem `json:"vals,omitempty"` // pre-populated values
+	JS   string     `json:"js,omitempty"`   // raw JavaScript code (for act="raw")
+}
+
+// JSElement represents a DOM element in JSON format
+type JSElement struct {
+	T string              `json:"t"`           // tag name
+	A map[string]string   `json:"a,omitempty"` // attributes (id, class, style, etc.)
+	E map[string]*JSEvent `json:"e,omitempty"` // events (click, change, submit)
+	C []interface{}       `json:"c,omitempty"` // children (strings or JSElement objects)
+}
+
+// JSPatchOp represents a single patch operation
+type JSPatchOp struct {
+	Op  string     `json:"op"`            // "inline", "outline", "append", "prepend", "none", "notify", "title"
+	Tgt string     `json:"tgt,omitempty"` // target element ID
+	El  *JSElement `json:"el,omitempty"`  // element to insert/replace
+	JS  string     `json:"js,omitempty"`  // raw JavaScript (for backwards compatibility)
+	// Notification fields (when op == "notify")
+	Msg     string `json:"msg,omitempty"`     // notification message
+	Variant string `json:"variant,omitempty"` // "success", "error", "info", "error-reload"
+	// Title field (when op == "title")
+	Title string `json:"title,omitempty"` // page title
+}
+
+// JSPatchMessage is the WebSocket patch message format
+type JSPatchMessage struct {
+	Type string       `json:"type"` // "patch"
+	Ops  []*JSPatchOp `json:"ops"`  // operations to apply
+}
+
+// JSHTTPResponse is the HTTP POST response format
+type JSHTTPResponse struct {
+	El  *JSElement   `json:"el"`            // element to render
+	Ops []*JSPatchOp `json:"ops,omitempty"` // additional operations (notifications, title, etc.)
 }
 
 type CSS struct {
@@ -83,6 +128,7 @@ type Context struct {
 	Response  http.ResponseWriter
 	SessionID string
 	append    []string
+	ops       []*JSPatchOp // additional operations (notifications, title changes, etc.)
 }
 
 type TSession struct {
@@ -526,6 +572,169 @@ func (ctx *Context) Callable(action Callable) **Callable {
 	return ctx.App.Callable(action)
 }
 
+// htmlToJSElement converts an HTML string to a JSElement JSON structure
+func htmlToJSElement(htmlStr string) (*JSElement, error) {
+	// Parse the HTML string
+	doc, err := html.Parse(strings.NewReader(htmlStr))
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the first meaningful content element (skip html, head, body, DOCTYPE, comments)
+	var findContentElement func(*html.Node) *html.Node
+	findContentElement = func(n *html.Node) *html.Node {
+		if n.Type == html.ElementNode {
+			// Skip document structure tags - we want the actual content
+			if n.Data == "html" || n.Data == "head" || n.Data == "body" {
+				// Look inside these tags for content
+				for c := n.FirstChild; c != nil; c = c.NextSibling {
+					if elem := findContentElement(c); elem != nil {
+						return elem
+					}
+				}
+				return nil
+			}
+			// This is a content element
+			return n
+		}
+		// For non-element nodes, keep searching
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if elem := findContentElement(c); elem != nil {
+				return elem
+			}
+		}
+		return nil
+	}
+
+	rootElement := findContentElement(doc)
+	if rootElement == nil {
+		// If no element found, return a text node wrapped in a span
+		return &JSElement{
+			T: "span",
+			C: []interface{}{htmlStr},
+		}, nil
+	}
+
+	return nodeToJSElement(rootElement), nil
+}
+
+// nodeToJSElement recursively converts an html.Node to JSElement
+func nodeToJSElement(n *html.Node) *JSElement {
+	if n.Type != html.ElementNode {
+		return nil
+	}
+
+	elem := &JSElement{
+		T: n.Data,
+		A: make(map[string]string),
+		E: make(map[string]*JSEvent),
+		C: []interface{}{},
+	}
+
+	// Process attributes
+	for _, attr := range n.Attr {
+		switch attr.Key {
+		case "onclick":
+			if event := parseEventHandler(attr.Val, "click"); event != nil {
+				elem.E["click"] = event
+			}
+		case "onchange":
+			if event := parseEventHandler(attr.Val, "change"); event != nil {
+				elem.E["change"] = event
+			}
+		case "onsubmit":
+			if event := parseEventHandler(attr.Val, "submit"); event != nil {
+				elem.E["submit"] = event
+			}
+		case "disabled", "readonly", "checked", "selected", "required":
+			// Boolean attributes - store with empty string or the value if present
+			elem.A[attr.Key] = attr.Val
+		default:
+			elem.A[attr.Key] = attr.Val
+		}
+	}
+
+	// Clean up empty maps
+	if len(elem.A) == 0 {
+		elem.A = nil
+	}
+	if len(elem.E) == 0 {
+		elem.E = nil
+	}
+
+	// Process children
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.TextNode {
+			text := c.Data
+			if text != "" {
+				elem.C = append(elem.C, text)
+			}
+		} else if c.Type == html.ElementNode {
+			if child := nodeToJSElement(c); child != nil {
+				elem.C = append(elem.C, child)
+			}
+		}
+	}
+
+	if len(elem.C) == 0 {
+		elem.C = nil
+	}
+
+	return elem
+}
+
+// parseEventHandler parses event handler strings like "__post(...)" or "__submit(...)"
+// and converts them to JSEvent structures. For raw JavaScript handlers, returns a JSEvent
+// with Act="raw" to preserve client-side interactivity.
+func parseEventHandler(handler string, eventType string) *JSEvent {
+	handler = strings.TrimSpace(handler)
+
+	if handler == "" {
+		return nil
+	}
+
+	// Match __post(event, "swap", "target_id", "path", values)
+	rePost := regexp.MustCompile(`__post\s*\(\s*event\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*(\[.*?\])\s*\)`)
+	if matches := rePost.FindStringSubmatch(handler); len(matches) == 5 {
+		event := &JSEvent{
+			Act:  "post",
+			Swap: matches[1],
+			Tgt:  matches[2],
+			Path: matches[3],
+		}
+		// Parse values array
+		var vals []BodyItem
+		if err := json.Unmarshal([]byte(matches[4]), &vals); err == nil {
+			event.Vals = vals
+		}
+		return event
+	}
+
+	// Match __submit(event, "swap", "target_id", "path", values)
+	reSubmit := regexp.MustCompile(`__submit\s*\(\s*event\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*(\[.*?\])\s*\)`)
+	if matches := reSubmit.FindStringSubmatch(handler); len(matches) == 5 {
+		event := &JSEvent{
+			Act:  "form",
+			Swap: matches[1],
+			Tgt:  matches[2],
+			Path: matches[3],
+		}
+		// Parse values array
+		var vals []BodyItem
+		if err := json.Unmarshal([]byte(matches[4]), &vals); err == nil {
+			event.Vals = vals
+		}
+		return event
+	}
+
+	// For raw JavaScript handlers (like those used in IRadioButtons, IRadioDiv),
+	// preserve them so client-side interactivity works after DOM updates
+	return &JSEvent{
+		Act: "raw",
+		JS:  handler,
+	}
+}
+
 func (ctx *Context) Post(as ActionType, swap Swap, action *Action) string {
 	path, ok := stored[action.Method]
 
@@ -723,74 +932,45 @@ func (ctx *Context) Redirect(href string) string {
 // Deferred fragments removed. The previous ctx.Defer(...) builder and helpers
 // are no longer available.
 
-func displayMessage(ctx *Context, message string, color string) {
-	// Styled toast matching t-sui visuals
-	script := Trim(fmt.Sprintf(`<script>(function(){
-        var box=document.getElementById("__messages__");
-        if(box==null){box=document.createElement("div");box.id="__messages__";box.style.position="fixed";box.style.top="0";box.style.right="0";box.style.padding="8px";box.style.zIndex="9999";box.style.pointerEvents="none";document.body.appendChild(box);} 
-        var n=document.createElement("div");
-        n.style.display="flex";n.style.alignItems="center";n.style.gap="10px";
-        n.style.padding="12px 16px";n.style.margin="8px";n.style.borderRadius="12px";
-        n.style.minHeight="44px";n.style.minWidth="340px";n.style.maxWidth="340px";
-        n.style.boxShadow="0 6px 18px rgba(0,0,0,0.08)";n.style.border="1px solid";
-        var C=%q;var isGreen=C.indexOf('green')>=0;var isRed=C.indexOf('red')>=0;
-        var accent=isGreen?"#16a34a":(isRed?"#dc2626":"#4f46e5");
-        if(isGreen){n.style.background="#dcfce7";n.style.color="#166534";n.style.borderColor="#bbf7d0";}
-        else if(isRed){n.style.background="#fee2e2";n.style.color="#991b1b";n.style.borderColor="#fecaca";}
-        else{n.style.background="#eef2ff";n.style.color="#3730a3";n.style.borderColor="#e0e7ff";}
-        n.style.borderLeft="4px solid "+accent;
-        var dot=document.createElement("span");dot.style.width="10px";dot.style.height="10px";dot.style.borderRadius="9999px";dot.style.background=accent;
-        var t=document.createElement("span");t.textContent=%q; 
-        n.appendChild(dot);n.appendChild(t);
-        box.appendChild(n);
-        setTimeout(function(){try{box.removeChild(n);}catch(_){}} ,5000);
-    })();</script>`, color, message))
-	ctx.append = append(ctx.append, script)
+func displayMessage(ctx *Context, message string, variant string) {
+	// Add notification operation to context
+	ctx.ops = append(ctx.ops, &JSPatchOp{
+		Op:      "notify",
+		Msg:     message,
+		Variant: variant,
+	})
 }
 
-// displayError renders an error toast similar to displayMessage's red variant
-// and includes a Reload button that refreshes the application.
+// displayError renders an error toast with a Reload button.
 func displayError(ctx *Context, message string) {
-	// Fixed red styling with reload button
-	script := Trim(fmt.Sprintf(`<script>(function(){
-        var box=document.getElementById("__messages__");
-        if(box==null){box=document.createElement("div");box.id="__messages__";box.style.position="fixed";box.style.top="0";box.style.right="0";box.style.padding="8px";box.style.zIndex="9999";box.style.pointerEvents="none";document.body.appendChild(box);} 
-        var n=document.createElement("div");
-        n.style.display='flex';n.style.alignItems='center';n.style.gap='10px';
-        n.style.padding='12px 16px';n.style.margin='8px';n.style.borderRadius='12px';
-        n.style.minHeight='44px';n.style.minWidth='340px';n.style.maxWidth='340px';
-        n.style.background='#fee2e2';n.style.color='#991b1b';n.style.border='1px solid #fecaca';
-        n.style.borderLeft='4px solid #dc2626';n.style.boxShadow='0 6px 18px rgba(0,0,0,0.08)';
-        n.style.fontWeight='600';n.style.pointerEvents='auto';
-        var dot=document.createElement('span');dot.style.width='10px';dot.style.height='10px';dot.style.borderRadius='9999px';dot.style.background='#dc2626';
-        var t=document.createElement('span');t.textContent=%q;
-        var btn=document.createElement('button');btn.textContent='Reload';btn.style.background='#991b1b';btn.style.color='#fff';btn.style.border='none';btn.style.padding='6px 10px';btn.style.borderRadius='8px';btn.style.cursor='pointer';btn.style.fontWeight='700';btn.onclick=function(){ try { window.location.reload(); } catch(_){} };
-        n.appendChild(dot);n.appendChild(t);n.appendChild(btn);
-        box.appendChild(n);
-        setTimeout(function(){ try { if(n && n.parentNode) { n.parentNode.removeChild(n); } } catch(_){} }, 88000);
-    })();</script>`, message))
-	ctx.append = append(ctx.append, script)
+	ctx.ops = append(ctx.ops, &JSPatchOp{
+		Op:      "notify",
+		Msg:     message,
+		Variant: "error-reload",
+	})
 }
 
 func (ctx *Context) Success(message string) {
-	displayMessage(ctx, message, "bg-green-700 text-white")
+	displayMessage(ctx, message, "success")
 }
 
 func (ctx *Context) Error(message string) {
-	displayMessage(ctx, message, "bg-red-700 text-white")
+	displayMessage(ctx, message, "error")
 }
 
 // ErrorReload shows an error toast with a Reload button.
 func (ctx *Context) ErrorReload(message string) { displayError(ctx, message) }
 
 func (ctx *Context) Info(message string) {
-	displayMessage(ctx, message, "bg-blue-700 text-white")
+	displayMessage(ctx, message, "info")
 }
 
 // Title updates the page title dynamically
 func (ctx *Context) Title(title string) {
-	script := fmt.Sprintf(`<script>document.title=%q;</script>`, title)
-	ctx.append = append(ctx.append, script)
+	ctx.ops = append(ctx.ops, &JSPatchOp{
+		Op:    "title",
+		Title: title,
+	})
 }
 
 // SetSecurityHeaders sets comprehensive security headers
@@ -1422,19 +1602,16 @@ func (app *App) Listen(port string) {
 						// Serve a minimal error page that auto-reloads once the dev WS reconnects
 						w.WriteHeader(http.StatusInternalServerError)
 						if r.Method == "POST" {
-							// For POST requests, return JS that creates an error message node
+							// For POST requests, convert error HTML to JSON element
 							errorHTML := devErrorPage()
-							var buf bytes.Buffer
-							enc := json.NewEncoder(&buf)
-							enc.SetEscapeHTML(false)
-							if err := enc.Encode(errorHTML); err == nil {
-								htmlJSON := strings.TrimSpace(buf.String())
-								jsCode := fmt.Sprintf(`(function(){var div=document.createElement('div');div.innerHTML=%s;var first=div.children[0];return first||div;})()`, htmlJSON)
-								w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-								w.Write([]byte(jsCode))
-							} else {
-								w.Write([]byte("document.createTextNode('Error')"))
+							jsElement, err := htmlToJSElement(errorHTML)
+							if err != nil {
+								// Fallback to simple text element
+								jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
 							}
+							response := JSHTTPResponse{El: jsElement}
+							w.Header().Set("Content-Type", "application/json; charset=utf-8")
+							json.NewEncoder(w).Encode(response)
 						} else {
 							w.Write([]byte(devErrorPage()))
 						}
@@ -1449,22 +1626,20 @@ func (app *App) Listen(port string) {
 				}
 
 				if r.Method == "POST" {
-					// For POST requests, convert HTML to JS that returns a DOM node
-					// Use a JSON encoder that doesn't escape HTML characters
-					var buf bytes.Buffer
-					enc := json.NewEncoder(&buf)
-					enc.SetEscapeHTML(false)
-					if err := enc.Encode(html); err != nil {
-						log.Printf("Error encoding HTML: %v", err)
+					// For POST requests, convert HTML to JSON element structure
+					jsElement, err := htmlToJSElement(html)
+					if err != nil {
+						log.Printf("Error converting HTML to JSON: %v", err)
 						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte("document.createTextNode('Error')"))
-						return
+						// Fallback to simple text element
+						jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
 					}
-					// Trim the trailing newline added by Encode
-					htmlJSON := strings.TrimSpace(buf.String())
-					jsCode := fmt.Sprintf(`(function(){var div=document.createElement('div');div.innerHTML=%s;var first=div.children[0];return first||div;})()`, htmlJSON)
-					w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-					w.Write([]byte(jsCode))
+
+					response := JSHTTPResponse{El: jsElement, Ops: ctx.ops}
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					if err := json.NewEncoder(w).Encode(response); err != nil {
+						log.Printf("Error encoding JSON response: %v", err)
+					}
 				} else {
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
 					w.Write([]byte(html))
@@ -1509,19 +1684,16 @@ func (app *App) TestHandler() http.Handler {
 						log.Println("handler panic recovered:", rec)
 						w.WriteHeader(http.StatusInternalServerError)
 						if r.Method == "POST" {
-							// For POST requests, return JS that creates an error message node
+							// For POST requests, convert error HTML to JSON element
 							errorHTML := devErrorPage()
-							var buf bytes.Buffer
-							enc := json.NewEncoder(&buf)
-							enc.SetEscapeHTML(false)
-							if err := enc.Encode(errorHTML); err == nil {
-								htmlJSON := strings.TrimSpace(buf.String())
-								jsCode := fmt.Sprintf(`(function(){var div=document.createElement('div');div.innerHTML=%s;var first=div.children[0];return first||div;})()`, htmlJSON)
-								w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-								w.Write([]byte(jsCode))
-							} else {
-								w.Write([]byte("document.createTextNode('Error')"))
+							jsElement, err := htmlToJSElement(errorHTML)
+							if err != nil {
+								// Fallback to simple text element
+								jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
 							}
+							response := JSHTTPResponse{El: jsElement}
+							w.Header().Set("Content-Type", "application/json; charset=utf-8")
+							json.NewEncoder(w).Encode(response)
 						} else {
 							w.Write([]byte(devErrorPage()))
 						}
@@ -1535,22 +1707,20 @@ func (app *App) TestHandler() http.Handler {
 				}
 
 				if r.Method == "POST" {
-					// For POST requests, convert HTML to JS that returns a DOM node
-					// Use a JSON encoder that doesn't escape HTML characters
-					var buf bytes.Buffer
-					enc := json.NewEncoder(&buf)
-					enc.SetEscapeHTML(false)
-					if err := enc.Encode(html); err != nil {
-						log.Printf("Error encoding HTML: %v", err)
+					// For POST requests, convert HTML to JSON element structure
+					jsElement, err := htmlToJSElement(html)
+					if err != nil {
+						log.Printf("Error converting HTML to JSON: %v", err)
 						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte("document.createTextNode('Error')"))
-						return
+						// Fallback to simple text element
+						jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
 					}
-					// Trim the trailing newline added by Encode
-					htmlJSON := strings.TrimSpace(buf.String())
-					jsCode := fmt.Sprintf(`(function(){var div=document.createElement('div');div.innerHTML=%s;var first=div.children[0];return first||div;})()`, htmlJSON)
-					w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-					w.Write([]byte(jsCode))
+
+					response := JSHTTPResponse{El: jsElement, Ops: ctx.ops}
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					if err := json.NewEncoder(w).Encode(response); err != nil {
+						log.Printf("Error encoding JSON response: %v", err)
+					}
 				} else {
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
 					w.Write([]byte(html))
@@ -1808,10 +1978,10 @@ func (app *App) initWS() {
 }
 
 // sendPatch broadcasts a patch message to all connected WS clients.
-func (app *App) sendPatch(jsCode string) {
-	msg := map[string]string{
-		"type": "patch",
-		"js":   Trim(jsCode),
+func (app *App) sendPatch(ops []*JSPatchOp) {
+	msg := JSPatchMessage{
+		Type: "patch",
+		Ops:  ops,
 	}
 
 	data, err := json.Marshal(msg)
@@ -1832,7 +2002,7 @@ func (app *App) sendPatch(jsCode string) {
 }
 
 // Patch patches using a TargetSwap descriptor (id + swap) and pushes to WS clients.
-func (ctx *Context) Patch(ts TargetSwap, jsCode string, clear ...func()) {
+func (ctx *Context) Patch(ts TargetSwap, html string, clear ...func()) {
 	if ctx == nil || ctx.App == nil {
 		return
 	}
@@ -1852,12 +2022,25 @@ func (ctx *Context) Patch(ts TargetSwap, jsCode string, clear ...func()) {
 		ctx.App.sessMu.Unlock()
 	}
 
-	// Wrap the JS code with appropriate DOM manipulation
-	wrappedJS := wrapJSForPatch(ts, jsCode)
-	ctx.App.sendPatch(wrappedJS)
+	// Convert HTML to JSON element and create patch operation
+	jsElement, err := htmlToJSElement(html)
+	if err != nil {
+		log.Printf("Error converting HTML to JSON for patch: %v", err)
+		// Fallback to simple text element
+		jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
+	}
+
+	op := &JSPatchOp{
+		Op:  string(ts.Swap),
+		Tgt: ts.ID,
+		El:  jsElement,
+	}
+
+	ctx.App.sendPatch([]*JSPatchOp{op})
 }
 
-// wrapJSForPatch wraps JS code with appropriate DOM manipulation based on swap type
+// wrapJSForPatch is deprecated but kept for backwards compatibility
+// Now we use JSON operations instead
 func wrapJSForPatch(ts TargetSwap, jsCode string) string {
 	var code string
 	switch ts.Swap {
@@ -2295,30 +2478,44 @@ var __post = Trim(`
 		var L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
 
 		fetch(path, {method: "POST", body: JSON.stringify(body)})
-			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
-			.then(function (jsCode) {
-				// Execute JS code and apply to target
-				var el = document.getElementById(target_id);
-				if (el != null) {
-					var result = eval(jsCode);
-					if (result && result.nodeType) {
-						if (swap === "inline") {
-							el.innerHTML = '';
-							el.appendChild(result);
-						} else if (swap === "outline") {
-							el.parentNode.replaceChild(result, el);
-						} else if (swap === "append") {
-							el.appendChild(result);
-						} else if (swap === "prepend") {
-							el.insertBefore(result, el.firstChild);
-						}
-					}
+			.then(function(resp){ 
+				if(!resp.ok){ throw new Error('HTTP '+resp.status); }
+				var contentType = resp.headers.get("content-type");
+				if (contentType && contentType.indexOf("application/json") !== -1) {
+					return resp.json();
 				} else {
-					// No target, just execute the JS
-					eval(jsCode);
+					// Fallback for non-JSON responses
+					return resp.text().then(function(text) {
+						try { return JSON.parse(text); } catch(_) { return {el: null}; }
+					});
 				}
 			})
-			.catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
+			.then(function (data) {
+				// Create element from JSON and apply to target
+				var target = document.getElementById(target_id);
+				if (target != null && data && data.el) {
+					var element = __engine.create(data.el);
+					if (element) {
+						if (swap === "inline") {
+							target.innerHTML = '';
+							target.appendChild(element);
+						} else if (swap === "outline") {
+							if (target.parentNode) {
+								target.parentNode.replaceChild(element, target);
+							}
+						} else if (swap === "append") {
+							target.appendChild(element);
+						} else if (swap === "prepend") {
+							target.insertBefore(element, target.firstChild);
+						}
+					}
+				}
+				// Process additional operations (notifications, title, etc.)
+				if (data && data.ops) {
+					__engine.applyPatch(data.ops);
+				}
+			})
+			.catch(function(err){ try { console.error('__post error:', err); __error('Something went wrong ...'); } catch(__){} })
 			.finally(function(){ try { L.stop(); } catch(_){} });
     }
 `)
@@ -2454,30 +2651,44 @@ var __submit = Trim(`
 		}
 
 		fetch(path, {method: "POST", body: fetchBody, headers: fetchHeaders})
-			.then(function(resp){ if(!resp.ok){ throw new Error('HTTP '+resp.status); } return resp.text(); })
-			.then(function (jsCode) {
-				// Execute JS code and apply to target
-				var el = document.getElementById(target_id);
-				if (el != null) {
-					var result = eval(jsCode);
-					if (result && result.nodeType) {
-						if (swap === "inline") {
-							el.innerHTML = '';
-							el.appendChild(result);
-						} else if (swap === "outline") {
-							el.parentNode.replaceChild(result, el);
-						} else if (swap === "append") {
-							el.appendChild(result);
-						} else if (swap === "prepend") {
-							el.insertBefore(result, el.firstChild);
-						}
-					}
+			.then(function(resp){ 
+				if(!resp.ok){ throw new Error('HTTP '+resp.status); }
+				var contentType = resp.headers.get("content-type");
+				if (contentType && contentType.indexOf("application/json") !== -1) {
+					return resp.json();
 				} else {
-					// No target, just execute the JS
-					eval(jsCode);
+					// Fallback for non-JSON responses
+					return resp.text().then(function(text) {
+						try { return JSON.parse(text); } catch(_) { return {el: null}; }
+					});
 				}
 			})
-            .catch(function(_){ try { __error('Something went wrong ...'); } catch(__){} })
+			.then(function (data) {
+				// Create element from JSON and apply to target
+				var target = document.getElementById(target_id);
+				if (target != null && data && data.el) {
+					var element = __engine.create(data.el);
+					if (element) {
+						if (swap === "inline") {
+							target.innerHTML = '';
+							target.appendChild(element);
+						} else if (swap === "outline") {
+							if (target.parentNode) {
+								target.parentNode.replaceChild(element, target);
+							}
+						} else if (swap === "append") {
+							target.appendChild(element);
+						} else if (swap === "prepend") {
+							target.insertBefore(element, target.firstChild);
+						}
+					}
+				}
+				// Process additional operations (notifications, title, etc.)
+				if (data && data.ops) {
+					__engine.applyPatch(data.ops);
+				}
+			})
+            .catch(function(err){ try { console.error('__submit error:', err); __error('Something went wrong ...'); } catch(__){} })
             .finally(function(){ try { L.stop(); } catch(_){} });
     }
 `)
@@ -2658,8 +2869,12 @@ var __ws = Trim(`
             try { if (!(window).__gsuiHadClose) { (window).__gsuiHadClose = false; } } catch(_){ }
             function handlePatch(msg){
                 try {
-                    if (msg.js) {
-                        // Execute JavaScript code directly
+                    // Handle new JSON-based patches
+                    if (msg.ops && msg.ops.length > 0) {
+                        __engine.applyPatch(msg.ops);
+                    }
+                    // Fallback for old JS-based patches (backwards compatibility)
+                    else if (msg.js) {
                         try { eval(String(msg.js||'')); } catch(_){ }
                     }
                 } catch(_){ }
@@ -2847,7 +3062,264 @@ var __e = Trim(`
     }
 `)
 
+// __engine: JSON DOM engine for declarative DOM updates
+var __engine = Trim(`
+    var __engine = (function(){
+        function create(json) {
+            if (!json) return null;
+            if (typeof json === 'string') {
+                return document.createTextNode(json);
+            }
+            if (!json.t) return null;
+
+            var el = document.createElement(json.t);
+            
+            // Apply attributes
+            if (json.a) {
+                for (var key in json.a) {
+                    if (!json.a.hasOwnProperty(key)) continue;
+                    var val = json.a[key];
+                    if (key === 'class') {
+                        el.className = val;
+                    } else if (key === 'style') {
+                        el.setAttribute('style', val);
+                    } else if (key === 'for') {
+                        el.htmlFor = val;
+                    } else if (key === 'readonly') {
+                        el.readOnly = true;
+                    } else if (key === 'disabled') {
+                        el.disabled = true;
+                    } else if (key === 'checked') {
+                        el.checked = true;
+                    } else if (key === 'selected') {
+                        el.selected = true;
+                    } else if (key === 'required') {
+                        el.required = true;
+                    } else {
+                        el.setAttribute(key, val);
+                    }
+                }
+            }
+            
+            // Bind events
+            if (json.e) {
+                bindEvents(el, json.e);
+            }
+            
+            // Append children
+            if (json.c && json.c.length > 0) {
+                for (var i = 0; i < json.c.length; i++) {
+                    var child = create(json.c[i]);
+                    if (child) el.appendChild(child);
+                }
+            }
+            
+            return el;
+        }
+        
+        function bindEvents(el, events) {
+            for (var eventType in events) {
+                if (!events.hasOwnProperty(eventType)) continue;
+                var evt = events[eventType];
+                
+                if (evt.act === 'post') {
+                    el.addEventListener(eventType, (function(e) {
+                        return function(event) {
+                            __post(event, e.swap || 'inline', e.tgt || '', e.path || '', e.vals || []);
+                        };
+                    })(evt));
+                } else if (evt.act === 'form') {
+                    el.addEventListener(eventType, (function(e) {
+                        return function(event) {
+                            __submit(event, e.swap || 'inline', e.tgt || '', e.path || '', e.vals || []);
+                        };
+                    })(evt));
+                } else if (evt.act === 'raw' && evt.js) {
+                    el.addEventListener(eventType, (function(js) {
+                        return function(event) {
+                            try { (new Function('event', js))(event); } catch(_){ }
+                        };
+                    })(evt.js));
+                }
+            }
+        }
+        
+        // Track consecutive misses per target - only send "invalid" after multiple misses
+        // This handles race conditions during page load
+        var missCount = {};
+        
+        function applyPatch(ops) {
+            if (!ops || !ops.length) return;
+            
+            for (var i = 0; i < ops.length; i++) {
+                var op = ops[i];
+                
+                // Handle raw JS for backwards compatibility
+                if (op.js) {
+                    try { eval(op.js); } catch(_){ }
+                    continue;
+                }
+                
+                // Handle notification operations
+                if (op.op === 'notify') {
+                    try { __notify(op.msg || '', op.variant || 'info'); } catch(_){ }
+                    continue;
+                }
+                
+                // Handle title operations
+                if (op.op === 'title') {
+                    try { document.title = op.title || ''; } catch(_){ }
+                    continue;
+                }
+                
+                var target = document.getElementById(op.tgt);
+                if (!target) {
+                    if (op.tgt) {
+                        // Track consecutive misses for this target
+                        missCount[op.tgt] = (missCount[op.tgt] || 0) + 1;
+                        
+                        // Only send "invalid" after 2+ consecutive misses
+                        // This handles race conditions during page load while still
+                        // detecting when an element is truly gone
+                        if (missCount[op.tgt] >= 2) {
+                            delete missCount[op.tgt];
+                            try {
+                                var ws = (window).__gsuiWS;
+                                if (ws && ws.readyState === 1) {
+                                    ws.send(JSON.stringify({ type: 'invalid', id: op.tgt }));
+                                }
+                            } catch(_){ }
+                        }
+                    }
+                    continue;
+                }
+                
+                // Reset miss count on successful patch
+                if (op.tgt) {
+                    missCount[op.tgt] = 0;
+                }
+                
+                var element = create(op.el);
+                if (!element) continue;
+                
+                switch (op.op) {
+                    case 'inline':
+                        target.innerHTML = '';
+                        target.appendChild(element);
+                        break;
+                    case 'outline':
+                        if (target.parentNode) {
+                            target.parentNode.replaceChild(element, target);
+                        }
+                        break;
+                    case 'append':
+                        target.appendChild(element);
+                        break;
+                    case 'prepend':
+                        target.insertBefore(element, target.firstChild);
+                        break;
+                    case 'none':
+                        // Just execute without modifying DOM
+                        break;
+                }
+            }
+        }
+        
+        return {
+            create: create,
+            applyPatch: applyPatch,
+            bindEvents: bindEvents
+        };
+    })();
+`)
+
 var ContentID = Target()
+
+// __notify: creates styled notification toasts
+var __notify = Trim(`
+    function __notify(msg, variant) {
+        var box = document.getElementById('__messages__');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = '__messages__';
+            box.style.position = 'fixed';
+            box.style.top = '0';
+            box.style.right = '0';
+            box.style.padding = '8px';
+            box.style.zIndex = '9999';
+            box.style.pointerEvents = 'none';
+            document.body.appendChild(box);
+        }
+        
+        var n = document.createElement('div');
+        n.style.display = 'flex';
+        n.style.alignItems = 'center';
+        n.style.gap = '10px';
+        n.style.padding = '12px 16px';
+        n.style.margin = '8px';
+        n.style.borderRadius = '12px';
+        n.style.minHeight = '44px';
+        n.style.minWidth = '340px';
+        n.style.maxWidth = '340px';
+        n.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)';
+        n.style.border = '1px solid';
+        n.style.fontWeight = '600';
+        
+        var accent = '#4f46e5';
+        var timeout = 5000;
+        
+        if (variant === 'success') {
+            accent = '#16a34a';
+            n.style.background = '#dcfce7';
+            n.style.color = '#166534';
+            n.style.borderColor = '#bbf7d0';
+        } else if (variant === 'error' || variant === 'error-reload') {
+            accent = '#dc2626';
+            n.style.background = '#fee2e2';
+            n.style.color = '#991b1b';
+            n.style.borderColor = '#fecaca';
+            if (variant === 'error-reload') {
+                n.style.pointerEvents = 'auto';
+                timeout = 88000;
+            }
+        } else {
+            n.style.background = '#eef2ff';
+            n.style.color = '#3730a3';
+            n.style.borderColor = '#e0e7ff';
+        }
+        
+        n.style.borderLeft = '4px solid ' + accent;
+        
+        var dot = document.createElement('span');
+        dot.style.width = '10px';
+        dot.style.height = '10px';
+        dot.style.borderRadius = '9999px';
+        dot.style.background = accent;
+        
+        var t = document.createElement('span');
+        t.textContent = msg;
+        
+        n.appendChild(dot);
+        n.appendChild(t);
+        
+        if (variant === 'error-reload') {
+            var btn = document.createElement('button');
+            btn.textContent = 'Reload';
+            btn.style.background = '#991b1b';
+            btn.style.color = '#fff';
+            btn.style.border = 'none';
+            btn.style.padding = '6px 10px';
+            btn.style.borderRadius = '8px';
+            btn.style.cursor = 'pointer';
+            btn.style.fontWeight = '700';
+            btn.onclick = function() { try { window.location.reload(); } catch(_){} };
+            n.appendChild(btn);
+        }
+        
+        box.appendChild(n);
+        setTimeout(function() { try { if (n && n.parentNode) { n.parentNode.removeChild(n); } } catch(_){} }, timeout);
+    }
+`)
 
 // Error UI helper injected into every page
 
@@ -2930,7 +3402,7 @@ func MakeApp(defaultLanguage string) *App {
                 /* Hover helpers used in nav/examples */
                 .dark .hover\:bg-gray-200:hover { background-color:#374151 !important; }
             </style>`,
-			Script(__stringify, __loader, __offline, __error, __e, __post, __submit, __load, __theme, __ws),
+			Script(__stringify, __loader, __offline, __error, __notify, __e, __engine, __post, __submit, __load, __theme, __ws),
 		},
 		HTMLBody: func(class string) string {
 			if class == "" {
