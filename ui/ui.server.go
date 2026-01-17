@@ -941,18 +941,22 @@ func (ctx *Context) Load(href string) Attr {
 }
 
 // Reload adds a reload operation that will reload the page on the client
-func (ctx *Context) Reload() {
+func (ctx *Context) Reload() string {
 	ctx.ops = append(ctx.ops, &JSPatchOp{
 		Op: "reload",
 	})
+
+	return ""
 }
 
 // Redirect adds a redirect operation that will navigate to the specified URL
-func (ctx *Context) Redirect(href string) {
+func (ctx *Context) Redirect(href string) string {
 	ctx.ops = append(ctx.ops, &JSPatchOp{
 		Op:   "redirect",
 		Href: href,
 	})
+
+	return ""
 }
 
 // Deferred fragments removed. The previous ctx.Defer(...) builder and helpers
