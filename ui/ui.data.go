@@ -209,7 +209,6 @@ type TCollateResult[T any] struct {
 type CollateColors struct {
 	Button        string // Button color constant (e.g., Blue, Green)
 	ButtonOutline string // Outline button color constant (e.g., BlueOutline, GreenOutline)
-	FormBg        string // Form background class (e.g., "bg-blue-800")
 	ActiveBg      string // Active state background (e.g., "bg-blue-600")
 	ActiveBorder  string // Active state border (e.g., "border-blue-600")
 	ActiveHover   string // Active state hover (e.g., "hover:bg-blue-700")
@@ -220,7 +219,6 @@ var (
 	CollateBlue = CollateColors{
 		Button:        Blue,
 		ButtonOutline: BlueOutline,
-		FormBg:        "bg-blue-800",
 		ActiveBg:      "bg-blue-600",
 		ActiveBorder:  "border-blue-600",
 		ActiveHover:   "hover:bg-blue-700",
@@ -228,7 +226,6 @@ var (
 	CollateGreen = CollateColors{
 		Button:        Green,
 		ButtonOutline: GreenOutline,
-		FormBg:        "bg-green-800",
 		ActiveBg:      "bg-green-600",
 		ActiveBorder:  "border-green-600",
 		ActiveHover:   "hover:bg-green-700",
@@ -236,7 +233,6 @@ var (
 	CollatePurple = CollateColors{
 		Button:        Purple,
 		ButtonOutline: PurpleOutline,
-		FormBg:        "bg-purple-800",
 		ActiveBg:      "bg-purple-500",
 		ActiveBorder:  "border-purple-500",
 		ActiveHover:   "hover:bg-purple-700",
@@ -244,7 +240,6 @@ var (
 	CollateRed = CollateColors{
 		Button:        Red,
 		ButtonOutline: RedOutline,
-		FormBg:        "bg-red-800",
 		ActiveBg:      "bg-red-600",
 		ActiveBorder:  "border-red-600",
 		ActiveHover:   "hover:bg-red-700",
@@ -252,7 +247,6 @@ var (
 	CollateYellow = CollateColors{
 		Button:        Yellow,
 		ButtonOutline: YellowOutline,
-		FormBg:        "bg-yellow-600",
 		ActiveBg:      "bg-yellow-400",
 		ActiveBorder:  "border-yellow-400",
 		ActiveHover:   "hover:bg-yellow-500",
@@ -260,7 +254,6 @@ var (
 	CollateGray = CollateColors{
 		Button:        Gray,
 		ButtonOutline: GrayOutline,
-		FormBg:        "bg-gray-800",
 		ActiveBg:      "bg-gray-600",
 		ActiveBorder:  "border-gray-600",
 		ActiveHover:   "hover:bg-gray-700",
@@ -935,16 +928,16 @@ for(var i=0;i<allBtns.length;i++){
 
 func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 	// Build form class conditionally using configured color
-	formClass := fmt.Sprintf("flex %s rounded-lg", collate.Colors.FormBg)
+	formClass := fmt.Sprintf("flex %s rounded", collate.Colors.ActiveBg)
 
 	return Div("flex gap-px w-full")(
 		// Excel button at the start of the row
 		If(len(collate.ExcelFields) > 0 || collate.OnExcel != nil, func() string {
 			return Button().
-				Class("rounded-lg shadow").
+				Class("rounded shadow").
 				Color(collate.Colors.Button).
 				Click(ctx.Call(collate.onXLS, query).None()).
-				Render(IconLeft("fa fa-download", "Excel"))
+				Render(IconLeft("fa fa-download", "Export"))
 		}),
 
 		Flex1,
@@ -975,7 +968,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 		If(len(collate.FilterFields) > 0 || len(collate.SortFields) > 0, func() string {
 			return Button().
 				Submit().
-				Class("rounded-r-lg shadow").
+				Class("rounded-r shadow").
 				Color(collate.Colors.Button).
 				Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
 				Render(IconLeft("fa fa-fw fa-sliders", "Filter"))
