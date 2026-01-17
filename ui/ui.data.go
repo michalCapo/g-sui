@@ -1020,10 +1020,20 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				Div("relative p-px")(
 					IText("Search", query).
 						Class("").
-						ClassInput("cursor-pointer bg-white border-gray-300 hover:border-blue-500 block w-full p-3 pr-12").
+						ClassInput("cursor-pointer bg-white border-gray-300 hover:border-blue-500 block w-full p-3 pl-12 pr-12").
 						Placeholder(ctx.Translate("Search")).
 						Render(""),
 
+					// Cancel button on the left (only shown when search has value)
+					If(query.Search != "", func() string {
+						return Button().
+							Color(GrayOutline).
+							Class("absolute left-2 top-1/2 -translate-y-1/2 rounded-full w-8 h-8 flex items-center justify-center").
+							Click(`var el=event.target;while(el&&el.tagName!=='FORM'&&el.tagName!=='BODY'){if(el.tagName==='FORM')break;el=el.parentElement;}if(!el||el.tagName!=='FORM')return;var searchInput=el.querySelector('input[name="Search"]');var searchHidden=el.querySelector('input[type="hidden"][name="Search"]');if(searchInput)searchInput.value='';if(searchHidden)searchHidden.value='';el.requestSubmit();`).
+							Render(Icon("fa fa-fw fa-times"))
+					}),
+
+					// Search button on the right
 					Button().
 						Submit().
 						Color(GrayOutline).
