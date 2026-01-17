@@ -1370,11 +1370,18 @@ func (app *App) Callable(action Callable) **Callable {
 		uid = eventPath + uid
 	}
 
+	// Check if already registered - update the callable if found
+	mu.Lock()
 	for key, value := range stored {
 		if value == uid {
+			// Update the callable to the new instance's method
+			// This ensures stateful handlers (like collate methods) use the latest instance
+			*key = action
+			mu.Unlock()
 			return &key
 		}
 	}
+	mu.Unlock()
 
 	found := &action
 	app.Register("POST", uid, found)
