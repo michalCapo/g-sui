@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"crypto/rand"
 	"embed"
 	"encoding/base64"
@@ -1135,7 +1136,6 @@ func (app *App) SmoothNavigation(enable bool) {
 	app.SmoothNav = enable
 }
 
-
 func (app *App) debugf(format string, args ...any) {
 	if !app.DebugEnabled {
 		return
@@ -1414,7 +1414,6 @@ func (app *App) Listen(port string) {
 		for found, path := range stored {
 			if value == path {
 				ctx := makeContext(app, r, w)
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 				// Recover from panics inside handler calls to avoid broken fetches
 				defer func() {
@@ -1422,15 +1421,53 @@ func (app *App) Listen(port string) {
 						log.Println("handler panic recovered:", rec)
 						// Serve a minimal error page that auto-reloads once the dev WS reconnects
 						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte(devErrorPage()))
+						if r.Method == "POST" {
+							// For POST requests, return JS that creates an error message node
+							errorHTML := devErrorPage()
+							var buf bytes.Buffer
+							enc := json.NewEncoder(&buf)
+							enc.SetEscapeHTML(false)
+							if err := enc.Encode(errorHTML); err == nil {
+								htmlJSON := strings.TrimSpace(buf.String())
+								jsCode := fmt.Sprintf(`(function(){var div=document.createElement('div');div.innerHTML=%s;var first=div.children[0];return first||div;})()`, htmlJSON)
+								w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+								w.Write([]byte(jsCode))
+							} else {
+								w.Write([]byte("document.createTextNode('Error')"))
+							}
+						} else {
+							w.Write([]byte(devErrorPage()))
+						}
 					}
 				}()
 
 				// Normal call
 				app.debugf("route %s -> %s", r.Method, path)
-				w.Write([]byte((*found)(ctx)))
+				html := (*found)(ctx)
 				if len(ctx.append) > 0 {
-					w.Write([]byte(strings.Join(ctx.append, "")))
+					html += strings.Join(ctx.append, "")
+				}
+
+				if r.Method == "POST" {
+					// For POST requests, convert HTML to JS that returns a DOM node
+					// Use a JSON encoder that doesn't escape HTML characters
+					var buf bytes.Buffer
+					enc := json.NewEncoder(&buf)
+					enc.SetEscapeHTML(false)
+					if err := enc.Encode(html); err != nil {
+						log.Printf("Error encoding HTML: %v", err)
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte("document.createTextNode('Error')"))
+						return
+					}
+					// Trim the trailing newline added by Encode
+					htmlJSON := strings.TrimSpace(buf.String())
+					jsCode := fmt.Sprintf(`(function(){var div=document.createElement('div');div.innerHTML=%s;var first=div.children[0];return first||div;})()`, htmlJSON)
+					w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+					w.Write([]byte(jsCode))
+				} else {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					w.Write([]byte(html))
 				}
 
 				return
@@ -1466,20 +1503,57 @@ func (app *App) TestHandler() http.Handler {
 		for found, routePath := range stored {
 			if routePath == r.URL.Path {
 				ctx := makeContext(app, r, w)
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 				defer func() {
 					if rec := recover(); rec != nil {
 						log.Println("handler panic recovered:", rec)
 						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte(devErrorPage()))
+						if r.Method == "POST" {
+							// For POST requests, return JS that creates an error message node
+							errorHTML := devErrorPage()
+							var buf bytes.Buffer
+							enc := json.NewEncoder(&buf)
+							enc.SetEscapeHTML(false)
+							if err := enc.Encode(errorHTML); err == nil {
+								htmlJSON := strings.TrimSpace(buf.String())
+								jsCode := fmt.Sprintf(`(function(){var div=document.createElement('div');div.innerHTML=%s;var first=div.children[0];return first||div;})()`, htmlJSON)
+								w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+								w.Write([]byte(jsCode))
+							} else {
+								w.Write([]byte("document.createTextNode('Error')"))
+							}
+						} else {
+							w.Write([]byte(devErrorPage()))
+						}
 					}
 				}()
 
 				app.debugf("route %s -> %s", r.Method, routePath)
-				w.Write([]byte((*found)(ctx)))
+				html := (*found)(ctx)
 				if len(ctx.append) > 0 {
-					w.Write([]byte(strings.Join(ctx.append, "")))
+					html += strings.Join(ctx.append, "")
+				}
+
+				if r.Method == "POST" {
+					// For POST requests, convert HTML to JS that returns a DOM node
+					// Use a JSON encoder that doesn't escape HTML characters
+					var buf bytes.Buffer
+					enc := json.NewEncoder(&buf)
+					enc.SetEscapeHTML(false)
+					if err := enc.Encode(html); err != nil {
+						log.Printf("Error encoding HTML: %v", err)
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte("document.createTextNode('Error')"))
+						return
+					}
+					// Trim the trailing newline added by Encode
+					htmlJSON := strings.TrimSpace(buf.String())
+					jsCode := fmt.Sprintf(`(function(){var div=document.createElement('div');div.innerHTML=%s;var first=div.children[0];return first||div;})()`, htmlJSON)
+					w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+					w.Write([]byte(jsCode))
+				} else {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					w.Write([]byte(html))
 				}
 
 				return
@@ -1802,7 +1876,6 @@ func wrapJSForPatch(ts TargetSwap, jsCode string) string {
 	}
 	return code
 }
-
 
 // Render renders HTML inside the given target element (replaces innerHTML).
 func (ctx *Context) Render(target Attr, html string) {
