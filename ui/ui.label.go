@@ -51,8 +51,8 @@ func (c *ALabel) Render(text string) string {
 	labelJS := El("label", c.classLabel, Attr{For: c.id})(Text(text))
 	asteriskJS := ""
 	if c.required && !c.disabled {
-		asteriskJS = "," + Span("ml-1 text-red-700")(Text("*"))
+		asteriskJS = Span("ml-1 text-red-700")(Text("*"))
 	}
 
-	return Div(Classes(c.class, "relative"))(labelJS + asteriskJS)
+	return Div(Classes(c.class, "relative"))(labelJS, asteriskJS)
 }
