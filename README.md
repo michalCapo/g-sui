@@ -460,6 +460,23 @@ func handler(ctx *ui.Context) string {
 - The library favors simple strings for HTML; helpers build class names and attributes for you.
 - Validation uses `go-playground/validator`; see the login and showcase examples.
 
+## Releases
+
+To create and push a new version:
+
+```bash
+./deploy
+```
+
+The `deploy` script automatically:
+- Starts at version `v0.100` if no tags exist
+- Increments the minor version by 1 (e.g., `v0.100` → `v0.101` → `v0.102`)
+- Ensures your working tree is clean before tagging
+- Creates an annotated git tag
+- Pushes the tag to the remote repository
+
+After running `./deploy`, you can create a GitHub release by visiting the [releases page](https://github.com/michalCapo/go-srui/releases/new) and selecting the newly created tag.
+
 ## Claude Code Skills
 
 [g-sui](https://github.com/michalCapo/g-sui) includes **Claude Code skills** to help Claude (and other LLMs) understand the framework better. These skills provide comprehensive documentation that Claude can reference when answering questions or generating code.

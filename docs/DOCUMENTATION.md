@@ -3363,6 +3363,39 @@ func TestPageRender(t *testing.T) {
 
 ---
 
+## Releases and Versioning
+
+### Creating a New Release
+
+To create and push a new version tag, use the `deploy` script:
+
+```bash
+./deploy
+```
+
+The script automatically:
+- Starts at version `v0.100` if no tags exist
+- Increments the minor version by 1 (e.g., `v0.100` → `v0.101` → `v0.102`)
+- Ensures your working tree is clean (no uncommitted changes)
+- Creates an annotated git tag with a release message
+- Pushes the tag to the remote repository
+
+### Version Numbering Scheme
+
+The project uses semantic versioning with the format `v0.XXX`:
+- Major version: Fixed at `0` (pre-1.0 release)
+- Minor version: Auto-incremented starting from `100` (`v0.100`, `v0.101`, `v0.102`, ...)
+
+### After Deployment
+
+After running `./deploy`, you can:
+1. Create a GitHub release at https://github.com/michalCapo/go-srui/releases/new
+2. Select the newly created tag
+3. Add release notes describing the changes
+4. Publish the release
+
+---
+
 ## Future Considerations
 
 ### Potential Enhancements

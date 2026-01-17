@@ -26,7 +26,18 @@ go test -run TestName ./ui/
 
 # Module tidy
 go mod tidy
+
+# Create and push a new version tag
+./deploy
 ```
+
+### Versioning and Releases
+
+The project uses semantic versioning starting at `v0.100`:
+- Run `./deploy` to automatically create and push a new version tag
+- The script increments the minor version (e.g., `v0.100` → `v0.101` → `v0.102`)
+- Requires a clean working tree (no uncommitted changes)
+- Creates an annotated git tag and pushes it to the remote repository
 
 ## High-Level Architecture
 
