@@ -7,9 +7,9 @@ import (
 )
 
 func HelloContent(ctx *ui.Context) string {
-	sayHello := func(ctx *ui.Context) string { ctx.Success("Hello"); return "" }
-	sayDelay := func(ctx *ui.Context) string { time.Sleep(2 * time.Second); ctx.Info("Information"); return "" }
-	sayError := func(ctx *ui.Context) string { ctx.Error("Hello error"); return "" }
+	sayHello := func(ctx *ui.Context) string { return ctx.Success("Hello") }
+	sayDelay := func(ctx *ui.Context) string { time.Sleep(2 * time.Second); return ctx.Info("Information") }
+	sayError := func(ctx *ui.Context) string { return ctx.Error("Hello error") }
 	sayCrash := func(_ *ui.Context) string { panic("Hello again") }
 
 	return ui.Div("flex justify-start gap-4 items-center")(

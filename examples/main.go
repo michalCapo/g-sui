@@ -41,6 +41,7 @@ var routes = []route{
 	{Path: "/collate", Title: "Collate"},
 	{Path: "/collate-empty", Title: "Collate Empty"},
 	{Path: "/spa", Title: "SPA"},
+	{Path: "/reload-redirect", Title: "Reload & Redirect"},
 }
 
 func main() {
@@ -118,6 +119,7 @@ func main() {
 	app.Page("/collate", layout("Collate", pages.Collate))
 	app.Page("/collate-empty", layout("Collate Empty", pages.CollateEmpty))
 	app.Page("/spa", layout("SPA", pages.SpaExample))
+	app.Page("/reload-redirect", layout("Reload & Redirect", pages.ReloadRedirect))
 
 	app.Listen(":1422")
 }

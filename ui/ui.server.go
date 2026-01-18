@@ -980,19 +980,25 @@ func displayError(ctx *Context, message string) {
 	})
 }
 
-func (ctx *Context) Success(message string) {
+func (ctx *Context) Success(message string) string {
 	displayMessage(ctx, message, "success")
+
+	return ""
 }
 
-func (ctx *Context) Error(message string) {
+func (ctx *Context) Error(message string) string {
 	displayMessage(ctx, message, "error")
+
+	return ""
 }
 
 // ErrorReload shows an error toast with a Reload button.
 func (ctx *Context) ErrorReload(message string) { displayError(ctx, message) }
 
-func (ctx *Context) Info(message string) {
+func (ctx *Context) Info(message string) string {
 	displayMessage(ctx, message, "info")
+
+	return ""
 }
 
 // Title updates the page title dynamically
