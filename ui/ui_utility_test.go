@@ -437,6 +437,31 @@ func TestAttributes_AllAttributes(t *testing.T) {
 	assertContains(t, attrs, `required="required"`)
 }
 
+func TestAttributes_ActionAndMethod(t *testing.T) {
+	attrs := attributes(
+		Attr{
+			Action: "/submit",
+			Method: "POST",
+		},
+	)
+
+	assertContains(t, attrs, `action="/submit"`)
+	assertContains(t, attrs, `method="POST"`)
+}
+
+func TestAttributes_ActionAndMethod_FormElement(t *testing.T) {
+	// Test that Action and Method work with Form elements
+	html := Form("test-form", Attr{
+		ID:     "my-form",
+		Action: "/api/submit",
+		Method: "POST",
+	})("Form content")
+
+	assertContains(t, html, `action="/api/submit"`)
+	assertContains(t, html, `method="POST"`)
+	assertContains(t, html, `id="my-form"`)
+}
+
 // ============================================================================
 // Div and Other HTML Elements Tests
 // ============================================================================

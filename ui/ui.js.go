@@ -125,6 +125,12 @@ func buildAttrs(attrs []Attr) string {
 		if attr.Readonly {
 			parts = append(parts, "readonly")
 		}
+		if attr.Action != "" {
+			parts = append(parts, fmt.Sprintf(`action="%s"`, escapeAttr(attr.Action)))
+		}
+		if attr.Method != "" {
+			parts = append(parts, fmt.Sprintf(`method="%s"`, escapeAttr(attr.Method)))
+		}
 		if attr.Rows != 0 {
 			parts = append(parts, fmt.Sprintf(`rows="%d"`, attr.Rows))
 		}
@@ -169,7 +175,9 @@ var (
 	Div      = func(class string, attr ...Attr) func(elements ...string) string { return El("div", class, attr...) }
 	Span     = func(class string, attr ...Attr) func(elements ...string) string { return El("span", class, attr...) }
 	Form     = func(class string, attr ...Attr) func(elements ...string) string { return El("form", class, attr...) }
-	Textarea = func(class string, attr ...Attr) func(elements ...string) string { return El("textarea", class, attr...) }
+	Textarea = func(class string, attr ...Attr) func(elements ...string) string {
+		return El("textarea", class, attr...)
+	}
 	Select   = func(class string, attr ...Attr) func(elements ...string) string { return El("select", class, attr...) }
 	Option   = func(class string, attr ...Attr) func(elements ...string) string { return El("option", class, attr...) }
 	List     = func(class string, attr ...Attr) func(elements ...string) string { return El("ul", class, attr...) }

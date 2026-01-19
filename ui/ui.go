@@ -75,6 +75,8 @@ type Attr struct {
 	Min          string
 	Target       string
 	Form         string
+	Action       string
+	Method       string
 	Rows         uint8
 	Cols         uint8
 	Width        uint8
@@ -252,6 +254,14 @@ func attributes(attrs ...Attr) string {
 
 		if attr.Form != "" {
 			result = append(result, fmt.Sprintf(`form="%s"`, escapeAttr(attr.Form)))
+		}
+
+		if attr.Action != "" {
+			result = append(result, fmt.Sprintf(`action="%s"`, escapeAttr(attr.Action)))
+		}
+
+		if attr.Method != "" {
+			result = append(result, fmt.Sprintf(`method="%s"`, escapeAttr(attr.Method)))
 		}
 
 		if attr.Required {

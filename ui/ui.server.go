@@ -3067,11 +3067,13 @@ var __e = Trim(`
             if (attrs.pattern) el.pattern = attrs.pattern;
             if (attrs.autocomplete) el.autocomplete = attrs.autocomplete;
             if (attrs.for) el.htmlFor = attrs.for;
-            if (attrs.form) el.setAttribute('form', attrs.form);
-            if (attrs.target) el.target = attrs.target;
-            if (attrs.onclick) el.setAttribute('onclick', attrs.onclick);
-            if (attrs.onchange) el.setAttribute('onchange', attrs.onchange);
-            if (attrs.onsubmit) el.setAttribute('onsubmit', attrs.onsubmit);
+			if (attrs.form) el.setAttribute('form', attrs.form);
+			if (attrs.target) el.target = attrs.target;
+			if (attrs.action) el.action = attrs.action;
+			if (attrs.method) el.method = attrs.method;
+			if (attrs.onclick) el.setAttribute('onclick', attrs.onclick);
+			if (attrs.onchange) el.setAttribute('onchange', attrs.onchange);
+			if (attrs.onsubmit) el.setAttribute('onsubmit', attrs.onsubmit);
             for (var key in attrs) {
                 if (key.indexOf('data-') === 0) {
                     el.setAttribute(key, attrs[key]);
