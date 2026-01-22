@@ -7,11 +7,14 @@ ui.Button().
     Color(ui.Blue).           // Blue, Green, Red, Yellow, Purple, Gray, White + *Outline
     Size(ui.MD).              // XS, SM, MD, ST, LG, XL
     Class("rounded px-4").    // Custom classes
-    Click(ctx.Call(...)).     // Click handler
-    Href("/path").            // Make link
+    Click(ctx.Call(...)).     // Click handler (returns JS string)
+    Href("/path").            // Make link (<a> element)
     Submit().                 // type="submit"
     Reset().                  // type="reset"
-    Disabled(true).           // Disable
+    Disabled(true).           // Disable button
+    Form("form-id").          // Associate with form by ID
+    Name("btn-name").         // Button name attribute
+    Val("value").             // Button value attribute
     If(condition).            // Conditional render
     Render("Button Text")
 ```
@@ -207,131 +210,154 @@ table.Render()
 ### Alert
 
 ```go
-ui.Alert("info").Message("Info message").Render()
-ui.Alert("success").Message("Success!").Render()
-ui.Alert("warning").Message("Warning!").Render()
-ui.Alert("error").Message("Error!").Render()
+ui.Alert().
+    Variant("info").              // "info", "success", "warning", "error", or *-outline variants
+    Title("Heads up!").           // Optional title
+    Message("Info message").      // Alert message
+    Dismissible(true).            // Show dismiss button
+    Persist("alert-key").         // localStorage key for "don't show again"
+    Class("custom-class").        // Additional classes
+    If(condition).                // Conditional render
+    Render()
 ```
+
+**Variants:** `"info"`, `"success"`, `"warning"`, `"error"`, `"info-outline"`, `"success-outline"`, `"warning-outline"`, `"error-outline"`
 
 ### Badge
 
 ```go
-ui.Badge("blue").Text("New").Render()
-ui.Badge("green").Text("Active").Render()
-ui.Badge("red").Text("Deleted").Render()
+ui.Badge().
+    Text("New").                  // Badge text
+    Color("blue").                // "blue", "green", "red", "yellow", "purple", "gray" (+ "-soft", "-outline")
+    Size("md").                   // "sm", "md", "lg"
+    Dot().                        // Show as dot indicator (no text)
+    Icon(iconHTML).               // Optional icon HTML
+    Square().                     // Square corners (default: rounded)
+    Class("custom").              // Additional classes
+    If(condition).                // Conditional render
+    Render()
 ```
+
+**Color variants:** `"blue"`, `"green"`, `"red"`, `"yellow"`, `"purple"`, `"gray"`, `"blue-soft"`, `"green-soft"`, etc.
 
 ### Card
 
 ```go
 ui.Card().
-    Title("Card Title").
-    Subtitle("Subtitle").
-    Action(ui.Button().Color(ui.Blue).Render("Action")).
-    Body(ui.P("")("Card content")).
+    Variant(ui.CardShadowed).    // CardShadowed, CardBordered, CardFlat, CardGlass
+    Header(html).                 // Header HTML
+    Body(html).                   // Body HTML
+    Footer(html).                 // Footer HTML
+    Image(src, alt).              // Optional image at top
+    Hover(true).                  // Enable hover effect
+    Compact(true).                // Compact padding
+    Padding("p-4").               // Custom padding
+    Class("custom").              // Additional classes
+    If(condition).                // Conditional render
     Render()
 ```
+
+**Variants:** `ui.CardShadowed` (default), `ui.CardBordered`, `ui.CardFlat`, `ui.CardGlass`
 
 ### Tabs
 
 ```go
-tabs := ui.Tabs("tabs-id")
+tabs := ui.Tabs()
 
-tabs.Tab(ui.TabItem{
-    ID:      "tab1",
-    Label:   "Tab 1",
-    Content: ui.Div("")("Content 1"),
-    Active:  true,
-})
-
-tabs.Tab(ui.TabItem{
-    ID:    "tab2",
-    Label: "Tab 2",
-    Content: ui.Div("")("Content 2"),
-})
-
+tabs.Tab("Tab 1", contentHTML, iconHTML).  // Label, content, optional icon
+tabs.Tab("Tab 2", contentHTML).
+tabs.Active(0).                            // Initially active tab (0-based)
+tabs.Style("underline").                   // "underline", "pills", "boxed", "vertical"
+tabs.Class("custom").                      // Additional classes
+tabs.If(condition).                        // Conditional render
 tabs.Render()
 ```
+
+**Styles:** `"underline"` (default), `"pills"`, `"boxed"`, `"vertical"`
 
 ### Accordion
 
 ```go
-acc := ui.Accordion("acc-id")
+acc := ui.Accordion()
 
-acc.Item(ui.AccordionItem{
-    ID:      "item1",
-    Title:   "Section 1",
-    Content: ui.Div("")("Content 1"),
-    Open:    true,
-})
-
-acc.Item(ui.AccordionItem{
-    ID:      "item2",
-    Title:   "Section 2",
-    Content: ui.Div("")("Content 2"),
-})
-
+acc.Item("Section 1", contentHTML, true).  // Title, content, optional open state
+acc.Item("Section 2", contentHTML).
+acc.Multiple(true).                       // Allow multiple sections open
+acc.Variant(ui.AccordionBordered).        // AccordionBordered, AccordionGhost, AccordionSeparated
+acc.Class("custom").                      // Additional classes
+acc.If(condition).                        // Conditional render
 acc.Render()
 ```
+
+**Variants:** `ui.AccordionBordered` (default), `ui.AccordionGhost`, `ui.AccordionSeparated`
 
 ### Dropdown
 
 ```go
-dropdown := ui.Dropdown("dropdown-id")
+dropdown := ui.Dropdown()
 
-dropdown.Item(ui.DropdownItem{
-    Label: "Option 1",
-    Click: ctx.Call(handler1).Replace(target),
-})
-
-dropdown.Item(ui.DropdownItem{
-    Label: "Option 2",
-    Click: ctx.Call(handler2).Replace(target),
-})
-
-dropdown.Trigger(ui.Button().Color(ui.Blue).Render("Menu"))
+dropdown.Trigger(html).                   // Trigger element HTML
+dropdown.Item("Option 1", onclickJS, iconHTML).  // Label, onclick JS, optional icon
+dropdown.Item("Option 2", onclickJS).
+dropdown.Header("Group Name").            // Non-interactive header
+dropdown.Divider().                       // Visual separator
+dropdown.Danger("Delete", onclickJS, iconHTML).  // Danger variant item
+dropdown.Position("bottom-left").         // "bottom-left", "bottom-right", "top-left", "top-right"
+dropdown.Class("custom").                 // Additional classes
+dropdown.If(condition).                   // Conditional render
 dropdown.Render()
 ```
+
+**Positions:** `"bottom-left"` (default), `"bottom-right"`, `"top-left"`, `"top-right"`
 
 ### Progress Bar
 
 ```go
-ui.Progress().Value(50).Max(100).Color(ui.Blue).Render()
+ui.ProgressBar().
+    Value(75).                            // Percentage (0-100)
+    Color("bg-blue-600").                // Color class
+    Gradient("#3b82f6", "#8b5cf6").      // Gradient colors (overrides Color)
+    Striped(true).                       // Striped pattern
+    Animated(true).                      // Animate stripes
+    Indeterminate(true).                 // Indeterminate progress
+    Size("md").                          // "xs", "sm", "md", "lg", "xl"
+    Label("Loading...").                 // Optional label text
+    LabelPosition("outside").            // "inside" (default) or "outside"
+    Class("custom").                     // Additional classes
+    If(condition).                       // Conditional render
+    Render()
 ```
 
-### Step/Wizard
+### Step Progress
 
 ```go
-steps := ui.Step("steps-id")
-
-steps.StepItem(ui.StepItem{
-    Number: 1,
-    Title:  "Step 1",
-    Status: "completed",  // completed, active, pending
-})
-
-steps.StepItem(ui.StepItem{
-    Number: 2,
-    Title:  "Step 2",
-    Status: "active",
-})
-
-steps.StepItem(ui.StepItem{
-    Number: 3,
-    Title:  "Step 3",
-    Status: "pending",
-})
-
-steps.Render()
+ui.StepProgress(2, 5).                    // Current step, total steps
+    Current(3).                          // Update current step
+    Total(6).                           // Update total steps
+    Color("bg-blue-500").               // Progress bar color
+    Size("md").                         // "xs", "sm", "md", "lg", "xl"
+    Class("custom").                    // Additional classes
+    If(condition).                      // Conditional render
+    Render()
 ```
+
+Shows "Step X of Y" label with progress bar.
 
 ### Tooltip
 
 ```go
-ui.Button().
-    Tooltip(ui.TooltipInfo{Text: "Help text"}).
-    Render("Button with tooltip")
+ui.Tooltip().
+    Content("Help text").                // Tooltip text
+    Position("top").                     // "top", "bottom", "left", "right"
+    Variant("dark").                     // "dark", "light", "blue", "green", "red", "yellow"
+    Delay(500).                          // Show delay in milliseconds
+    Class("custom").                     // Additional classes
+    If(condition).                       // Conditional render
+    Render(elementHTML)                  // Wrap element with tooltip
 ```
+
+**Positions:** `"top"` (default), `"bottom"`, `"left"`, `"right"`  
+**Variants:** `"dark"` (default), `"light"`, `"blue"`, `"green"`, `"red"`, `"yellow"`
 
 ## Labels & Icons
 

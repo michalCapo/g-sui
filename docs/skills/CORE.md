@@ -38,16 +38,37 @@ func (f *UserForm) Submit(ctx *ui.Context) string {
 ctx.Success("Operation completed")  // Green toast
 ctx.Error("Something went wrong")   // Red toast
 ctx.Info("FYI message")             // Blue toast
-ctx.ErrorReload("Error - click to reload")  // Red toast with reload
+ctx.ErrorReload("Error - click to reload")  // Red toast with reload button
 ```
 
 ### Navigation
 
 ```go
-ctx.Load("/path")    // SPA-like navigation (no full reload)
-ctx.Reload()         // Reload current page
-ctx.Redirect("/url") // Navigate to different URL
+ctx.Load("/path")    // SPA-like navigation (no full reload) - returns Attr
+ctx.Reload()         // Reload current page - returns ""
+ctx.Redirect("/url") // Navigate to different URL - returns ""
 ctx.Title("New Title") // Update page title dynamically
+```
+
+### Security Headers
+
+```go
+ctx.SetDefaultCSP()  // Set secure default CSP headers
+ctx.SetCSP("default-src 'self'; ...")  // Set custom CSP policy
+ctx.SetSecurityHeaders()  // Set comprehensive security headers
+ctx.SetCustomSecurityHeaders(options)  // Set custom security headers with options
+```
+
+### File Downloads
+
+```go
+ctx.DownloadAs(reader, "application/pdf", "document.pdf")  // Trigger file download
+```
+
+### Translations
+
+```go
+ctx.Translate("Hello %s", name)  // Translate message (requires app locale)
 ```
 
 ### Sessions (requires GORM)
@@ -103,9 +124,20 @@ ctx.Submit(handler, payload).None()
 
 **ctx.Click** - Returns Attr{OnClick: ...} for elements:
 ```go
-ctx.Click(handler, payload).Render(target)
-ctx.Click(handler, payload).Replace(target)
-// ... etc
+ctx.Click(handler, payload).Render(target)   // Returns Attr
+ctx.Click(handler, payload).Replace(target)   // Returns Attr
+ctx.Click(handler, payload).Append(target)    // Returns Attr
+ctx.Click(handler, payload).Prepend(target)   // Returns Attr
+ctx.Click(handler, payload).None()            // Returns Attr
+```
+
+**ctx.Send** - Returns Actions (same as Call but uses FORM method):
+```go
+ctx.Send(handler, payload).Render(target)   // Returns string
+ctx.Send(handler, payload).Replace(target)  // Returns string
+ctx.Send(handler, payload).Append(target)   // Returns string
+ctx.Send(handler, payload).Prepend(target)  // Returns string
+ctx.Send(handler, payload).None()           // Returns string
 ```
 
 ## Stateful Components

@@ -2139,52 +2139,57 @@ target.SkeletonForm()                   // Form skeleton
 
 ### Alert - Notification Banners
 
-Dismissible notification banners for info, success, warning, and error messages with dark mode support.
+Dismissible notification banners for info, success, warning, and error messages with dark mode support, optional titles, and localStorage persistence.
 
 ```go
 ui.Alert().Message("Important information").Variant("info").Dismissible(true).Render()
-ui.Alert().Message("Changes saved!").Variant("success").Dismissible(false).Render()
-ui.Alert().Message("Please review carefully").Variant("warning").Render()
-ui.Alert().Message("Something went wrong").Variant("error").Dismissible(true).Render()
+ui.Alert().Title("Heads up!").Message("Changes saved!").Variant("success").Dismissible(true).Render()
+ui.Alert().Message("Please review carefully").Variant("warning-outline").Dismissible(true).Render()
+ui.Alert().Message("Something went wrong").Variant("error").Persist("error-alert").Dismissible(true).Render()
 ```
 
-**Variants**: `"info"` (default), `"success"`, `"warning"`, `"error"`
+**Variants**: `"info"` (default), `"success"`, `"warning"`, `"error"`, `"info-outline"`, `"success-outline"`, `"warning-outline"`, `"error-outline"`
 
 **Methods**:
 - `.Message(text string)` - Set alert message
-- `.Variant(variant string)` - Set alert type (info/success/warning/error)
+- `.Title(text string)` - Set optional alert title
+- `.Variant(variant string)` - Set alert type (info/success/warning/error with optional -outline suffix)
 - `.Dismissible(bool)` - Show close button (removes from DOM)
-- `.Persist(key string)` - Use localStorage to remember dismissal
+- `.Persist(key string)` - Use localStorage to remember dismissal ("don't show again")
 - `.If(condition)` - Conditional rendering
 - `.Class(...classes)` - Custom CSS classes
 
 ### Badge - Status Indicators
 
-Small status indicators, notification counts, and labels with dark mode support.
+Small status indicators, notification counts, and labels with dark mode support, icons, and size variants.
 
 ```go
 // Dot variant (notification indicator)
-ui.Badge().Color("red").Dot().Render()
+ui.Badge().Color("red").Dot().Size("lg").Render()
 
-// Text/number badge
-ui.Badge().Color("blue").Text("3").Render()
+// Text/number badge with icon
+icon := `<svg>...</svg>`
+ui.Badge().Color("blue").Text("3").Icon(icon).Size("md").Render()
 
-// Label badge
-ui.Badge().Color("green").Text("Online").Render()
+// Label badge with soft variant
+ui.Badge().Color("green-soft").Text("Online").Square().Render()
 ```
 
-**Colors**: `"red"`, `"green"`, `"blue"`, `"yellow"`, `"purple"`, `"gray"` (or use constants like `ui.Red`)
+**Colors**: `"red"`, `"green"`, `"blue"`, `"yellow"`, `"purple"`, `"gray"` (or use constants like `ui.Red`). Add `-soft` or `-outline` suffix for variants.
 
 **Methods**:
 - `.Text(text string)` - Set badge text
-- `.Color(color string)` - Set badge color
-- `.Dot()` - Use dot variant (small circle)
+- `.Color(color string)` - Set badge color (supports -soft and -outline variants)
+- `.Dot()` - Use dot variant (small circle, no text)
+- `.Icon(html string)` - Add icon HTML before text
+- `.Size(value string)` - Set size: `"sm"`, `"md"` (default), `"lg"`
+- `.Square()` - Use square corners instead of rounded
 - `.If(condition)` - Conditional rendering
 - `.Class(...classes)` - Custom CSS classes
 
 ### Card - Content Containers
 
-Consistent containers with optional header, body, and footer sections.
+Consistent containers with optional header, body, footer, images, and hover effects.
 
 ```go
 ui.Card().
@@ -2193,34 +2198,59 @@ ui.Card().
     Footer("<div class='text-sm text-gray-500'>Card footer</div>").
     Variant(ui.CardBordered).
     Render()
+
+// Card with image and hover effect
+ui.Card().
+    Image("https://example.com/image.jpg", "Alt text").
+    Header("<h3>Card with Image</h3>").
+    Body("<p>Content</p>").
+    Hover(true).
+    Render()
+
+// Glass variant
+ui.Card().
+    Variant(ui.CardGlass).
+    Header("<h3>Glass Card</h3>").
+    Body("<p>Glassmorphism effect</p>").
+    Render()
 ```
 
-**Variants**: `ui.CardBordered`, `ui.CardShadowed`, `ui.CardFlat`
+**Variants**: `ui.CardShadowed` (default), `ui.CardBordered`, `ui.CardFlat`, `ui.CardGlass`
 
 **Methods**:
 - `.Header(html string)` - Set header HTML
 - `.Body(html string)` - Set body HTML
 - `.Footer(html string)` - Set footer HTML
+- `.Image(src string, alt string)` - Add image at top of card
 - `.Variant(variant string)` - Set card style
+- `.Hover(bool)` - Enable hover effect (shadow lift)
+- `.Compact(bool)` - Use compact padding
+- `.Padding(value string)` - Custom padding class
 - `.If(condition)` - Conditional rendering
 - `.Class(...classes)` - Custom CSS classes
 
 ### Progress Bar - Progress Indicators
 
-Visual progress indicators with optional striped animation.
+Visual progress indicators with gradients, labels, indeterminate mode, and striped animation.
 
 ```go
 ui.ProgressBar().Value(75).Render()
-ui.ProgressBar().Value(50).Striped(true).Render()
-ui.ProgressBar().Value(75).Striped(true).Animated(true).Render()
-ui.ProgressBar().Value(100).Color("bg-green-600").Striped(true).Animated(true).Render()
+ui.ProgressBar().Value(50).Striped(true).Animated(true).Render()
+ui.ProgressBar().Value(75).Gradient("#3b82f6", "#8b5cf6").Render()
+ui.ProgressBar().Value(45).Label("Loading...").LabelPosition("outside").Render()
+ui.ProgressBar().Indeterminate(true).Color("bg-blue-600").Render()
 ```
 
 **Methods**:
 - `.Value(percent int)` - Set progress value (0-100)
+- `.Color(cssClass string)` - Custom color class (default: `bg-blue-600`)
+- `.Gradient(colors ...string)` - Use gradient colors (overrides Color)
 - `.Striped(bool)` - Show striped pattern
-- `.Animated(bool)` - Animate stripes
-- `.Color(cssClass string)` - Custom color class
+- `.Animated(bool)` - Animate stripes (requires Striped)
+- `.Indeterminate(bool)` - Show indeterminate progress (animated bar)
+- `.Size(value string)` - Set height: `"xs"`, `"sm"`, `"md"` (default), `"lg"`, `"xl"`
+- `.Label(text string)` - Optional label text
+- `.LabelPosition(value string)` - `"inside"` (default) or `"outside"`
 - `.If(condition)` - Conditional rendering
 - `.Class(...classes)` - Custom CSS classes
 
@@ -2252,88 +2282,120 @@ ui.StepProgress(4, 4).Color("bg-green-500").Render()  // Complete
 
 ### Tooltip - Hover Tooltips
 
-Hover tooltips with positioning and light/dark variants.
+Hover tooltips with positioning, multiple variants, and configurable delay.
 
 ```go
 ui.Tooltip().Content("Tooltip text").Position("top").Render(
     ui.Button().Color(ui.Blue).Render("Hover me"),
 )
+
+ui.Tooltip().Content("Delayed tooltip").Delay(500).Variant("green").Render(
+    ui.Button().Color(ui.Green).Render("Hover me"),
+)
 ```
 
 **Positions**: `"top"` (default), `"bottom"`, `"left"`, `"right"`
 
-**Variants**: `"dark"` (default), `"light"`
+**Variants**: `"dark"` (default), `"light"`, `"blue"`, `"green"`, `"red"`, `"yellow"`
 
 **Methods**:
 - `.Content(text string)` - Set tooltip text
 - `.Position(position string)` - Set tooltip position
 - `.Variant(variant string)` - Set appearance style
+- `.Delay(ms int)` - Set show/hide delay in milliseconds (default: 200)
 - `.If(condition)` - Conditional rendering
 - `.Class(...classes)` - Custom CSS classes
 
 ### Tabs - Tabbed Content
 
-Tabbed navigation for organizing content into switchable panels. Client-side state management.
+Tabbed navigation for organizing content into switchable panels with icons and multiple styles. Client-side state management.
 
 ```go
 ui.Tabs().
     Tab("Overview", "<div class='p-4'>Overview content</div>").
-    Tab("Features", "<div class='p-4'>Features content</div>").
+    Tab("Features", "<div class='p-4'>Features content</div>", iconHTML).
     Tab("Settings", "<div class='p-4'>Settings content</div>").
     Active(0).                      // Set initially active tab (0-indexed)
-    Style("underline").             // "underline", "pills", or "boxed"
+    Style("underline").             // "underline", "pills", "boxed", or "vertical"
     Render()
 ```
 
-**Styles**: `"underline"` (default), `"pills"`, `"boxed"`
+**Styles**: `"underline"` (default), `"pills"`, `"boxed"`, `"vertical"`
 
 **Methods**:
-- `.Tab(label string, content string)` - Add a tab panel
-- `.Active(index int)` - Set initially active tab
+- `.Tab(label string, content string, icon ...string)` - Add a tab panel with optional icon HTML
+- `.Active(index int)` - Set initially active tab (0-indexed)
 - `.Style(style string)` - Set tab style
 - `.If(condition)` - Conditional rendering
 - `.Class(...classes)` - Custom CSS classes
 
 ### Accordion - Collapsible Sections
 
-Vertically stacked collapsible content sections with client-side toggle.
+Vertically stacked collapsible content sections with client-side toggle and multiple variants.
 
 ```go
-// Single section open at a time
+// Single section open at a time (bordered variant)
 ui.Accordion().
-    Item("Section 1", "Content for section 1").
+    Item("Section 1", "Content for section 1", true).  // Third param: initially open
     Item("Section 2", "Content for section 2").
     Item("Section 3", "Content for section 3").
     Render()
 
-// Multiple sections can be open
+// Multiple sections can be open (separated variant)
 ui.Accordion().
     Item("Section 1", "Content for section 1").
     Item("Section 2", "Content for section 2").
+    Variant(ui.AccordionSeparated).
     Multiple(true).
+    Render()
+
+// Ghost variant (minimal styling)
+ui.Accordion().
+    Variant(ui.AccordionGhost).
+    Item("Section 1", "Content").
     Render()
 ```
 
+**Variants**: `ui.AccordionBordered` (default), `ui.AccordionGhost`, `ui.AccordionSeparated`
+
 **Methods**:
-- `.Item(title string, content string)` - Add collapsible section
-- `.Multiple(bool)` - Allow multiple sections open
+- `.Item(title string, content string, open ...bool)` - Add collapsible section (third param: initially open)
+- `.Multiple(bool)` - Allow multiple sections open simultaneously
+- `.Variant(variant string)` - Set accordion style
 - `.If(condition)` - Conditional rendering
 - `.Class(...classes)` - Custom CSS classes
 
 ### Dropdown Menu - Context Menus
 
-Contextual action menus that appear on click with click-outside-to-close.
+Contextual action menus that appear on click with headers, dividers, danger items, icons, and multiple positions.
 
 ```go
+iconEdit := `<svg>...</svg>`
+iconDelete := `<svg>...</svg>`
+
 ui.Dropdown().
     Trigger(ui.Button().Color(ui.Blue).Render("Options ▼")).
-    Item("Edit", "alert('Edit')").
+    Header("General").
+    Item("Edit", "alert('Edit')", iconEdit).
     Item("Duplicate", "alert('Duplicate')").
     Divider().
-    Item("Delete", "alert('Delete')").
+    Header("Danger Zone").
+    Danger("Delete", "alert('Delete')", iconDelete).
     Position("bottom-left").
     Render()
 ```
+
+**Positions**: `"bottom-left"` (default), `"bottom-right"`, `"top-left"`, `"top-right"`
+
+**Methods**:
+- `.Trigger(html string)` - Set trigger element HTML
+- `.Item(label string, onclick string, icon ...string)` - Add menu item with optional icon
+- `.Danger(label string, onclick string, icon ...string)` - Add danger-variant item (red styling)
+- `.Header(label string)` - Add non-interactive header label
+- `.Divider()` - Add visual separator
+- `.Position(value string)` - Set dropdown position
+- `.If(condition)` - Conditional rendering
+- `.Class(...classes)` - Custom CSS classes
 
 **Positions**: `"bottom-left"`, `"bottom-right"`, `"top-left"`, `"top-right"`
 

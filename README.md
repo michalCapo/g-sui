@@ -279,14 +279,15 @@ Notes:
 ## Components (selection)
 
 ### UI Components
-- **Alert**: `ui.Alert().Message(text).Variant("success").Dismissible(true).Render()` - Dismissible notification banners with dark mode
-- **Badge**: `ui.Badge().Text("3").Color("red").Dot()` - Status indicators and notification counts
-- **Card**: `ui.Card().Header(h).Body(b).Footer(f).Variant(ui.CardBordered).Render()` - Content containers with 3 variants
-- **Progress**: `ui.ProgressBar().Value(75).Striped(true).Animated(true).Render()` - Progress indicators
-- **Tooltip**: `ui.Tooltip().Content(text).Position("top").Render(element)` - Hover tooltips with 4 positions
-- **Tabs**: `ui.Tabs().Tab(label, content).Active(0).Style("underline").Render()` - Tabbed content with underline/pills styles
-- **Accordion**: `ui.Accordion().Item(title, content).Multiple(true).Render()` - Collapsible sections
-- **Dropdown**: `ui.Dropdown().Trigger(html).Item(label, action).Position("bottom-left").Render()` - Context menus
+- **Alert**: `ui.Alert().Message(text).Variant("success").Title("Title").Dismissible(true).Persist("key").Render()` - Dismissible notification banners with dark mode, optional title, and localStorage persistence
+- **Badge**: `ui.Badge().Text("3").Color("red").Dot().Size("lg").Icon(html).Square().Render()` - Status indicators with dot, icon, and size variants
+- **Card**: `ui.Card().Header(h).Body(b).Footer(f).Image(src,alt).Variant(ui.CardGlass).Hover(true).Compact(true).Render()` - Content containers with 4 variants (shadowed, bordered, flat, glass), images, and hover effects
+- **Progress**: `ui.ProgressBar().Value(75).Gradient("#3b82f6","#8b5cf6").Striped(true).Animated(true).Indeterminate(true).Label("Loading").LabelPosition("outside").Render()` - Progress indicators with gradients, labels, and indeterminate mode
+- **Step Progress**: `ui.StepProgress(2, 5).Color("bg-blue-500").Size("md").Render()` - Step progress indicator showing "Step X of Y" with progress bar
+- **Tooltip**: `ui.Tooltip().Content(text).Position("top").Variant("dark").Delay(500).Render(element)` - Hover tooltips with 4 positions, 6 variants, and configurable delay
+- **Tabs**: `ui.Tabs().Tab(label, content, icon).Active(0).Style("boxed").Render()` - Tabbed content with 4 styles (underline, pills, boxed, vertical) and icon support
+- **Accordion**: `ui.Accordion().Item(title, content, open).Variant(ui.AccordionSeparated).Multiple(true).Render()` - Collapsible sections with 3 variants (bordered, ghost, separated) and multiple open support
+- **Dropdown**: `ui.Dropdown().Trigger(html).Item(label, onclick, icon).Header("Group").Divider().Danger("Delete", onclick).Position("bottom-right").Render()` - Context menus with headers, dividers, danger items, and 4 positions
 
 ### Form Components
 - Buttons: `ui.Button().Color(...).Size(...).Class(...).Href(...).Submit().Reset().Click(...)`
