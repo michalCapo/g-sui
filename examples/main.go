@@ -69,57 +69,54 @@ func main() {
 		`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw==" crossorigin="anonymous" referrerpolicy="no-referrer" />`,
 	)
 
-	layout := func(title string, body func(*ui.Context) string) ui.Callable {
-		return func(ctx *ui.Context) string {
-			nav := ui.Div("bg-white shadow")(
-				ui.Div("mx-auto px-4 py-2 flex items-start gap-2")(
-					// top bar
-					ui.Div("flex flex-wrap gap-1 mt-2 md:mt-0 w-full")(
-						ui.Map(routes, func(r *route, _ int) string {
-							base := "px-2 py-1 rounded text-sm whitespace-nowrap"
-							cls := base + " hover:bg-gray-200"
-							// Highlight the currently selected route
-							if ctx != nil && ctx.Request != nil && r.Path == ctx.Request.URL.Path {
-								cls = base + " bg-blue-700 text-white hover:bg-blue-600"
-							}
-
-							return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
-						}),
-					),
-					ui.Flex1,
-					ui.ThemeSwitcher(""),
+	// Define persistent layout with content slot
+	app.Layout(func(ctx *ui.Context) string {
+		nav := ui.Div("bg-white shadow")(
+			ui.Div("mx-auto px-4 py-2 flex items-start gap-2")(
+				// top bar
+				ui.Div("flex flex-wrap gap-1 mt-2 md:mt-0 w-full")(
+					ui.Map(routes, func(r *route, _ int) string {
+						base := "px-2 py-1 rounded text-sm whitespace-nowrap"
+						cls := base + " hover:bg-gray-200"
+						// Highlight will be handled by JS router based on current path
+						return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+					}),
 				),
-			)
+				ui.Flex1,
+				ui.ThemeSwitcher(""),
+			),
+		)
 
-			content := body(ctx)
-			return app.HTML(title, "bg-gray-200 min-h-screen", nav+ui.Div("max-w-5xl mx-auto px-2 py-8")(content))
-		}
-	}
+		// Content slot where pages will be rendered
+		contentSlot := ui.Div("max-w-5xl mx-auto px-2 py-8", ui.Attr{ID: "__content__"})()
 
-	// Individual example pages
-	app.Page("/", layout("Showcase", pages.Showcase))
-	app.Page("/icons", layout("Icons", pages.IconsContent))
-	app.Page("/button", layout("Button", pages.Button))
-	app.Page("/text", layout("Text", pages.Text))
-	app.Page("/password", layout("Password", pages.Password))
-	app.Page("/number", layout("Number", pages.Number))
-	app.Page("/date", layout("Date & Time", pages.Date))
-	app.Page("/area", layout("Textarea", pages.Area))
-	app.Page("/select", layout("Select", pages.Select))
-	app.Page("/checkbox", layout("Checkbox", pages.Checkbox))
-	app.Page("/radio", layout("Radio", pages.Radio))
-	app.Page("/form", layout("Form", pages.FormContent))
-	app.Page("/table", layout("Table", pages.Table))
-	app.Page("/captcha", layout("Captcha", pages.Captcha))
-	app.Page("/others", layout("Others", pages.Others))
-	app.Page("/append", layout("Append / Prepend", pages.Append))
-	app.Page("/clock", layout("Clock", pages.Clock))
-	app.Page("/deferred", layout("Deferred", pages.Deffered))
-	app.Page("/shared", layout("Shared", pages.Shared))
-	app.Page("/collate", layout("Collate", pages.Collate))
-	app.Page("/collate-empty", layout("Collate Empty", pages.CollateEmpty))
-	app.Page("/spa", layout("SPA", pages.SpaExample))
-	app.Page("/reload-redirect", layout("Reload & Redirect", pages.ReloadRedirect))
+		return nav + contentSlot
+	})
+
+	// Individual example pages (content only, no layout wrapper)
+	app.Page("/", "Showcase", pages.Showcase)
+	app.Page("/icons", "Icons", pages.IconsContent)
+	app.Page("/button", "Button", pages.Button)
+	app.Page("/text", "Text", pages.Text)
+	app.Page("/password", "Password", pages.Password)
+	app.Page("/number", "Number", pages.Number)
+	app.Page("/date", "Date & Time", pages.Date)
+	app.Page("/area", "Textarea", pages.Area)
+	app.Page("/select", "Select", pages.Select)
+	app.Page("/checkbox", "Checkbox", pages.Checkbox)
+	app.Page("/radio", "Radio", pages.Radio)
+	app.Page("/form", "Form", pages.FormContent)
+	app.Page("/table", "Table", pages.Table)
+	app.Page("/captcha", "Captcha", pages.Captcha)
+	app.Page("/others", "Others", pages.Others)
+	app.Page("/append", "Append / Prepend", pages.Append)
+	app.Page("/clock", "Clock", pages.Clock)
+	app.Page("/deferred", "Deferred", pages.Deffered)
+	app.Page("/shared", "Shared", pages.Shared)
+	app.Page("/collate", "Collate", pages.Collate)
+	app.Page("/collate-empty", "Collate Empty", pages.CollateEmpty)
+	app.Page("/spa", "SPA", pages.SpaExample)
+	app.Page("/reload-redirect", "Reload & Redirect", pages.ReloadRedirect)
 
 	app.Listen(":1422")
 }

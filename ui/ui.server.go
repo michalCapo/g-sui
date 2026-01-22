@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"crypto/rand"
 	"embed"
 	"encoding/base64"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/exec"
@@ -39,10 +41,21 @@ var (
 	reRemoveChars  = regexp.MustCompile(`[*()\[\]]`)
 )
 
+// generateUUID generates a simple UUID v4-like string
+func generateUUID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40 // Version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // Variant 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
+
 type BodyItem struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-	Type  string `json:"type"`
+	Name        string `json:"name"`
+	Value       string `json:"value"`
+	Type        string `json:"type"`
+	Filename    string `json:"filename,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
 }
 
 // JSON DOM Protocol Types
@@ -94,6 +107,25 @@ type JSPatchMessage struct {
 type JSHTTPResponse struct {
 	El  *JSElement   `json:"el"`            // element to render
 	Ops []*JSPatchOp `json:"ops,omitempty"` // additional operations (notifications, title, etc.)
+}
+
+// JSCallMessage is the WebSocket request for callable actions
+type JSCallMessage struct {
+	Type string     `json:"type"` // "call"
+	RID  string     `json:"rid"`  // request ID for correlation
+	Act  string     `json:"act"`  // "post" or "form"
+	Path string     `json:"path"` // callable endpoint path
+	Swap string     `json:"swap"` // "inline", "outline", "append", "prepend", "none"
+	Tgt  string     `json:"tgt"`  // target element ID
+	Vals []BodyItem `json:"vals"` // values/payload
+}
+
+// JSResponseMessage is the WebSocket response for callable actions
+type JSResponseMessage struct {
+	Type string       `json:"type"` // "response"
+	RID  string       `json:"rid"`  // matching request ID
+	El   *JSElement   `json:"el"`   // element to render
+	Ops  []*JSPatchOp `json:"ops"`  // additional operations
 }
 
 type CSS struct {
@@ -234,6 +266,16 @@ func validateInputSafety(data []BodyItem) error {
 		if len(item.Type) > 64 {
 			return fmt.Errorf("field type too long at index %d: %d exceeds maximum of 64", i, len(item.Type))
 		}
+
+	// Validate filename length (for file uploads)
+	if len(item.Filename) > 512 {
+		return fmt.Errorf("filename too long at index %d: %d exceeds maximum of 512", i, len(item.Filename))
+	}
+
+	// Validate content type length (for file uploads)
+	if len(item.ContentType) > 256 {
+		return fmt.Errorf("content type too long at index %d: %d exceeds maximum of 256", i, len(item.ContentType))
+	}
 	}
 
 	return nil
@@ -937,7 +979,7 @@ func (ctx *Context) Call(method Callable, values ...any) Actions {
 }
 
 func (ctx *Context) Load(href string) Attr {
-	return Attr{OnClick: Trim(fmt.Sprintf(`__load("%s")`, escapeJS(href)))}
+	return Attr{OnClick: Trim(fmt.Sprintf(`event.preventDefault();if(window.__router&&window.__router.navigate){window.__router.navigate("%s");}else{__load("%s");}`, escapeJS(href), escapeJS(href)))}
 }
 
 // Reload adds a reload operation that will reload the page on the client
@@ -1217,6 +1259,13 @@ type PWAConfig struct {
 	OfflinePage           string    `json:"-"` // Optional offline fallback page URL
 }
 
+type Route struct {
+	Path    string
+	UUID    string
+	Title   string
+	Handler *Callable
+}
+
 type App struct {
 	Lanugage      string
 	HTMLBody      func(string) string
@@ -1231,6 +1280,10 @@ type App struct {
 	wsMu          sync.RWMutex
 	wsClients     map[*websocket.Conn]*wsState
 	assetHandlers map[string]http.Handler
+	routes        map[string]*Route // path → Route
+	routesByID    map[string]*Route // uuid → Route
+	routesMu      sync.RWMutex      // mutex for route maps
+	layout        Callable          // persistent layout function
 }
 
 type sessRec struct {
@@ -1274,58 +1327,45 @@ func (app *App) Register(httpMethod string, path string, method *Callable) strin
 	return path
 }
 
-// Page registers a route with optional middleware support.
-// Usage: Page("/", middleware1, middleware2, component)
-// All middleware functions are called in order before the component.
-// If any middleware returns a non-empty string, that response is used and execution stops.
-// All middleware and components must have the same signature: func(ctx *Context) string
-func (app *App) Page(path string, component ...Callable) **Callable {
-	if len(component) == 0 {
-		panic("Page requires at least one component")
+// Layout sets the persistent layout function that wraps all pages.
+// The layout should render a content slot element with id="__content__".
+func (app *App) Layout(handler Callable) {
+	app.layout = handler
+}
+
+// Page registers a route with a title and handler.
+// Usage: Page("/", "Page Title", handler)
+// Each page is assigned a UUID internally for client-side routing.
+func (app *App) Page(path string, title string, handler Callable) {
+	if path == "" {
+		panic("Page path cannot be empty")
+	}
+	if title == "" {
+		panic("Page title cannot be empty")
 	}
 
-	for key, value := range stored {
-		if value == path {
-			return &key
-		}
+	app.routesMu.Lock()
+	defer app.routesMu.Unlock()
+
+	// Check if path already exists
+	if _, exists := app.routes[path]; exists {
+		panic(fmt.Sprintf("Page path already registered: %s", path))
 	}
 
-	// If only one component provided, use it directly (backward compatible)
-	if len(component) == 1 {
-		fn := component[0]
-		found := &fn
-		mu.Lock()
-		stored[found] = path
-		mu.Unlock()
-		return &found
+	// Generate UUID for this route
+	uuid := generateUUID()
+
+	// Create route
+	route := &Route{
+		Path:    path,
+		UUID:    uuid,
+		Title:   title,
+		Handler: &handler,
 	}
 
-	// Multiple components: last one is the handler, others are middleware
-	// Create a wrapper function that chains middleware before the final component
-	handler := component[len(component)-1]
-	middleware := component[:len(component)-1]
-
-	// Create a chained wrapper function
-	wrapper := func(ctx *Context) string {
-		// Call all middleware in order
-		for _, mw := range middleware {
-			result := mw(ctx)
-			// If middleware returns non-empty string, use it as response (early return)
-			if result != "" {
-				return result
-			}
-		}
-		// All middleware passed, call the final component
-		return handler(ctx)
-	}
-
-	found := &wrapper
-
-	mu.Lock()
-	stored[found] = path
-	mu.Unlock()
-
-	return &found
+	// Store in both maps
+	app.routes[path] = route
+	app.routesByID[uuid] = route
 }
 
 // Debug enables or disables server debug logging.
@@ -1590,6 +1630,102 @@ func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {
 	}
 }
 
+// makeContextForWS creates a Context from WebSocket data
+func makeContextForWS(app *App, sessionID string, vals []BodyItem) (*Context, error) {
+	// Check if we have file uploads (Base64 encoded)
+	hasFiles := false
+	for _, item := range vals {
+		if item.Type == "file" && item.Value != "" {
+			hasFiles = true
+			break
+		}
+	}
+
+	var r *http.Request
+	if hasFiles {
+		// For file uploads, we need to create a multipart form
+		// Create a buffer and multipart writer
+		var buf bytes.Buffer
+		writer := multipart.NewWriter(&buf)
+
+		// Add regular form fields
+		for _, item := range vals {
+			if item.Type == "file" {
+				// Decode Base64 and add as file
+				fileData, err := base64.StdEncoding.DecodeString(item.Value)
+				if err != nil {
+					return nil, fmt.Errorf("failed to decode base64 file data for %s: %w", item.Name, err)
+				}
+				filename := item.Filename
+				if filename == "" {
+					filename = item.Name
+				}
+				part, err := writer.CreateFormFile(item.Name, filename)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create form file for %s: %w", item.Name, err)
+				}
+				if _, err := part.Write(fileData); err != nil {
+					return nil, fmt.Errorf("failed to write file data for %s: %w", item.Name, err)
+				}
+			} else {
+				// Add regular field
+				if err := writer.WriteField(item.Name, item.Value); err != nil {
+					return nil, fmt.Errorf("failed to write field %s: %w", item.Name, err)
+				}
+			}
+		}
+		
+		// Get content type before closing
+		contentType := writer.FormDataContentType()
+		writer.Close()
+
+		// Create request with multipart body
+		r = &http.Request{
+			Method: "POST",
+			Header: make(http.Header),
+			Body:   io.NopCloser(bytes.NewReader(buf.Bytes())),
+		}
+		r.Header.Set("Content-Type", contentType)
+	} else {
+		// Create a minimal http.Request with body containing JSON-encoded vals
+		bodyJSON, err := json.Marshal(vals)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal body items: %w", err)
+		}
+
+		r = &http.Request{
+			Method: "POST",
+			Header: make(http.Header),
+			Body:   io.NopCloser(bytes.NewReader(bodyJSON)),
+		}
+		r.Header.Set("Content-Type", "application/json")
+	}
+
+	// Create a minimal response writer (we won't use it for WS)
+	w := &wsResponseWriter{}
+
+	ctx := makeContext(app, r, w)
+	if sessionID != "" {
+		ctx.SessionID = sessionID
+	}
+
+	return ctx, nil
+}
+
+// wsResponseWriter is a minimal ResponseWriter for WebSocket contexts
+type wsResponseWriter struct {
+	header http.Header
+}
+
+func (w *wsResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+func (w *wsResponseWriter) Write([]byte) (int, error) { return 0, nil }
+func (w *wsResponseWriter) WriteHeader(int)           {}
+
 func (app *App) Listen(port string) {
 	log.Println("Listening on http://0.0.0.0" + port)
 
@@ -1622,62 +1758,152 @@ func (app *App) Listen(port string) {
 			}
 		}
 
-		for found, path := range stored {
-			if value == path {
+		// Handle /__page/{uuid} endpoint for SPA routing
+		if strings.HasPrefix(value, "/__page/") && r.Method == "POST" {
+			uuid := strings.TrimPrefix(value, "/__page/")
+			app.routesMu.RLock()
+			route, exists := app.routesByID[uuid]
+			app.routesMu.RUnlock()
+
+			if !exists {
+				http.Error(w, "Page not found", http.StatusNotFound)
+				return
+			}
+
+			ctx := makeContext(app, r, w)
+
+			defer func() {
+				if rec := recover(); rec != nil {
+					log.Println("handler panic recovered:", rec)
+					w.WriteHeader(http.StatusInternalServerError)
+					errorHTML := devErrorPage()
+					jsElement, err := htmlToJSElement(errorHTML)
+					if err != nil {
+						jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
+					}
+					response := JSHTTPResponse{El: jsElement}
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					json.NewEncoder(w).Encode(response)
+				}
+			}()
+
+			app.debugf("page fetch %s -> %s", uuid, route.Path)
+			html := (*route.Handler)(ctx)
+			if len(ctx.append) > 0 {
+				html += strings.Join(ctx.append, "")
+			}
+
+			// Convert HTML to JSON element structure
+			jsElement, err := htmlToJSElement(html)
+			if err != nil {
+				log.Printf("Error converting HTML to JSON: %v", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
+			}
+
+			// Add title operation
+			ops := ctx.ops
+			if route.Title != "" {
+				ops = append(ops, &JSPatchOp{
+					Op:    "title",
+					Title: route.Title,
+				})
+			}
+
+			response := JSHTTPResponse{El: jsElement, Ops: ops}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				log.Printf("Error encoding JSON response: %v", err)
+			}
+
+			return
+		}
+
+		// If layout is set and this is a GET request, render layout shell with route manifest
+		if app.layout != nil && r.Method == "GET" {
+			app.routesMu.RLock()
+			route, exists := app.routes[value]
+			app.routesMu.RUnlock()
+
+			// Only render shell for registered routes
+			if exists {
 				ctx := makeContext(app, r, w)
 
-				// Recover from panics inside handler calls to avoid broken fetches
 				defer func() {
 					if rec := recover(); rec != nil {
 						log.Println("handler panic recovered:", rec)
-						// Serve a minimal error page that auto-reloads once the dev WS reconnects
 						w.WriteHeader(http.StatusInternalServerError)
-						if r.Method == "POST" {
-							// For POST requests, convert error HTML to JSON element
-							errorHTML := devErrorPage()
-							jsElement, err := htmlToJSElement(errorHTML)
-							if err != nil {
-								// Fallback to simple text element
-								jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
-							}
-							response := JSHTTPResponse{El: jsElement}
-							w.Header().Set("Content-Type", "application/json; charset=utf-8")
-							json.NewEncoder(w).Encode(response)
-						} else {
-							w.Write([]byte(devErrorPage()))
-						}
+						w.Write([]byte(devErrorPage()))
 					}
 				}()
 
-				// Normal call
-				app.debugf("route %s -> %s", r.Method, path)
-				html := (*found)(ctx)
-				if len(ctx.append) > 0 {
-					html += strings.Join(ctx.append, "")
+				// Render layout shell
+				layoutHTML := app.layout(ctx)
+
+				// Build route manifest
+				app.routesMu.RLock()
+				routeManifest := make(map[string]string)
+				for path, route := range app.routes {
+					routeManifest[path] = route.UUID
+				}
+				app.routesMu.RUnlock()
+
+				manifestJSON, err := json.Marshal(routeManifest)
+				if err != nil {
+					log.Printf("Error marshaling route manifest: %v", err)
+					manifestJSON = []byte("{}")
 				}
 
-				if r.Method == "POST" {
-					// For POST requests, convert HTML to JSON element structure
-					jsElement, err := htmlToJSElement(html)
-					if err != nil {
-						log.Printf("Error converting HTML to JSON: %v", err)
-						w.WriteHeader(http.StatusInternalServerError)
-						// Fallback to simple text element
-						jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
-					}
+				// Embed route manifest in script tag
+				manifestScript := fmt.Sprintf(`<script>window.__routes = %s;</script>`, string(manifestJSON))
 
-					response := JSHTTPResponse{El: jsElement, Ops: ctx.ops}
-					w.Header().Set("Content-Type", "application/json; charset=utf-8")
-					if err := json.NewEncoder(w).Encode(response); err != nil {
-						log.Printf("Error encoding JSON response: %v", err)
-					}
-				} else {
-					w.Header().Set("Content-Type", "text/html; charset=utf-8")
-					w.Write([]byte(html))
+				// Build full HTML page with layout
+				head := []string{
+					fmt.Sprintf(`<title>%s</title>`, route.Title),
+				}
+				head = append(head, app.HTMLHead...)
+
+				// Conditionally add smooth navigation script if enabled (router handles this now)
+				if app.SmoothNav {
+					head = append(head, Script(__smoothnav))
 				}
 
+				html := app.HTMLBody("")
+				html = strings.ReplaceAll(html, "__lang__", app.Lanugage)
+				html = strings.ReplaceAll(html, "__head__", strings.Join(head, " "))
+				html = strings.ReplaceAll(html, "__body__", layoutHTML+manifestScript)
+
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Write([]byte(Trim(html)))
 				return
 			}
+		}
+
+		// Callable actions are now handled via WebSocket, not HTTP POST
+		// HTTP POST is only used for SPA routing (/__page/{uuid})
+
+		// Serve static handlers (manifest, service worker) via GET
+		if r.Method == "GET" && (value == "/manifest.webmanifest" || value == "/sw.js") {
+			mu.Lock()
+			for found, path := range stored {
+				if path == value {
+					mu.Unlock()
+					ctx := makeContext(app, r, w)
+					defer func() {
+						if rec := recover(); rec != nil {
+							log.Println("handler panic recovered:", rec)
+							w.WriteHeader(http.StatusInternalServerError)
+							w.Write([]byte(devErrorPage()))
+						}
+					}()
+					html := (*found)(ctx)
+					if len(html) > 0 {
+						w.Write([]byte(html))
+					}
+					return
+				}
+			}
+			mu.Unlock()
 		}
 
 		http.Error(w, "Not found", http.StatusNotFound)
@@ -1706,58 +1932,28 @@ func (app *App) TestHandler() http.Handler {
 			return
 		}
 
-		for found, routePath := range stored {
-			if routePath == r.URL.Path {
-				ctx := makeContext(app, r, w)
+		// Callable actions are now handled via WebSocket, not HTTP POST.
+		// TestHandler only serves static handlers (manifest, service worker).
+		if r.Method == "GET" && (r.URL.Path == "/manifest.webmanifest" || r.URL.Path == "/sw.js") {
+			for found, routePath := range stored {
+				if routePath == r.URL.Path {
+					ctx := makeContext(app, r, w)
 
-				defer func() {
-					if rec := recover(); rec != nil {
-						log.Println("handler panic recovered:", rec)
-						w.WriteHeader(http.StatusInternalServerError)
-						if r.Method == "POST" {
-							// For POST requests, convert error HTML to JSON element
-							errorHTML := devErrorPage()
-							jsElement, err := htmlToJSElement(errorHTML)
-							if err != nil {
-								// Fallback to simple text element
-								jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
-							}
-							response := JSHTTPResponse{El: jsElement}
-							w.Header().Set("Content-Type", "application/json; charset=utf-8")
-							json.NewEncoder(w).Encode(response)
-						} else {
+					defer func() {
+						if rec := recover(); rec != nil {
+							log.Println("handler panic recovered:", rec)
+							w.WriteHeader(http.StatusInternalServerError)
 							w.Write([]byte(devErrorPage()))
 						}
-					}
-				}()
+					}()
 
-				app.debugf("route %s -> %s", r.Method, routePath)
-				html := (*found)(ctx)
-				if len(ctx.append) > 0 {
-					html += strings.Join(ctx.append, "")
+					html := (*found)(ctx)
+					if len(html) > 0 {
+						w.Write([]byte(html))
+					}
+
+					return
 				}
-
-				if r.Method == "POST" {
-					// For POST requests, convert HTML to JSON element structure
-					jsElement, err := htmlToJSElement(html)
-					if err != nil {
-						log.Printf("Error converting HTML to JSON: %v", err)
-						w.WriteHeader(http.StatusInternalServerError)
-						// Fallback to simple text element
-						jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
-					}
-
-					response := JSHTTPResponse{El: jsElement, Ops: ctx.ops}
-					w.Header().Set("Content-Type", "application/json; charset=utf-8")
-					if err := json.NewEncoder(w).Encode(response); err != nil {
-						log.Printf("Error encoding JSON response: %v", err)
-					}
-				} else {
-					w.Header().Set("Content-Type", "text/html; charset=utf-8")
-					w.Write([]byte(html))
-				}
-
-				return
 			}
 		}
 
@@ -1962,7 +2158,7 @@ func (app *App) initWS() {
 			}
 		}()
 
-		// Receive loop: handle ping/pong from client and invalid target notices
+		// Receive loop: handle ping/pong from client, invalid target notices, and callable actions
 		for {
 			var s string
 			if err := websocket.Message.Receive(ws, &s); err != nil {
@@ -2001,6 +2197,104 @@ func (app *App) initWS() {
 								app.sessMu.Unlock()
 							}
 						}
+					case "call":
+						// Handle callable action request
+						msgRaw := s
+						go func(raw string) {
+							var callMsg JSCallMessage
+							defer func() {
+								if rec := recover(); rec != nil {
+									log.Printf("WebSocket call handler panic: %v", rec)
+									// Send error response
+									if callMsg.RID != "" {
+										errorEl := &JSElement{T: "span", C: []interface{}{"Error"}}
+										errorResp := JSResponseMessage{
+											Type: "response",
+											RID:  callMsg.RID,
+											El:   errorEl,
+											Ops:  []*JSPatchOp{{Op: "notify", Msg: "An error occurred", Variant: "error"}},
+										}
+										if data, err := json.Marshal(errorResp); err == nil {
+											_ = websocket.Message.Send(ws, string(data))
+										}
+									}
+								}
+							}()
+
+							if err := json.Unmarshal([]byte(raw), &callMsg); err != nil {
+								log.Printf("Failed to parse call message: %v", err)
+								return
+							}
+
+							// Look up callable from stored map
+							mu.Lock()
+							var found *Callable
+							for storedCallable, path := range stored {
+								if path == callMsg.Path {
+									found = storedCallable
+									break
+								}
+							}
+							mu.Unlock()
+
+							if found == nil {
+								log.Printf("Callable not found for path: %s", callMsg.Path)
+								errorEl := &JSElement{T: "span", C: []interface{}{"Not found"}}
+								errorResp := JSResponseMessage{
+									Type: "response",
+									RID:  callMsg.RID,
+									El:   errorEl,
+									Ops:  []*JSPatchOp{{Op: "notify", Msg: "Action not found", Variant: "error"}},
+								}
+								if data, err := json.Marshal(errorResp); err == nil {
+									_ = websocket.Message.Send(ws, string(data))
+								}
+								return
+							}
+
+							// Create context from WebSocket data
+							ctx, err := makeContextForWS(app, st.sid, callMsg.Vals)
+							if err != nil {
+								log.Printf("Failed to create context: %v", err)
+								errorEl := &JSElement{T: "span", C: []interface{}{"Error"}}
+								errorResp := JSResponseMessage{
+									Type: "response",
+									RID:  callMsg.RID,
+									El:   errorEl,
+									Ops:  []*JSPatchOp{{Op: "notify", Msg: "Failed to process request", Variant: "error"}},
+								}
+								if data, err := json.Marshal(errorResp); err == nil {
+									_ = websocket.Message.Send(ws, string(data))
+								}
+								return
+							}
+
+							// Execute callable
+							html := (*found)(ctx)
+							if len(ctx.append) > 0 {
+								html += strings.Join(ctx.append, "")
+							}
+
+							// Convert HTML to JSON element
+							jsElement, err := htmlToJSElement(html)
+							if err != nil {
+								log.Printf("Error converting HTML to JSON: %v", err)
+								jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
+							}
+
+							// Send response
+							resp := JSResponseMessage{
+								Type: "response",
+								RID:  callMsg.RID,
+								El:   jsElement,
+								Ops:  ctx.ops,
+							}
+							if data, err := json.Marshal(resp); err == nil {
+								_ = websocket.Message.Send(ws, string(data))
+							} else {
+								log.Printf("Failed to marshal response: %v", err)
+							}
+						}(msgRaw)
 					}
 				}
 			}
@@ -2508,20 +2802,17 @@ var __post = Trim(`
 
 		var L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
 
-		fetch(path, {method: "POST", body: JSON.stringify(body)})
-			.then(function(resp){ 
-				if(!resp.ok){ throw new Error('HTTP '+resp.status); }
-				var contentType = resp.headers.get("content-type");
-				if (contentType && contentType.indexOf("application/json") !== -1) {
-					return resp.json();
-				} else {
-					// Fallback for non-JSON responses
-					return resp.text().then(function(text) {
-						try { return JSON.parse(text); } catch(_) { return {el: null}; }
-					});
-				}
-			})
-			.then(function (data) {
+		// Generate unique request ID
+		var rid = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+		
+		// Initialize pending requests map if needed
+		if (!window.__gsuiPending) {
+			window.__gsuiPending = {};
+		}
+
+		// Store pending request with callback
+		window.__gsuiPending[rid] = function(data) {
+			try {
 				// Create element from JSON and apply to target
 				var target = document.getElementById(target_id);
 				if (target != null && data && data.el) {
@@ -2545,9 +2836,48 @@ var __post = Trim(`
 				if (data && data.ops) {
 					__engine.applyPatch(data.ops);
 				}
-			})
-			.catch(function(err){ try { console.error('__post error:', err); __error('Something went wrong ...'); } catch(__){} })
-			.finally(function(){ try { L.stop(); } catch(_){} });
+			} catch(err) {
+				try { console.error('__post callback error:', err); __error('Something went wrong ...'); } catch(__){}
+			} finally {
+				try { L.stop(); } catch(_){}
+				delete window.__gsuiPending[rid];
+			}
+		};
+
+		// Set timeout for stale requests (30 seconds)
+		setTimeout(function() {
+			if (window.__gsuiPending && window.__gsuiPending[rid]) {
+				delete window.__gsuiPending[rid];
+				try { L.stop(); } catch(_){}
+				try { __error('Request timeout'); } catch(_){}
+			}
+		}, 30000);
+
+		// Send WebSocket message
+		try {
+			var ws = (window).__gsuiWS;
+			if (ws && ws.readyState === 1) {
+				var msg = {
+					type: 'call',
+					rid: rid,
+					act: 'post',
+					path: path,
+					swap: swap,
+					tgt: target_id,
+					vals: body
+				};
+				ws.send(JSON.stringify(msg));
+			} else {
+				// WebSocket not ready, fallback to error
+				delete window.__gsuiPending[rid];
+				try { L.stop(); } catch(_){}
+				try { __error('Connection not available'); } catch(_){}
+			}
+		} catch(err) {
+			delete window.__gsuiPending[rid];
+			try { L.stop(); } catch(_){}
+			try { console.error('__post error:', err); __error('Something went wrong ...'); } catch(__){}
+		}
     }
 `)
 
@@ -2608,93 +2938,76 @@ var __submit = Trim(`
 			found = Array.from(form.querySelectorAll('[name]'));
 		};
 
-		// Check if any input is a file input with files selected
-		let hasFiles = false;
-		found.forEach((item) => {
-			if (item.getAttribute("type") === "file" && item.files && item.files.length > 0) {
-				hasFiles = true;
-			}
-		});
-
 		var L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
 
-		let fetchBody;
-		let fetchHeaders = {};
-
-		if (hasFiles) {
-			// Use FormData for file uploads
-			const formData = new FormData();
+		// Process form fields and files
+		var processFields = function(callback) {
+			var processed = 0;
+			var total = found.length;
 			
-			// Add pre-populated values first
-			values.forEach((item) => {
-				formData.append(item.name, item.value);
-			});
+			if (total === 0) {
+				callback(body);
+				return;
+			}
 
-			// Add form inputs, overwriting any duplicates
 			found.forEach((item) => {
 				const name = item.getAttribute("name");
 				const type = item.getAttribute("type");
 				
-				if (name == null) return;
+				if (name == null) {
+					processed++;
+					if (processed === total) callback(body);
+					return;
+				}
 
 				// For radio buttons, only include the checked one
 				if (type === "radio" && !item.checked) {
+					processed++;
+					if (processed === total) callback(body);
 					return;
 				}
 
-				if (type === "file") {
-					if (item.files && item.files.length > 0) {
-						formData.append(name, item.files[0]);
-					}
-				} else if (type === "checkbox") {
-					formData.append(name, String(item.checked));
+				if (type === "file" && item.files && item.files.length > 0) {
+					// Read file as Base64
+					var file = item.files[0];
+					var reader = new FileReader();
+					reader.onload = function(e) {
+						var result = String(e.target.result || '');
+						var base64 = result.split(',')[1] || result;
+						body = body.filter(element => element.name !== name);
+						body.push({ name: name, type: "file", value: base64, filename: file.name || name, content_type: file.type || '' });
+						processed++;
+						if (processed === total) callback(body);
+					};
+					reader.onerror = function() {
+						processed++;
+						if (processed === total) callback(body);
+					};
+					reader.readAsDataURL(item.files[0]);
 				} else {
-					formData.append(name, item.value);
-				}
-			});
-
-			fetchBody = formData;
-			// Don't set Content-Type - browser will set it with boundary for multipart/form-data
-		} else {
-			// Use JSON for non-file forms (original behavior)
-			found.forEach((item) => {
-				const name = item.getAttribute("name");
-				const type = item.getAttribute("type");
-				let value = item.value;
-				
-				if (type === 'checkbox') {
-					value = String(item.checked)
-				}
-
-				// For radio buttons, only include the checked one
-				if (type === 'radio' && !item.checked) {
-					return;
-				}
-
-				if(name != null) {
+					let value = item.value;
+					if (type === 'checkbox') {
+						value = String(item.checked);
+					}
 					body = body.filter(element => element.name !== name);
-					body.push({ name, type, value });
+					body.push({ name: name, type: type || 'text', value: value });
+					processed++;
+					if (processed === total) callback(body);
 				}
 			});
+		};
 
-			fetchBody = JSON.stringify(body);
-			fetchHeaders = { 'Content-Type': 'application/json' };
+		// Generate unique request ID
+		var rid = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+		
+		// Initialize pending requests map if needed
+		if (!window.__gsuiPending) {
+			window.__gsuiPending = {};
 		}
 
-		fetch(path, {method: "POST", body: fetchBody, headers: fetchHeaders})
-			.then(function(resp){ 
-				if(!resp.ok){ throw new Error('HTTP '+resp.status); }
-				var contentType = resp.headers.get("content-type");
-				if (contentType && contentType.indexOf("application/json") !== -1) {
-					return resp.json();
-				} else {
-					// Fallback for non-JSON responses
-					return resp.text().then(function(text) {
-						try { return JSON.parse(text); } catch(_) { return {el: null}; }
-					});
-				}
-			})
-			.then(function (data) {
+		// Store pending request with callback
+		window.__gsuiPending[rid] = function(data) {
+			try {
 				// Create element from JSON and apply to target
 				var target = document.getElementById(target_id);
 				if (target != null && data && data.el) {
@@ -2718,9 +3031,50 @@ var __submit = Trim(`
 				if (data && data.ops) {
 					__engine.applyPatch(data.ops);
 				}
-			})
-            .catch(function(err){ try { console.error('__submit error:', err); __error('Something went wrong ...'); } catch(__){} })
-            .finally(function(){ try { L.stop(); } catch(_){} });
+			} catch(err) {
+				try { console.error('__submit callback error:', err); __error('Something went wrong ...'); } catch(__){}
+			} finally {
+				try { L.stop(); } catch(_){}
+				delete window.__gsuiPending[rid];
+			}
+		};
+
+		// Set timeout for stale requests (30 seconds)
+		setTimeout(function() {
+			if (window.__gsuiPending && window.__gsuiPending[rid]) {
+				delete window.__gsuiPending[rid];
+				try { L.stop(); } catch(_){}
+				try { __error('Request timeout'); } catch(_){}
+			}
+		}, 30000);
+
+		// Process fields and send WebSocket message
+		processFields(function(finalBody) {
+			try {
+				var ws = (window).__gsuiWS;
+				if (ws && ws.readyState === 1) {
+					var msg = {
+						type: 'call',
+						rid: rid,
+						act: 'form',
+						path: path,
+						swap: swap,
+						tgt: target_id,
+						vals: finalBody
+					};
+					ws.send(JSON.stringify(msg));
+				} else {
+					// WebSocket not ready, fallback to error
+					delete window.__gsuiPending[rid];
+					try { L.stop(); } catch(_){}
+					try { __error('Connection not available'); } catch(_){}
+				}
+			} catch(err) {
+				delete window.__gsuiPending[rid];
+				try { L.stop(); } catch(_){}
+				try { console.error('__submit error:', err); __error('Something went wrong ...'); } catch(__){}
+			}
+		});
     }
 `)
 
@@ -2775,12 +3129,23 @@ var __smoothnav = Trim(`
                 // Prevent default navigation
                 e.preventDefault();
                 
-                // Use __load for smooth navigation
+                // Use router for SPA navigation
                 try {
-                    __load(href);
-                } catch(_) {
-                    // Fallback to normal navigation if __load fails
-                    window.location.href = href;
+                    // Check if router is available (it initializes on DOMContentLoaded)
+                    if (window.__router && typeof window.__router.navigate === 'function') {
+                        window.__router.navigate(href);
+                    } else if (typeof __load === 'function') {
+                        // Fallback to __load if router not yet initialized
+                        __load(href);
+                    } else {
+                        // Final fallback to normal navigation
+                        window.location.href = href;
+                    }
+                } catch(err) {
+                    // Fallback to normal navigation if router fails
+                    try {
+                        window.location.href = href;
+                    } catch(_) {}
                 }
             }, true);
         } catch(_) {}
@@ -2852,6 +3217,137 @@ var __load = Trim(`
 				try { __error('Something went wrong ...'); } catch(__){} 
 			});
     }
+`)
+
+// __router: client-side SPA router for page navigation
+var __router = Trim(`
+    var __router = (function(){
+        var routes = window.__routes || {};
+        var contentId = '__content__';
+        var initialized = false;
+        
+        function renderNotFound(path) {
+            try {
+                var target = document.getElementById(contentId);
+                if (!target) return;
+                target.innerHTML = '';
+                var wrap = document.createElement('div');
+                wrap.className = 'mx-auto max-w-3xl px-4 py-8';
+                var title = document.createElement('h1');
+                title.textContent = '404 - Page not found';
+                title.className = 'text-2xl font-semibold mb-2';
+                var text = document.createElement('p');
+                text.textContent = 'No route matched ' + (path || '/');
+                text.className = 'text-gray-600';
+                wrap.appendChild(title);
+                wrap.appendChild(text);
+                target.appendChild(wrap);
+                try { document.title = '404 - Page not found'; } catch(_) {}
+            } catch(_) {}
+        }
+
+        function navigate(path, pushState) {
+            // Normalize path
+            if (!path) path = '/';
+            if (!path.startsWith('/')) path = '/' + path;
+
+            var routeMap = window.__routes || routes || {};
+            var uuid = routeMap[path];
+            if (!uuid) {
+                console.warn('Route not found:', path);
+                renderNotFound(path);
+                return;
+            }
+            
+            var L = null;
+            var loaderTimer = setTimeout(function() {
+                try {
+                    L = (function(){ try { return __loader.start(); } catch(_) { return { stop: function(){} }; } })();
+                } catch(_) {}
+            }, 50);
+            
+            fetch('/__page/' + uuid, {method: 'POST', body: '[]', headers: {'Content-Type': 'application/json'}})
+                .then(function(resp) {
+                    if (resp.status === 404) {
+                        renderNotFound(path);
+                        return null;
+                    }
+                    if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
+                    return resp.json();
+                })
+                .then(function(data) {
+                    if (!data) return;
+                    clearTimeout(loaderTimer);
+                    if (L) {
+                        try { L.stop(); } catch(_) {}
+                    }
+                    
+                    var target = document.getElementById(contentId);
+                    if (target && data && data.el) {
+                        var element = __engine.create(data.el);
+                        if (element) {
+                            target.innerHTML = '';
+                            target.appendChild(element);
+                        }
+                    }
+                    
+                    // Handle operations (title, notifications, etc.)
+                    if (data && data.ops) {
+                        __engine.applyPatch(data.ops);
+                    }
+                    
+                    // Update history
+                    if (pushState !== false) {
+                        try {
+                            window.history.pushState({path: path}, '', path);
+                        } catch(_) {}
+                    }
+                })
+                .catch(function(err) {
+                    clearTimeout(loaderTimer);
+                    if (L) {
+                        try { L.stop(); } catch(_) {}
+                    }
+                    try {
+                        console.error('__router navigate error:', err);
+                        __error('Failed to load page');
+                    } catch(_) {}
+                });
+        }
+        
+        // Handle browser back/forward
+        window.addEventListener('popstate', function(e) {
+            navigate(window.location.pathname, false);
+        });
+        
+        // Initialize on DOM ready
+        function init() {
+            if (initialized) return;
+            initialized = true;
+            
+            // Navigate to current path on initial load
+            navigate(window.location.pathname, false);
+        }
+        
+        // Expose navigate on window immediately for ctx.Load() and link interception
+        var routerAPI = {
+            navigate: navigate,
+            routes: routes
+        };
+        
+        try {
+            window.__router = routerAPI;
+        } catch(_) {}
+        
+        // Initialize navigation on DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+        
+        return routerAPI;
+    })();
 `)
 
 // __theme: initialize theme and expose setTheme(mode) on window.
@@ -2934,6 +3430,17 @@ var __ws = Trim(`
                         else if (msg.type==='ping') {
                             try { ws.send(JSON.stringify({ type: 'pong', t: Date.now() })); } catch(_){ }
                         } else if (msg.type==='pong') { /* ignore */ }
+                        else if (msg.type==='response') {
+                            // Handle callable action response
+                            try {
+                                if (window.__gsuiPending && msg.rid && window.__gsuiPending[msg.rid]) {
+                                    var callback = window.__gsuiPending[msg.rid];
+                                    callback({ el: msg.el, ops: msg.ops });
+                                }
+                            } catch(err) {
+                                try { console.error('Error handling response:', err); } catch(_){}
+                            }
+                        }
                     } catch(_){ }
                 };
                 ws.onclose = function(){
@@ -3467,7 +3974,7 @@ func MakeApp(defaultLanguage string) *App {
                 /* Hover helpers used in nav/examples */
                 .dark .hover\:bg-gray-200:hover { background-color:#374151 !important; }
             </style>`,
-			Script(__stringify, __loader, __offline, __error, __notify, __e, __engine, __post, __submit, __load, __theme, __ws),
+			Script(__stringify, __loader, __offline, __error, __notify, __e, __engine, __post, __submit, __load, __router, __theme, __ws),
 		},
 		HTMLBody: func(class string) string {
 			if class == "" {
@@ -3484,6 +3991,8 @@ func MakeApp(defaultLanguage string) *App {
 		},
 		DebugEnabled: false,
 		sessions:     make(map[string]*sessRec),
+		routes:       make(map[string]*Route),
+		routesByID:   make(map[string]*Route),
 	}
 }
 
