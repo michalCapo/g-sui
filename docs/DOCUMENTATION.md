@@ -2571,6 +2571,29 @@ type Context struct {
   - Returns `nil` if no query parameters exist
   - Falls back to `Request.URL.Query()` for direct requests
 
+**Example: Using Path and Query Parameters Together**
+
+```go
+// Route: app.Page("/user/{id}", userDetailHandler)
+// URL: /user/123?tab=profile&view=detailed&sort=name&order=asc
+
+func userDetailHandler(ctx *ui.Context) string {
+    // Get path parameters from route pattern
+    userID := ctx.PathParam("id")
+    
+    // Get query parameters (if any) using ctx.QueryParam() - works with SPA navigation
+    tab := ctx.QueryParam("tab")
+    view := ctx.QueryParam("view")
+    sort := ctx.QueryParam("sort")
+    order := ctx.QueryParam("order")
+    
+    // Use the parameters...
+    return ui.Div("")(fmt.Sprintf("User %s, tab: %s, view: %s", userID, tab, view))
+}
+```
+
+**Important:** `QueryParam()` works seamlessly with both SPA navigation (via `ctx.Load()`) and direct HTTP requests, so query parameters are preserved when navigating with `ctx.Load("/user/123?tab=profile")`.
+
 #### User Feedback (Toasts)
 - `Success(msg string)` - Green toast notification
 - `Error(msg string)` - Red toast notification

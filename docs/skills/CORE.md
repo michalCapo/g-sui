@@ -36,9 +36,14 @@ allParams := ctx.AllQueryParams()     // Returns map[string][]string
 // URL: /user/123?tab=profile&view=detailed
 
 func handler(ctx *ui.Context) string {
+    // Get path parameters from route pattern
     userID := ctx.PathParam("id")      // "123"
+    
+    // Get query parameters (if any) using ctx.QueryParam() - works with SPA navigation
     tab := ctx.QueryParam("tab")       // "profile"
     view := ctx.QueryParam("view")     // "detailed"
+    sort := ctx.QueryParam("sort")     // Empty string if not present
+    order := ctx.QueryParam("order")   // Empty string if not present
     
     return ui.Div("")(fmt.Sprintf("User %s, tab: %s, view: %s", userID, tab, view))
 }

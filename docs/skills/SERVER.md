@@ -69,9 +69,14 @@ func searchHandler(ctx *ui.Context) string {
 
 // URL: /user/123?tab=profile&view=detailed
 func userHandler(ctx *ui.Context) string {
+    // Get path parameters from route pattern
     userID := ctx.PathParam("id")   // "123" (path param)
+    
+    // Get query parameters (if any) using ctx.QueryParam() - works with SPA navigation
     tab := ctx.QueryParam("tab")    // "profile" (query param)
     view := ctx.QueryParam("view")  // "detailed" (query param)
+    sort := ctx.QueryParam("sort")  // Empty string if not present
+    order := ctx.QueryParam("order") // Empty string if not present
 }
 
 // Multi-value query parameters: /tags?tag=a&tag=b

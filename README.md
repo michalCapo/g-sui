@@ -103,6 +103,10 @@ The examples include:
 - Icons helpers and Hello demo (success/info/error/crash)
 - Markdown rendering and a CAPTCHA demo
 - **Route Parameters**: Path parameters (`/user/{id}`) and query parameters (`?name=Smith`) examples
+  ```go
+  userID := ctx.PathParam("id")           // From /user/{id}
+  tab := ctx.QueryParam("tab")            // From ?tab=profile (works with SPA navigation)
+  ```
 - Query demo: in-memory SQLite + GORM with `ui.TCollate` (search, sort, filters, paging, XLS export)
 - Append/Prepend demo for list updates
 - Clock demo and deferred fragments (skeleton → WS patch)
