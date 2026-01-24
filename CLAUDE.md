@@ -87,7 +87,6 @@ app.Page("/path", handler)            // Register page route
 app.Favicon(embedFS, "path", 24*time.Hour)
 app.Assets(embedFS, "assets/", 24*time.Hour)
 app.AutoRestart(true)                 // Dev: rebuild on file changes
-app.SmoothNavigation(true)            // Enable SPA-like navigation
 app.PWA(ui.PWAConfig{...})           // Enable PWA
 app.Listen(":8080")                   // Start server (also starts WebSocket)
 ```

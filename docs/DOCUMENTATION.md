@@ -2513,7 +2513,9 @@ type App struct {
 
 **Key Methods:**
 - `MakeApp(lang string) *App` - Create new app instance
-- `Page(path string, handler Callable)` - Register page route
+- `Page(path string, title string, handler Callable)` - Register page route with title
+  - Supports parameterized routes: `app.Page("/user/{id}", "Title", handler)`
+  - Path parameters use curly braces: `/user/{id}`, `/user/{userId}/post/{postId}`
 - `Action(path string, handler Callable)` - Register server action
 - `Listen(addr string)` - Start HTTP and WebSocket server
 - `Favicon(fs embed.FS, path string, maxAge time.Duration)` - Serve favicon
@@ -2554,6 +2556,21 @@ type Context struct {
 - `IP() string` - Client IP address
 - `Body(data any) error` - Parse form/JSON into struct
 
+#### Route Parameters
+- `PathParam(name string) string` - Get path parameter from route pattern (e.g., `/user/{id}`)
+  - Returns empty string if parameter doesn't exist
+  - Example: `userID := ctx.PathParam("id")` for route `/user/{id}`
+- `QueryParam(name string) string` - Get query parameter from URL (e.g., `?name=Smith`)
+  - Returns first value for multi-value params, empty string if not found
+  - Works with both SPA navigation (`ctx.Load`) and direct requests
+  - Example: `name := ctx.QueryParam("name")` for URL `/search?name=Smith`
+- `QueryParams(name string) []string` - Get all values for a query parameter
+  - Returns `nil` if parameter doesn't exist
+  - Example: `tags := ctx.QueryParams("tag")` for URL `/tags?tag=a&tag=b`
+- `AllQueryParams() map[string][]string` - Get all query parameters as a map
+  - Returns `nil` if no query parameters exist
+  - Falls back to `Request.URL.Query()` for direct requests
+
 #### User Feedback (Toasts)
 - `Success(msg string)` - Green toast notification
 - `Error(msg string)` - Red toast notification
@@ -2572,12 +2589,6 @@ type Context struct {
 - `Reload() string` - JavaScript to reload page
 - `Redirect(url string) string` - JavaScript to navigate to URL
 
-#### Smooth Navigation Configuration
-- `app.SmoothNavigation(enable bool)` - Enable automatic link interception for smooth navigation
-  - When enabled, all internal `<a href="/path">` links automatically use background loading
-  - Only affects internal links (same origin)
-  - Skips external links, download links, links with `target` attributes, and links with existing onclick handlers
-  - Works with regular links created via `ui.A()` without needing `ctx.Load()`
 
 #### Session Management
 - `Session(db *gorm.DB, name string) *Session` - Get session by name
@@ -2607,7 +2618,7 @@ g-sui provides seamless, SPA-like navigation with background loading and intelli
 
 ### Background Loading
 
-When using `ctx.Load()` or enabling `app.SmoothNavigation(true)`, navigation works as follows:
+When using `ctx.Load()`, navigation works as follows:
 
 1. **Immediate Fetch**: On link click, the fetch starts immediately in the background
 2. **Delayed Loader**: A loader overlay appears only if the fetch takes longer than 50ms
@@ -2615,9 +2626,9 @@ When using `ctx.Load()` or enabling `app.SmoothNavigation(true)`, navigation wor
 4. **Seamless Replacement**: Page content is replaced without a full page reload
 5. **History Management**: Browser history and page title are updated automatically
 
-### Manual Navigation with `ctx.Load()`
+### Navigation with `ctx.Load()`
 
-Use `ctx.Load()` to explicitly enable smooth navigation on specific links:
+Use `ctx.Load()` to enable smooth navigation on specific links:
 
 ```go
 ui.A("px-2 py-1 rounded", ui.Href("/about"), ctx.Load("/about"))("About")
@@ -2625,59 +2636,17 @@ ui.A("px-2 py-1 rounded", ui.Href("/about"), ctx.Load("/about"))("About")
 
 This creates an `<a>` element with an onclick handler that calls `__load()` for smooth navigation.
 
-### Automatic Link Interception
-
-Enable automatic smooth navigation for all internal links:
-
-```go
-app := ui.MakeApp("en")
-app.SmoothNavigation(true)
-```
-
-When enabled, the framework automatically intercepts clicks on all internal `<a>` links and uses smooth navigation. This works with:
-
-- Regular links: `ui.A("class", ui.Href("/path"))("Link")`
-- Links in navigation menus
-- Dynamically created links (via event delegation)
-
-**What Gets Intercepted:**
-- Internal links (same origin)
-- Relative paths (`/path`, `./path`, `../path`)
-- Absolute paths on the same domain
-
-**What Gets Skipped:**
-- External links (different origin)
-- Links with `target` attribute (e.g., `target="_blank"`)
-- Links with `download` attribute
-- Hash-only links (`#section`)
-- Links with existing onclick handlers (to avoid double-handling)
-- `javascript:`, `mailto:`, `data:` links
-
 ### Implementation Details
 
-The smooth navigation system consists of:
+The smooth navigation system uses:
 
-1. **`__load(href)` JavaScript Function**: Handles the background fetch and DOM replacement
-   - Starts fetch immediately
-   - Sets a 50ms timer for loader display
-   - Cancels loader if fetch completes quickly
-   - Replaces `document.body.innerHTML` with fetched content
-   - Executes scripts from the new page
-   - Updates browser history
-
-2. **`__smoothnav` JavaScript Module**: Global click interceptor (when enabled)
-   - Attaches event listener on document (capture phase)
-   - Uses `closest('a')` to find link elements
-   - Checks if link should be intercepted
-   - Calls `__load(href)` for smooth navigation
-   - Falls back to normal navigation on error
-
-### Best Practices
-
-1. **Use `ctx.Load()` for explicit control**: When you need fine-grained control over which links use smooth navigation
-2. **Use `app.SmoothNavigation(true)` for automatic behavior**: When you want all internal links to use smooth navigation by default
-3. **Combine with active state highlighting**: Use `ctx.Request.URL.Path` to highlight the current route
-4. **Handle dynamic content**: The interceptor uses event delegation, so dynamically added links work automatically
+**`__load(href)` JavaScript Function**: Handles the background fetch and DOM replacement
+- Starts fetch immediately
+- Sets a 50ms timer for loader display
+- Cancels loader if fetch completes quickly
+- Replaces `document.body.innerHTML` with fetched content
+- Executes scripts from the new page
+- Updates browser history
 
 ### Example: Navigation Bar
 
@@ -2699,17 +2668,10 @@ func NavBar(ctx *ui.Context) string {
                 cls += " hover:bg-gray-200"
             }
             
-            // With SmoothNavigation enabled, ctx.Load() is optional
             return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
         }),
     )
 }
-```
-
-With `app.SmoothNavigation(true)`, you can simplify to:
-
-```go
-return ui.A(cls, ui.Href(r.Path))(r.Title) // Smooth navigation works automatically!
 ```
 
 ---

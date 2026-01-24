@@ -150,7 +150,7 @@ func TestIText_AllBuilderMethods(t *testing.T) {
 				return IText("test", nil).Required()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `required="required"`)
+				assertContains(t, html, " required ")
 				assertContains(t, html, `<span`)
 				assertContains(t, html, `*`)
 			},
@@ -161,7 +161,7 @@ func TestIText_AllBuilderMethods(t *testing.T) {
 				return IText("test", nil).Required(false)
 			},
 			verify: func(t *testing.T, html string) {
-				assertNotContains(t, html, `required="required"`)
+				assertNotContains(t, html, " required ")
 			},
 		},
 		{
@@ -170,7 +170,7 @@ func TestIText_AllBuilderMethods(t *testing.T) {
 				return IText("test", nil).Disabled()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `disabled="disabled"`)
+				assertContains(t, html, " disabled ")
 				assertContains(t, html, DISABLED)
 			},
 		},
@@ -180,7 +180,7 @@ func TestIText_AllBuilderMethods(t *testing.T) {
 				return IText("test", nil).Disabled(false)
 			},
 			verify: func(t *testing.T, html string) {
-				assertNotContains(t, html, `disabled="disabled"`)
+				assertNotContains(t, html, " disabled ")
 			},
 		},
 		{
@@ -199,7 +199,7 @@ func TestIText_AllBuilderMethods(t *testing.T) {
 				return IText("test", nil).Readonly(false)
 			},
 			verify: func(t *testing.T, html string) {
-				assertNotContains(t, html, `readonly="readonly"`)
+				assertNotContains(t, html, " readonly ")
 			},
 		},
 		{
@@ -371,7 +371,7 @@ func TestIArea_AllBuilderMethods(t *testing.T) {
 				return IArea("test", nil).Disabled()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `disabled="disabled"`)
+				assertContains(t, html, " disabled ")
 			},
 		},
 		{
@@ -380,7 +380,7 @@ func TestIArea_AllBuilderMethods(t *testing.T) {
 				return IArea("test", nil).Readonly()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `readonly="readonly"`)
+				assertContains(t, html, " readonly ")
 			},
 		},
 		{
@@ -389,7 +389,7 @@ func TestIArea_AllBuilderMethods(t *testing.T) {
 				return IArea("test", nil).Required()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `required="required"`)
+				assertContains(t, html, " required ")
 			},
 		},
 		{
@@ -467,7 +467,7 @@ func TestIPassword_AllBuilderMethods(t *testing.T) {
 				return IPassword("test", nil).Required()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `required="required"`)
+				assertContains(t, html, " required ")
 			},
 		},
 		{
@@ -476,7 +476,7 @@ func TestIPassword_AllBuilderMethods(t *testing.T) {
 				return IPassword("test", nil).Disabled()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `disabled="disabled"`)
+				assertContains(t, html, " disabled ")
 			},
 		},
 		{
@@ -587,7 +587,7 @@ func TestIDate_AllBuilderMethods(t *testing.T) {
 				return IDate("test", nil).Disabled()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `disabled="disabled"`)
+				assertContains(t, html, " disabled ")
 			},
 		},
 		{
@@ -596,7 +596,7 @@ func TestIDate_AllBuilderMethods(t *testing.T) {
 				return IDate("test", nil).Required()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `required="required"`)
+				assertContains(t, html, " required ")
 			},
 		},
 		{
@@ -759,7 +759,7 @@ func TestICheckbox_CheckedState(t *testing.T) {
 	}
 
 	html := ICheckbox("IsActive", data).Render("Active")
-	assertContains(t, html, `checked="checked"`)
+	assertContains(t, html, " checked ")
 }
 
 func TestICheckbox_UncheckedState(t *testing.T) {
@@ -785,7 +785,7 @@ func TestICheckbox_AllBuilderMethods(t *testing.T) {
 				return ICheckbox("test", nil).Required()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `required="required"`)
+				assertContains(t, html, " required ")
 			},
 		},
 		{
@@ -794,7 +794,7 @@ func TestICheckbox_AllBuilderMethods(t *testing.T) {
 				return ICheckbox("test", nil).Disabled()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `disabled="disabled"`)
+				assertContains(t, html, " disabled ")
 			},
 		},
 		{
@@ -853,7 +853,7 @@ func TestIRadio_CheckedState(t *testing.T) {
 	}
 
 	html := IRadio("Choice", data).Value("option1").Render("Option 1")
-	assertContains(t, html, `checked="checked"`)
+	assertContains(t, html, " checked ")
 }
 
 func TestIRadio_UncheckedState(t *testing.T) {

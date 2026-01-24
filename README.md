@@ -17,8 +17,8 @@ See documentation at [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) for a comp
 - Server-rendered HTML components with a small helper DSL
 - Lightweight interactivity via server actions (`Click`, `Submit`, `Send`)
 - Partial updates: re-render, replace, append, or prepend only the target
-- Smooth navigation with background loading and delayed loader (50ms threshold)
-- Optional automatic link interception for seamless SPA-like navigation (`app.SmoothNavigation(true)`)
+- Smooth navigation with background loading and delayed loader (50ms threshold) via `ctx.Load()`
+- **Parameterized routes** with path parameters (`/user/{id}`) and query parameters (`?name=Smith`) - works seamlessly with SPA navigation
 - Built-in PWA support with manifest and service worker generation (`app.PWA()`)
 - Deferred fragments with skeletons via WebSocket patches (`ctx.Patch` + skeleton helpers)
 - Query/Collate helper for data UIs: search, sort, filters, paging, and XLS export (works with `gorm`)
@@ -102,6 +102,7 @@ The examples include:
 - Tables with simple helpers (including colspan and empty cells)
 - Icons helpers and Hello demo (success/info/error/crash)
 - Markdown rendering and a CAPTCHA demo
+- **Route Parameters**: Path parameters (`/user/{id}`) and query parameters (`?name=Smith`) examples
 - Query demo: in-memory SQLite + GORM with `ui.TCollate` (search, sort, filters, paging, XLS export)
 - Append/Prepend demo for list updates
 - Clock demo and deferred fragments (skeleton → WS patch)
@@ -111,9 +112,7 @@ The examples include:
 
 g-sui provides smooth, SPA-like navigation with background loading and a smart loader that only appears if the fetch takes longer than 50ms.
 
-#### Manual Navigation
-
-Use `ctx.Load()` for explicit smooth navigation:
+Use `ctx.Load()` for smooth navigation on links:
 
 ```go
 ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
@@ -124,20 +123,6 @@ This creates a link that:
 - Shows a loader only if the fetch takes longer than 50ms
 - Replaces the page content seamlessly without a full reload
 - Updates the browser history and title
-
-#### Automatic Link Interception
-
-Enable automatic smooth navigation for all internal links:
-
-```go
-app := ui.MakeApp("en")
-app.SmoothNavigation(true) // Enable automatic link interception
-```
-
-When enabled, all regular `<a href="/path">` links automatically use smooth navigation without needing `ctx.Load()`. The interceptor:
-- Only affects internal links (same origin)
-- Skips external links, download links, and links with `target` attributes
-- Respects links that already have custom onclick handlers
 
 #### Active Navigation Highlight
 
@@ -153,12 +138,6 @@ ui.Map(routes, func(r *route, _ int) string {
     }
     return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
 })
-```
-
-With `app.SmoothNavigation(true)`, you can omit `ctx.Load()` and regular links will still use smooth navigation:
-
-```go
-return ui.A(cls, ui.Href(r.Path))(r.Title) // Works automatically!
 ```
 
 ## Progressive Web App (PWA)

@@ -12,7 +12,7 @@ func SpaExample(ctx *ui.Context) string {
 
 	return ui.Div("max-w-5xl mx-auto flex flex-col gap-6")(
 		ui.Div("text-3xl font-bold")("Single Page Application (SPA)"),
-		ui.Div("text-gray-600")("This page demonstrates g-sui's SPA capabilities. When SPA mode is enabled, all internal links are intercepted and handled via background loading."),
+		ui.Div("text-gray-600")("This page demonstrates g-sui's SPA capabilities using explicit navigation via ctx.Load()."),
 
 		ui.Div("grid grid-cols-1 md:grid-cols-2 gap-6")(
 			// Feature 1: Smooth Transitions
@@ -40,8 +40,8 @@ func SpaExample(ctx *ui.Context) string {
 		ui.Div("bg-blue-50 dark:bg-blue-900/20 p-6 rounded-xl border border-blue-100 dark:border-blue-800")(
 			ui.Div("font-semibold text-blue-800 dark:text-blue-300 mb-2")("How it works"),
 			ui.Div("text-blue-700 dark:text-blue-400 text-sm space-y-2")(
-				ui.P("")("1. `app.SmoothNavigation(true)` enables global link interception."),
-				ui.P("")("2. Clicking an internal link triggers a background `fetch`."),
+				ui.P("")("1. Use `ctx.Load(\"/path\")` to enable smooth navigation on specific links."),
+				ui.P("")("2. Clicking a link with `ctx.Load()` triggers a background `fetch`."),
 				ui.P("")("3. The server returns the partial or full HTML."),
 				ui.P("")("4. The client updates the DOM and browser history."),
 			),

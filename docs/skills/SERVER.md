@@ -20,7 +20,6 @@ func main() {
 
     // Development options
     app.AutoRestart(true)         // Rebuild on file changes
-    app.SmoothNavigation(true)    // SPA-like navigation
 
     // Start server
     app.Listen(":8080")  // Also starts WebSocket at /__ws
@@ -30,8 +29,56 @@ func main() {
 ## Route Registration
 
 ```go
-app.Page("/path", handler)           // GET route
-app.Page("/path", handler, "POST")   // POST route
+app.Page("/path", "Title", handler)           // GET route with title
+app.Page("/path", "Title", handler, "POST")   // POST route with title
+```
+
+### Parameterized Routes
+
+Routes can include path parameters using curly braces:
+
+```go
+// Single parameter
+app.Page("/user/{id}", "User Detail", userDetailHandler)
+
+// Multiple parameters
+app.Page("/user/{userId}/post/{postId}", "Post Detail", postDetailHandler)
+
+// Nested parameters
+app.Page("/category/{category}/product/{product}", "Product Detail", productHandler)
+```
+
+**Accessing Path Parameters:**
+```go
+func userDetailHandler(ctx *ui.Context) string {
+    userID := ctx.PathParam("id")  // Extract from /user/{id}
+    // Use userID...
+}
+```
+
+**Query Parameters:**
+Query parameters work with any route (with or without path parameters):
+
+```go
+// URL: /search?name=Smith&age=30
+func searchHandler(ctx *ui.Context) string {
+    name := ctx.QueryParam("name")  // "Smith"
+    age := ctx.QueryParam("age")   // "30"
+    // Works with both SPA navigation (ctx.Load) and direct requests
+}
+
+// URL: /user/123?tab=profile&view=detailed
+func userHandler(ctx *ui.Context) string {
+    userID := ctx.PathParam("id")   // "123" (path param)
+    tab := ctx.QueryParam("tab")    // "profile" (query param)
+    view := ctx.QueryParam("view")  // "detailed" (query param)
+}
+
+// Multi-value query parameters: /tags?tag=a&tag=b
+func tagsHandler(ctx *ui.Context) string {
+    tags := ctx.QueryParams("tag")  // []string{"a", "b"}
+    allParams := ctx.AllQueryParams()  // map[string][]string
+}
 ```
 
 ## HTML Wrapper
@@ -139,9 +186,7 @@ ctx.Patch(target.Replace(), html)
 SPA-like navigation without full page reload:
 
 ```go
-app.SmoothNavigation(true)
-
-// In your code:
+// Use ctx.Load() for smooth navigation
 ctx.Load("/path")  // Returns Attr for smooth navigation
 ```
 
@@ -225,7 +270,6 @@ func main() {
 
     // Dev mode
     app.AutoRestart(true)
-    app.SmoothNavigation(true)
 
     app.Listen(":8080")
 }

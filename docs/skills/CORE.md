@@ -13,6 +13,37 @@ ctx.IP()      // Client IP address
 ctx.Body(&struct)  // Parse form/JSON into struct with automatic type inference
 ```
 
+### Route Parameters
+
+```go
+// Path parameters from route patterns: /user/{id}
+userID := ctx.PathParam("id")  // Returns empty string if not found
+
+// Query parameters from URL: /search?name=Smith&age=30
+name := ctx.QueryParam("name")        // Returns first value or empty string
+age := ctx.QueryParam("age")          // Works with both SPA and direct navigation
+
+// Multi-value query parameters: /tags?tag=a&tag=b
+tags := ctx.QueryParams("tag")        // Returns []string or nil
+
+// All query parameters
+allParams := ctx.AllQueryParams()     // Returns map[string][]string
+```
+
+**Example:**
+```go
+// Route: app.Page("/user/{id}", handler)
+// URL: /user/123?tab=profile&view=detailed
+
+func handler(ctx *ui.Context) string {
+    userID := ctx.PathParam("id")      // "123"
+    tab := ctx.QueryParam("tab")       // "profile"
+    view := ctx.QueryParam("view")     // "detailed"
+    
+    return ui.Div("")(fmt.Sprintf("User %s, tab: %s, view: %s", userID, tab, view))
+}
+```
+
 ### Type Inference in ctx.Body
 
 Form data is automatically parsed into Go structs:

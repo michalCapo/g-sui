@@ -42,13 +42,13 @@ var routes = []route{
 	{Path: "/collate-empty", Title: "Collate Empty"},
 	{Path: "/spa", Title: "SPA"},
 	{Path: "/reload-redirect", Title: "Reload & Redirect"},
+	{Path: "/routes", Title: "Route Params"},
 }
 
 func main() {
 	app := ui.MakeApp("en")
 	app.Assets(assets, "assets", 24*time.Hour)
 	app.Favicon(assets, "assets/favicon.svg", 24*time.Hour)
-	app.SmoothNavigation(true)
 
 	// Enable PWA
 	// app.PWA(ui.PWAConfig{
@@ -117,6 +117,11 @@ func main() {
 	app.Page("/collate-empty", "Collate Empty", pages.CollateEmpty)
 	app.Page("/spa", "SPA", pages.SpaExample)
 	app.Page("/reload-redirect", "Reload & Redirect", pages.ReloadRedirect)
+	app.Page("/routes", "Route Parameters", pages.RoutesExample)
+	app.Page("/routes/search", "Search", pages.SearchExample)
+	app.Page("/routes/user/{id}", "User Detail", pages.UserDetail)
+	app.Page("/routes/user/{userId}/post/{postId}", "User Post Detail", pages.UserPostDetail)
+	app.Page("/routes/category/{category}/product/{product}", "Category Product Detail", pages.CategoryProductDetail)
 
 	app.Listen(":1422")
 }

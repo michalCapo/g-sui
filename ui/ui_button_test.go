@@ -154,7 +154,7 @@ func TestButton_DisabledStateWithSubmit(t *testing.T) {
 	assertContains(t, html, `type="submit"`)
 
 	// Submit buttons get the disabled attribute and disabled styling
-	assertContains(t, html, `disabled="disabled"`)
+	assertContains(t, html, " disabled ")
 	assertContains(t, html, DISABLED)
 }
 
@@ -422,7 +422,7 @@ func TestButton_CombinedOptions(t *testing.T) {
 	assertContains(t, html, Blue)
 	assertContains(t, html, "extra-class")
 	// Submit buttons get disabled attribute and styling
-	assertContains(t, html, `disabled="disabled"`)
+	assertContains(t, html, " disabled ")
 	assertContains(t, html, DISABLED)
 	assertContains(t, html, "Submit")
 }

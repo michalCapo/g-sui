@@ -12,6 +12,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -161,12 +162,14 @@ const (
 )
 
 type Context struct {
-	App       *App
-	Request   *http.Request
-	Response  http.ResponseWriter
-	SessionID string
-	append    []string
-	ops       []*JSPatchOp // additional operations (notifications, title changes, etc.)
+	App         *App
+	Request     *http.Request
+	Response    http.ResponseWriter
+	SessionID   string
+	append      []string
+	ops         []*JSPatchOp        // additional operations (notifications, title changes, etc.)
+	pathParams  map[string]string   // extracted path parameters from route patterns
+	queryParams map[string][]string // query parameters from URL (for SPA navigation)
 }
 
 type TSession struct {
@@ -218,6 +221,57 @@ func (ctx *Context) IP() string {
 	return ctx.Request.RemoteAddr
 }
 
+// PathParam returns the value of a path parameter extracted from the route pattern.
+// Returns empty string if the parameter doesn't exist.
+func (ctx *Context) PathParam(name string) string {
+	if ctx.pathParams == nil {
+		return ""
+	}
+	return ctx.pathParams[name]
+}
+
+// QueryParam returns the value of a query parameter from the URL.
+// For SPA navigation, this returns params from the navigated URL.
+// For direct requests, this falls back to ctx.Request.URL.Query().
+// Returns empty string if the parameter doesn't exist.
+func (ctx *Context) QueryParam(name string) string {
+	if ctx.queryParams != nil {
+		if values, ok := ctx.queryParams[name]; ok && len(values) > 0 {
+			return values[0]
+		}
+		return ""
+	}
+	// Fallback to request URL query for non-SPA requests
+	if ctx.Request != nil && ctx.Request.URL != nil {
+		return ctx.Request.URL.Query().Get(name)
+	}
+	return ""
+}
+
+// QueryParams returns all values for a query parameter (for multi-value params).
+// Returns nil if the parameter doesn't exist.
+func (ctx *Context) QueryParams(name string) []string {
+	if ctx.queryParams != nil {
+		return ctx.queryParams[name]
+	}
+	// Fallback to request URL query for non-SPA requests
+	if ctx.Request != nil && ctx.Request.URL != nil {
+		return ctx.Request.URL.Query()[name]
+	}
+	return nil
+}
+
+// AllQueryParams returns all query parameters as a map.
+func (ctx *Context) AllQueryParams() map[string][]string {
+	if ctx.queryParams != nil {
+		return ctx.queryParams
+	}
+	if ctx.Request != nil && ctx.Request.URL != nil {
+		return ctx.Request.URL.Query()
+	}
+	return nil
+}
+
 func (ctx *Context) Session(db *gorm.DB, name string) *TSession {
 	return &TSession{
 		DB:        db,
@@ -267,15 +321,15 @@ func validateInputSafety(data []BodyItem) error {
 			return fmt.Errorf("field type too long at index %d: %d exceeds maximum of 64", i, len(item.Type))
 		}
 
-	// Validate filename length (for file uploads)
-	if len(item.Filename) > 512 {
-		return fmt.Errorf("filename too long at index %d: %d exceeds maximum of 512", i, len(item.Filename))
-	}
+		// Validate filename length (for file uploads)
+		if len(item.Filename) > 512 {
+			return fmt.Errorf("filename too long at index %d: %d exceeds maximum of 512", i, len(item.Filename))
+		}
 
-	// Validate content type length (for file uploads)
-	if len(item.ContentType) > 256 {
-		return fmt.Errorf("content type too long at index %d: %d exceeds maximum of 256", i, len(item.ContentType))
-	}
+		// Validate content type length (for file uploads)
+		if len(item.ContentType) > 256 {
+			return fmt.Errorf("content type too long at index %d: %d exceeds maximum of 256", i, len(item.ContentType))
+		}
 	}
 
 	return nil
@@ -1260,10 +1314,14 @@ type PWAConfig struct {
 }
 
 type Route struct {
-	Path    string
-	UUID    string
-	Title   string
-	Handler *Callable
+	Path       string
+	UUID       string
+	Title      string
+	Handler    *Callable
+	Pattern    string   // original pattern like "/vehicles/edit/{id}"
+	Segments   []string // split segments for matching
+	ParamNames []string // names of parameters in order
+	HasParams  bool     // whether this route has path parameters
 }
 
 type App struct {
@@ -1271,7 +1329,6 @@ type App struct {
 	HTMLBody      func(string) string
 	HTMLHead      []string
 	DebugEnabled  bool
-	SmoothNav     bool
 	pwaConfig     *PWAConfig
 	pwaManifest   []byte
 	swCacheKey    string // Generated on startup for cache versioning
@@ -1333,8 +1390,76 @@ func (app *App) Layout(handler Callable) {
 	app.layout = handler
 }
 
+// parseRoutePattern parses a route path pattern and extracts segment information.
+// Returns segments, parameter names, and whether the route has parameters.
+func parseRoutePattern(pattern string) (segments []string, paramNames []string, hasParams bool) {
+	segments = strings.Split(strings.Trim(pattern, "/"), "/")
+	for _, seg := range segments {
+		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
+			paramName := strings.TrimSuffix(strings.TrimPrefix(seg, "{"), "}")
+			paramNames = append(paramNames, paramName)
+			hasParams = true
+		}
+	}
+	return segments, paramNames, hasParams
+}
+
+// matchRoutePattern matches an actual path against a route pattern and extracts parameters.
+// Returns the extracted parameters map if match succeeds, nil otherwise.
+func matchRoutePattern(actualPath string, route *Route) map[string]string {
+	if !route.HasParams {
+		// Exact match only
+		if actualPath == route.Path {
+			return nil
+		}
+		return nil
+	}
+
+	actualSegments := strings.Split(strings.Trim(actualPath, "/"), "/")
+	if len(actualSegments) != len(route.Segments) {
+		return nil
+	}
+
+	params := make(map[string]string)
+	for i, patternSeg := range route.Segments {
+		actualSeg := actualSegments[i]
+		if strings.HasPrefix(patternSeg, "{") && strings.HasSuffix(patternSeg, "}") {
+			// This is a parameter segment
+			paramName := strings.TrimSuffix(strings.TrimPrefix(patternSeg, "{"), "}")
+			params[paramName] = actualSeg
+		} else if patternSeg != actualSeg {
+			// Literal segment doesn't match
+			return nil
+		}
+	}
+
+	return params
+}
+
+// matchRoute finds a route that matches the given path, trying exact match first, then pattern matching.
+// Returns the matched route and extracted parameters.
+func (app *App) matchRoute(path string) (*Route, map[string]string) {
+	app.routesMu.RLock()
+	defer app.routesMu.RUnlock()
+
+	// First try exact match
+	if route, exists := app.routes[path]; exists {
+		return route, nil
+	}
+
+	// Then try pattern matching
+	for _, route := range app.routes {
+		if params := matchRoutePattern(path, route); params != nil {
+			return route, params
+		}
+	}
+
+	return nil, nil
+}
+
 // Page registers a route with a title and handler.
 // Usage: Page("/", "Page Title", handler)
+// Supports path parameters: Page("/vehicles/edit/{id}", "Edit Vehicle", handler)
 // Each page is assigned a UUID internally for client-side routing.
 func (app *App) Page(path string, title string, handler Callable) {
 	if path == "" {
@@ -1355,12 +1480,19 @@ func (app *App) Page(path string, title string, handler Callable) {
 	// Generate UUID for this route
 	uuid := generateUUID()
 
+	// Parse route pattern to extract segments and parameters
+	segments, paramNames, hasParams := parseRoutePattern(path)
+
 	// Create route
 	route := &Route{
-		Path:    path,
-		UUID:    uuid,
-		Title:   title,
-		Handler: &handler,
+		Path:       path,
+		UUID:       uuid,
+		Title:      title,
+		Handler:    &handler,
+		Pattern:    path,
+		Segments:   segments,
+		ParamNames: paramNames,
+		HasParams:  hasParams,
 	}
 
 	// Store in both maps
@@ -1372,12 +1504,6 @@ func (app *App) Page(path string, title string, handler Callable) {
 // When enabled, debug logs are printed with the "gsui:" prefix.
 func (app *App) Debug(enable bool) {
 	app.DebugEnabled = enable
-}
-
-// SmoothNavigation enables or disables automatic link interception for smooth navigation.
-// When enabled, all internal links will use background loading with delayed loader instead of full page reloads.
-func (app *App) SmoothNavigation(enable bool) {
-	app.SmoothNav = enable
 }
 
 func (app *App) debugf(format string, args ...any) {
@@ -1674,7 +1800,7 @@ func makeContextForWS(app *App, sessionID string, vals []BodyItem) (*Context, er
 				}
 			}
 		}
-		
+
 		// Get content type before closing
 		contentType := writer.FormDataContentType()
 		writer.Close()
@@ -1761,16 +1887,69 @@ func (app *App) Listen(port string) {
 		// Handle /__page/{uuid} endpoint for SPA routing
 		if strings.HasPrefix(value, "/__page/") && r.Method == "POST" {
 			uuid := strings.TrimPrefix(value, "/__page/")
-			app.routesMu.RLock()
-			route, exists := app.routesByID[uuid]
-			app.routesMu.RUnlock()
 
-			if !exists {
+			// Try to get actual path from request body or query string
+			var actualPath string
+			if r.Body != nil {
+				var bodyData struct {
+					Path string `json:"path"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&bodyData); err == nil && bodyData.Path != "" {
+					actualPath = bodyData.Path
+				}
+			}
+
+			// Fallback: try query parameter
+			if actualPath == "" {
+				actualPath = r.URL.Query().Get("path")
+			}
+
+			// Parse query parameters from actualPath and strip for route matching
+			pathForMatching := actualPath
+			var queryParams map[string][]string
+			if pathForMatching != "" {
+				if queryIdx := strings.Index(pathForMatching, "?"); queryIdx >= 0 {
+					queryString := pathForMatching[queryIdx+1:]
+					pathForMatching = pathForMatching[:queryIdx]
+					// Parse query string into map
+					if parsedURL, err := url.Parse("?" + queryString); err == nil {
+						queryParams = parsedURL.Query()
+					}
+				}
+			}
+
+			var route *Route
+			var pathParams map[string]string
+
+			if pathForMatching != "" {
+				// Use pattern matching to find route and extract parameters
+				route, pathParams = app.matchRoute(pathForMatching)
+			} else {
+				// Fallback to UUID lookup for backward compatibility
+				app.routesMu.RLock()
+				var exists bool
+				route, exists = app.routesByID[uuid]
+				app.routesMu.RUnlock()
+				if !exists {
+					http.Error(w, "Page not found", http.StatusNotFound)
+					return
+				}
+			}
+
+			if route == nil {
 				http.Error(w, "Page not found", http.StatusNotFound)
 				return
 			}
 
 			ctx := makeContext(app, r, w)
+			// Set path parameters in context
+			if pathParams != nil {
+				ctx.pathParams = pathParams
+			}
+			// Set query parameters in context (from SPA navigation path)
+			if queryParams != nil {
+				ctx.queryParams = queryParams
+			}
 
 			defer func() {
 				if rec := recover(); rec != nil {
@@ -1787,7 +1966,7 @@ func (app *App) Listen(port string) {
 				}
 			}()
 
-			app.debugf("page fetch %s -> %s", uuid, route.Path)
+			app.debugf("page fetch %s -> %s", route.UUID, route.Path)
 			html := (*route.Handler)(ctx)
 			if len(ctx.append) > 0 {
 				html += strings.Join(ctx.append, "")
@@ -1821,13 +2000,16 @@ func (app *App) Listen(port string) {
 
 		// If layout is set and this is a GET request, render layout shell with route manifest
 		if app.layout != nil && r.Method == "GET" {
-			app.routesMu.RLock()
-			route, exists := app.routes[value]
-			app.routesMu.RUnlock()
+			// Try to match route (exact or pattern)
+			route, pathParams := app.matchRoute(value)
 
 			// Only render shell for registered routes
-			if exists {
+			if route != nil {
 				ctx := makeContext(app, r, w)
+				// Set path parameters in context
+				if pathParams != nil {
+					ctx.pathParams = pathParams
+				}
 
 				defer func() {
 					if rec := recover(); rec != nil {
@@ -1842,9 +2024,16 @@ func (app *App) Listen(port string) {
 
 				// Build route manifest
 				app.routesMu.RLock()
-				routeManifest := make(map[string]string)
+				routeManifest := make(map[string]interface{})
 				for path, route := range app.routes {
-					routeManifest[path] = route.UUID
+					if route.HasParams {
+						routeManifest[path] = map[string]interface{}{
+							"uuid":    route.UUID,
+							"pattern": true,
+						}
+					} else {
+						routeManifest[path] = route.UUID
+					}
 				}
 				app.routesMu.RUnlock()
 
@@ -1862,11 +2051,6 @@ func (app *App) Listen(port string) {
 					fmt.Sprintf(`<title>%s</title>`, route.Title),
 				}
 				head = append(head, app.HTMLHead...)
-
-				// Conditionally add smooth navigation script if enabled (router handles this now)
-				if app.SmoothNav {
-					head = append(head, Script(__smoothnav))
-				}
 
 				html := app.HTMLBody("")
 				html = strings.ReplaceAll(html, "__lang__", app.Lanugage)
@@ -2733,11 +2917,6 @@ func (app *App) HTML(title string, class string, body ...string) string {
 
 	head = append(head, app.HTMLHead...)
 
-	// Conditionally add smooth navigation script if enabled
-	if app.SmoothNav {
-		head = append(head, Script(__smoothnav))
-	}
-
 	html := app.HTMLBody(class)
 	html = strings.ReplaceAll(html, "__lang__", app.Lanugage)
 	html = strings.ReplaceAll(html, "__head__", strings.Join(head, " "))
@@ -3078,80 +3257,6 @@ var __submit = Trim(`
     }
 `)
 
-// __smoothnav: automatically intercepts clicks on internal links for smooth navigation
-var __smoothnav = Trim(`
-    (function(){
-        try {
-            if (window.__gsuiSmoothNavInit) { return; }
-            window.__gsuiSmoothNavInit = true;
-            
-            function isInternalLink(href) {
-                if (!href) return false;
-                // Skip hash-only links
-                if (href.startsWith('#')) return false;
-                // Skip javascript: links
-                if (href.startsWith('javascript:')) return false;
-                // Skip data: and mailto: links
-                if (href.startsWith('data:') || href.startsWith('mailto:')) return false;
-                // Check if external (starts with http/https but not same origin)
-                if (href.startsWith('http://') || href.startsWith('https://')) {
-                    try {
-                        var linkUrl = new URL(href, window.location.href);
-                        return linkUrl.origin === window.location.origin;
-                    } catch(_) {
-                        return false;
-                    }
-                }
-                // Relative paths are internal
-                return true;
-            }
-            
-            document.addEventListener('click', function(e) {
-                var link = e.target.closest('a');
-                if (!link) return;
-                
-                var href = link.getAttribute('href');
-                if (!href) return;
-                
-                // Skip links with target attribute (e.g., _blank)
-                if (link.target && link.target !== '_self') return;
-                
-                // Skip links with download attribute
-                if (link.download) return;
-                
-                // Skip if link already has onclick handler (avoid double-handling with ctx.Load())
-                var onclickAttr = link.getAttribute('onclick');
-                if (onclickAttr && onclickAttr.trim().length > 0) return;
-                
-                // Only intercept internal links
-                if (!isInternalLink(href)) return;
-                
-                // Prevent default navigation
-                e.preventDefault();
-                
-                // Use router for SPA navigation
-                try {
-                    // Check if router is available (it initializes on DOMContentLoaded)
-                    if (window.__router && typeof window.__router.navigate === 'function') {
-                        window.__router.navigate(href);
-                    } else if (typeof __load === 'function') {
-                        // Fallback to __load if router not yet initialized
-                        __load(href);
-                    } else {
-                        // Final fallback to normal navigation
-                        window.location.href = href;
-                    }
-                } catch(err) {
-                    // Fallback to normal navigation if router fails
-                    try {
-                        window.location.href = href;
-                    } catch(_) {}
-                }
-            }, true);
-        } catch(_) {}
-    })();
-`)
-
 var __load = Trim(`
     function __load(href) {
 		// Prevent default navigation if event is available
@@ -3246,18 +3351,49 @@ var __router = Trim(`
             } catch(_) {}
         }
 
+        function matchPattern(pathname, routeMap) {
+            // Try to match against pattern routes
+            for (var pattern in routeMap) {
+                var routeInfo = routeMap[pattern];
+                if (typeof routeInfo === 'object' && routeInfo.pattern) {
+                    // Convert pattern to regex: /vehicles/edit/{id} -> /vehicles/edit/([^/]+)
+                    var regexStr = pattern.replace(/\{[^}]+\}/g, '([^/]+)');
+                    var regex = new RegExp('^' + regexStr + '$');
+                    if (regex.test(pathname)) {
+                        return routeInfo;
+                    }
+                }
+            }
+            return null;
+        }
+
         function navigate(path, pushState) {
-            // Normalize path
-            if (!path) path = '/';
-            if (!path.startsWith('/')) path = '/' + path;
+            // Preserve query string
+            var queryIndex = path.indexOf('?');
+            var pathname = queryIndex >= 0 ? path.substring(0, queryIndex) : path;
+            var query = queryIndex >= 0 ? path.substring(queryIndex) : '';
+            
+            // Normalize pathname
+            if (!pathname) pathname = '/';
+            if (!pathname.startsWith('/')) pathname = '/' + pathname;
 
             var routeMap = window.__routes || routes || {};
-            var uuid = routeMap[path];
-            if (!uuid) {
-                console.warn('Route not found:', path);
-                renderNotFound(path);
+            
+            // Try exact match first
+            var routeInfo = routeMap[pathname];
+            
+            // If not found, try pattern matching
+            if (!routeInfo) {
+                routeInfo = matchPattern(pathname, routeMap);
+            }
+            
+            if (!routeInfo) {
+                console.warn('Route not found:', pathname);
+                renderNotFound(pathname);
                 return;
             }
+            
+            var uuid = typeof routeInfo === 'string' ? routeInfo : routeInfo.uuid;
             
             var L = null;
             var loaderTimer = setTimeout(function() {
@@ -3266,7 +3402,14 @@ var __router = Trim(`
                 } catch(_) {}
             }, 50);
             
-            fetch('/__page/' + uuid, {method: 'POST', body: '[]', headers: {'Content-Type': 'application/json'}})
+            // Send actual path to server for parameter extraction
+            // Include query string in the path sent to server
+            var pathToSend = pathname + query;
+            fetch('/__page/' + uuid, {
+                method: 'POST',
+                body: JSON.stringify({path: pathToSend}),
+                headers: {'Content-Type': 'application/json'}
+            })
                 .then(function(resp) {
                     if (resp.status === 404) {
                         renderNotFound(path);
@@ -3317,7 +3460,7 @@ var __router = Trim(`
         
         // Handle browser back/forward
         window.addEventListener('popstate', function(e) {
-            navigate(window.location.pathname, false);
+            navigate(window.location.pathname + window.location.search, false);
         });
         
         // Initialize on DOM ready
@@ -3325,11 +3468,11 @@ var __router = Trim(`
             if (initialized) return;
             initialized = true;
             
-            // Navigate to current path on initial load
-            navigate(window.location.pathname, false);
+            // Navigate to current path on initial load (including query string)
+            navigate(window.location.pathname + window.location.search, false);
         }
         
-        // Expose navigate on window immediately for ctx.Load() and link interception
+        // Expose navigate on window immediately for ctx.Load()
         var routerAPI = {
             navigate: navigate,
             routes: routes

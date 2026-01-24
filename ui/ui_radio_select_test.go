@@ -257,7 +257,7 @@ func TestIRadioDiv_AllBuilderMethods(t *testing.T) {
 					Disabled()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `disabled="disabled"`)
+				assertContains(t, html, " disabled ")
 				assertContains(t, html, `pointer-events-none`)
 			},
 		},
@@ -410,7 +410,7 @@ func TestISelect_AllBuilderMethods(t *testing.T) {
 					Required()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `required="required"`)
+				assertContains(t, html, " required ")
 				assertContains(t, html, `<span`)
 				assertContains(t, html, `*`)
 			},
@@ -423,7 +423,7 @@ func TestISelect_AllBuilderMethods(t *testing.T) {
 					Required(false)
 			},
 			verify: func(t *testing.T, html string) {
-				assertNotContains(t, html, `required="required"`)
+				assertNotContains(t, html, " required ")
 			},
 		},
 		{
@@ -434,7 +434,7 @@ func TestISelect_AllBuilderMethods(t *testing.T) {
 					Disabled()
 			},
 			verify: func(t *testing.T, html string) {
-				assertContains(t, html, `disabled="disabled"`)
+				assertContains(t, html, " disabled ")
 			},
 		},
 		{
@@ -445,7 +445,7 @@ func TestISelect_AllBuilderMethods(t *testing.T) {
 					Disabled(false)
 			},
 			verify: func(t *testing.T, html string) {
-				assertNotContains(t, html, `disabled="disabled"`)
+				assertNotContains(t, html, " disabled ")
 			},
 		},
 		{
