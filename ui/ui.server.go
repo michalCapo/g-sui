@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -57,6 +56,14 @@ type BodyItem struct {
 	Type        string `json:"type"`
 	Filename    string `json:"filename,omitempty"`
 	ContentType string `json:"content_type,omitempty"`
+}
+
+// FileUpload represents an uploaded file from a form submission
+type FileUpload struct {
+	Name        string // Original filename
+	Data        []byte // File content (decoded from Base64)
+	ContentType string // MIME type (e.g., "image/png")
+	Size        int    // File size in bytes
 }
 
 // JSON DOM Protocol Types
@@ -170,6 +177,7 @@ type Context struct {
 	ops         []*JSPatchOp        // additional operations (notifications, title changes, etc.)
 	pathParams  map[string]string   // extracted path parameters from route patterns
 	queryParams map[string][]string // query parameters from URL (for SPA navigation)
+	fileItems   []BodyItem          // Store file uploads from WebSocket
 }
 
 type TSession struct {
@@ -270,6 +278,46 @@ func (ctx *Context) AllQueryParams() map[string][]string {
 		return ctx.Request.URL.Query()
 	}
 	return nil
+}
+
+// File returns a single uploaded file by name
+// Returns nil if no file found with that name
+func (ctx *Context) File(name string) (*FileUpload, error) {
+	for _, item := range ctx.fileItems {
+		if item.Type == "file" && item.Name == name && item.Value != "" {
+			data, err := base64.StdEncoding.DecodeString(item.Value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode file %s: %w", name, err)
+			}
+			return &FileUpload{
+				Name:        item.Filename,
+				Data:        data,
+				ContentType: item.ContentType,
+				Size:        len(data),
+			}, nil
+		}
+	}
+	return nil, nil // No file found (not an error)
+}
+
+// Files returns all uploaded files with the given name (for multiple file inputs)
+func (ctx *Context) Files(name string) ([]*FileUpload, error) {
+	var files []*FileUpload
+	for _, item := range ctx.fileItems {
+		if item.Type == "file" && item.Name == name && item.Value != "" {
+			data, err := base64.StdEncoding.DecodeString(item.Value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode file %s: %w", name, err)
+			}
+			files = append(files, &FileUpload{
+				Name:        item.Filename,
+				Data:        data,
+				ContentType: item.ContentType,
+				Size:        len(data),
+			})
+		}
+	}
+	return files, nil
 }
 
 func (ctx *Context) Session(db *gorm.DB, name string) *TSession {
@@ -1761,79 +1809,34 @@ func makeContext(app *App, r *http.Request, w http.ResponseWriter) *Context {
 
 // makeContextForWS creates a Context from WebSocket data
 func makeContextForWS(app *App, sessionID string, vals []BodyItem) (*Context, error) {
-	// Check if we have file uploads (Base64 encoded)
-	hasFiles := false
+	// Separate file items from regular items
+	var fileItems []BodyItem
+	var regularItems []BodyItem
 	for _, item := range vals {
-		if item.Type == "file" && item.Value != "" {
-			hasFiles = true
-			break
+		if item.Type == "file" {
+			fileItems = append(fileItems, item)
+		} else {
+			regularItems = append(regularItems, item)
 		}
 	}
 
-	var r *http.Request
-	if hasFiles {
-		// For file uploads, we need to create a multipart form
-		// Create a buffer and multipart writer
-		var buf bytes.Buffer
-		writer := multipart.NewWriter(&buf)
-
-		// Add regular form fields
-		for _, item := range vals {
-			if item.Type == "file" {
-				// Decode Base64 and add as file
-				fileData, err := base64.StdEncoding.DecodeString(item.Value)
-				if err != nil {
-					return nil, fmt.Errorf("failed to decode base64 file data for %s: %w", item.Name, err)
-				}
-				filename := item.Filename
-				if filename == "" {
-					filename = item.Name
-				}
-				part, err := writer.CreateFormFile(item.Name, filename)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create form file for %s: %w", item.Name, err)
-				}
-				if _, err := part.Write(fileData); err != nil {
-					return nil, fmt.Errorf("failed to write file data for %s: %w", item.Name, err)
-				}
-			} else {
-				// Add regular field
-				if err := writer.WriteField(item.Name, item.Value); err != nil {
-					return nil, fmt.Errorf("failed to write field %s: %w", item.Name, err)
-				}
-			}
-		}
-
-		// Get content type before closing
-		contentType := writer.FormDataContentType()
-		writer.Close()
-
-		// Create request with multipart body
-		r = &http.Request{
-			Method: "POST",
-			Header: make(http.Header),
-			Body:   io.NopCloser(bytes.NewReader(buf.Bytes())),
-		}
-		r.Header.Set("Content-Type", contentType)
-	} else {
-		// Create a minimal http.Request with body containing JSON-encoded vals
-		bodyJSON, err := json.Marshal(vals)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal body items: %w", err)
-		}
-
-		r = &http.Request{
-			Method: "POST",
-			Header: make(http.Header),
-			Body:   io.NopCloser(bytes.NewReader(bodyJSON)),
-		}
-		r.Header.Set("Content-Type", "application/json")
+	// Create JSON body for regular fields only
+	bodyJSON, err := json.Marshal(regularItems)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal body items: %w", err)
 	}
 
-	// Create a minimal response writer (we won't use it for WS)
+	r := &http.Request{
+		Method: "POST",
+		Header: make(http.Header),
+		Body:   io.NopCloser(bytes.NewReader(bodyJSON)),
+	}
+	r.Header.Set("Content-Type", "application/json")
+
 	w := &wsResponseWriter{}
-
 	ctx := makeContext(app, r, w)
+	ctx.fileItems = fileItems // Store file items for ctx.File()/ctx.Files()
+
 	if sessionID != "" {
 		ctx.SessionID = sessionID
 	}

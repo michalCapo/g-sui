@@ -32,6 +32,7 @@ var routes = []route{
 	{Path: "/radio", Title: "Radio"},
 	{Path: "/table", Title: "Table"},
 	{Path: "/form", Title: "Form"},
+	{Path: "/image-upload", Title: "Image Upload"},
 	{Path: "/captcha", Title: "Captcha"},
 	{Path: "/others", Title: "Others"},
 	{Path: "/append", Title: "Append/Prepend"},
@@ -106,6 +107,7 @@ func main() {
 	app.Page("/checkbox", "Checkbox", pages.Checkbox)
 	app.Page("/radio", "Radio", pages.Radio)
 	app.Page("/form", "Form", pages.FormContent)
+	app.Page("/image-upload", "Image Upload", pages.ImageUploadContent)
 	app.Page("/table", "Table", pages.Table)
 	app.Page("/captcha", "Captcha", pages.Captcha)
 	app.Page("/others", "Others", pages.Others)

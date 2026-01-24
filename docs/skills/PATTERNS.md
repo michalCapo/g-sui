@@ -320,23 +320,114 @@ func (f *MyForm) Reset(ctx *ui.Context) string {
 
 ## File Upload
 
+### File Input Component
+
+```go
+// Basic file input
+form.File("image").
+    Accept("image/*").
+    Required().
+    Render("Image")
+
+// With custom ID for ImagePreview
+id := ui.RandomString(10)
+form.File("image").
+    ID(id).                    // Set custom ID
+    Accept("image/*").
+    Multiple().                // Allow multiple files
+    Required().
+    Render("Image")
+
+// Image preview component
+ui.ImagePreview(id).
+    MaxSize("320px").
+    Render()
+```
+
+### File Upload Handler
+
 ```go
 func uploadHandler(ctx *ui.Context) string {
-    file, header, err := ctx.Request.FormFile("upload")
+    file, err := ctx.File("image")
     if err != nil {
-        ctx.Error("Upload failed")
-        return renderUploadForm()
+        ctx.Error("Failed to process file: " + err.Error())
+        return renderUploadForm(ctx)
     }
-    defer file.Close()
+    if file == nil {
+        ctx.Error("No file uploaded")
+        return renderUploadForm(ctx)
+    }
+
+    // Validate file type
+    if !strings.HasPrefix(file.ContentType, "image/") {
+        ctx.Error("File must be an image")
+        return renderUploadForm(ctx)
+    }
+
+    // Validate file size (max 5MB)
+    if file.Size > 5*1024*1024 {
+        ctx.Error("Image size must be less than 5MB")
+        return renderUploadForm(ctx)
+    }
 
     // Save file
-    dst, _ := os.Create("uploads/" + header.Filename)
-    defer dst.Close()
-    io.Copy(dst, file)
+    os.WriteFile("uploads/"+file.Name, file.Data, 0644)
 
-    ctx.Success("File uploaded!")
-    return renderUploadForm()
+    ctx.Success("File uploaded successfully!")
+    return renderUploadForm(ctx)
 }
+```
+
+**File Object Properties:**
+- `file.Name` - Original filename
+- `file.Data` - File contents as `[]byte`
+- `file.ContentType` - MIME type (e.g., `"image/png"`)
+- `file.Size` - File size in bytes
+
+### Image Preview Component
+
+```go
+// Single file preview
+id := ui.RandomString(10)
+form.File("image").ID(id).Accept("image/*").Render("Image")
+ui.ImagePreview(id).
+    MaxSize("320px").
+    Render()
+
+// Multiple file preview (grid layout)
+ui.ImagePreview(id).
+    Multiple().                // Enable grid layout
+    MaxSize("200px").
+    Render()
+```
+
+The ImagePreview component automatically handles client-side image previews before upload.
+
+### Image Upload Component (Combined)
+
+For image uploads, use the unified `ImageUpload` component that combines file input and preview:
+
+```go
+// Single component with inline preview (recommended)
+form.ImageUpload("image").
+    Zone("Add Photo", "Click to upload").
+    MaxSize("320px").
+    Required().
+    Render("Photo")
+```
+
+**Key Features:**
+- Inline preview: Selected image appears inside the upload zone
+- Change button: Built-in "Change Image" button to re-select
+- Unified experience: Single component instead of File + ImagePreview
+- Auto-accept: Defaults to `accept="image/*"`
+
+**Alternative:** You can still use separate File + ImagePreview components if needed:
+
+```go
+id := ui.RandomString(10)
+form.File("image").ID(id).Accept("image/*").Render("Image")
+ui.ImagePreview(id).MaxSize("320px").Render()
 ```
 
 ## CAPTCHA

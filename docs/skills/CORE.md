@@ -101,6 +101,29 @@ ctx.SetCustomSecurityHeaders(options)  // Set custom security headers with optio
 ctx.DownloadAs(reader, "application/pdf", "document.pdf")  // Trigger file download
 ```
 
+### File Uploads
+
+```go
+file, err := ctx.File("image")
+if err != nil {
+    ctx.Error("Failed to process file: " + err.Error())
+    return renderForm(ctx)
+}
+if file == nil {
+    ctx.Error("No file uploaded")
+    return renderForm(ctx)
+}
+
+// File object properties:
+// file.Name        - Original filename
+// file.Data        - File contents as []byte
+// file.ContentType - MIME type (e.g., "image/png")
+// file.Size        - File size in bytes
+
+// Save file
+os.WriteFile("uploads/"+file.Name, file.Data, 0644)
+```
+
 ### Translations
 
 ```go

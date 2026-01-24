@@ -70,6 +70,14 @@ func (f *FormInstance) Email(name string, data ...any) *TInput {
 	return IEmail(name, data...).Form(f.FormId)
 }
 
+func (f *FormInstance) File(name string) *TFile {
+	return IFile(name).Form(f.FormId)
+}
+
+func (f *FormInstance) ImageUpload(name string) *TImageUpload {
+	return IImageUpload(name).Form(f.FormId)
+}
+
 func (f *FormInstance) Hidden(name string, value any, attr ...Attr) string {
 	attr = append(attr, Attr{Name: name, Type: "hidden", Value: fmt.Sprintf("%v", value), Form: f.FormId})
 	return Input("hidden", attr...)

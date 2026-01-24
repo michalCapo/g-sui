@@ -686,6 +686,8 @@ func FormContent(ctx *ui.Context) string {
 | `.Radio(name, data...)` | `*TInput` | Radio button |
 | `.RadioButtons(name, data...)` | `*ARadio` | Radio button group |
 | `.RadioDiv(name, data...)` | `*ARadio` | Card-based radio (custom HTML) |
+| `.File(name)` | `*TFile` | File input |
+| `.ImageUpload(name)` | `*TImageUpload` | Image upload with inline preview |
 | `.Button()` | `*button` | Submit button |
 | `.Render()` | `string` | Hidden form element |
 
@@ -758,6 +760,28 @@ session.Save(&data)   // Save data to session
 ### File Downloads
 ```go
 ctx.DownloadAs(&reader, "application/xlsx", "export.xlsx")
+```
+
+### File Uploads
+```go
+file, err := ctx.File("image")
+if err != nil {
+    ctx.Error("Failed to process file: " + err.Error())
+    return renderForm(ctx)
+}
+if file == nil {
+    ctx.Error("No file uploaded")
+    return renderForm(ctx)
+}
+
+// File object properties:
+// file.Name        - Original filename
+// file.Data        - File contents as []byte
+// file.ContentType - MIME type (e.g., "image/png")
+// file.Size        - File size in bytes
+
+// Save file
+os.WriteFile("uploads/"+file.Name, file.Data, 0644)
 ```
 
 ### Security Headers
@@ -1965,6 +1989,8 @@ All inputs use fluent API: `IXxx(fieldName, dataPtr...).Method().Render("Label")
 | `ICheckbox` | checkbox | Single checkbox |
 | `IRadio` | radio | Single radio button |
 | `IRadioButtons` | radio | Radio button group |
+| `IFile` | file | File input |
+| `IImageUpload` | image | Image upload with inline preview |
 | `IValue` | - | Display-only value |
 | `ILabel` | - | Standalone label |
 
@@ -1988,6 +2014,202 @@ All inputs use fluent API: `IXxx(fieldName, dataPtr...).Method().Render("Label")
 - `.Options(opts)` - Select options (for ISelect, IRadioButtons)
 - `.Href(url)` - Make clickable link
 - `.Submit()`, `.Reset()` - Form button types
+
+### File Input Component
+
+```go
+// Basic file input
+ui.IFile("image").Accept("image/*").Required().Render("Image")
+
+// With custom ID for linking with ImagePreview
+id := ui.RandomString(10)
+ui.IFile("image").
+    ID(id).                    // Set custom ID
+    Accept("image/*").          // MIME types: "image/*", ".pdf,.doc", etc.
+    Multiple().                 // Allow multiple files
+    Required().
+    Disabled(false).
+    Class("custom-wrapper").    // Wrapper classes
+    ClassInput("custom-input"). // Input element classes
+    ClassLabel("custom-label"). // Label classes
+    Change("console.log('changed')").  // OnChange handler
+    If(condition).              // Conditional render
+    Render("Upload Image")
+```
+
+**File Input Methods:**
+- `.ID(id)` - Set custom ID (useful for linking with ImagePreview)
+- `.GetID()` - Get the file input's ID
+- `.Accept(types)` - Allowed file types (e.g., `"image/*"`, `".pdf,.doc"`)
+- `.Multiple()` - Allow selecting multiple files
+- `.Required()`, `.Disabled()` - State modifiers
+- `.Class(s)`, `.ClassInput(s)`, `.ClassLabel(s)` - Custom classes
+- `.Change(action)` - OnChange handler (JavaScript string)
+- `.If(condition)` - Conditional render
+- `.Form(id)` - Associate with form by ID
+
+**File Upload Handler:**
+
+```go
+func uploadHandler(ctx *ui.Context) string {
+    file, err := ctx.File("image")
+    if err != nil {
+        ctx.Error("Failed to process file: " + err.Error())
+        return renderUploadForm(ctx)
+    }
+    if file == nil {
+        ctx.Error("No file uploaded")
+        return renderUploadForm(ctx)
+    }
+
+    // Validate file type
+    if !strings.HasPrefix(file.ContentType, "image/") {
+        ctx.Error("File must be an image")
+        return renderUploadForm(ctx)
+    }
+
+    // Validate file size (max 5MB)
+    if file.Size > 5*1024*1024 {
+        ctx.Error("Image size must be less than 5MB")
+        return renderUploadForm(ctx)
+    }
+
+    // Save file
+    os.WriteFile("uploads/"+file.Name, file.Data, 0644)
+
+    ctx.Success("File uploaded successfully!")
+    return renderUploadForm(ctx)
+}
+```
+
+**File Object Properties:**
+- `file.Name` - Original filename
+- `file.Data` - File contents as `[]byte`
+- `file.ContentType` - MIME type (e.g., `"image/png"`)
+- `file.Size` - File size in bytes
+
+### Image Preview Component
+
+```go
+// Basic image preview (single file)
+id := ui.RandomString(10)
+ui.IFile("image").ID(id).Accept("image/*").Render("Image")
+ui.ImagePreview(id).
+    MaxSize("320px").          // Max width/height
+    Render()
+
+// Multiple file preview (grid layout)
+ui.ImagePreview(id).
+    Multiple().                // Enable grid layout for multiple images
+    MaxSize("200px").
+    Class("my-4").             // Custom wrapper classes
+    Render()
+
+// With conditional rendering
+ui.ImagePreview(id).
+    MaxSize("320px").
+    If(showPreview).
+    Render()
+```
+
+**ImagePreview Methods:**
+- `.Multiple()` - Enable grid layout for multiple images (default: single centered preview)
+- `.MaxSize(size)` - Maximum image dimensions (e.g., `"320px"`, `"200px"`)
+- `.Class(classes...)` - Custom wrapper classes
+- `.If(condition)` - Conditional render
+- `.Render()` - Generate HTML and JavaScript
+
+**Usage Pattern:**
+
+```go
+id := ui.RandomString(10)
+
+fileInput := form.File("image").
+    ID(id).                    // Set ID
+    Accept("image/*").
+    Required()
+
+fileInput.Render("Image")
+
+// Image preview component (reuses the file input ID)
+ui.ImagePreview(id).
+    MaxSize("320px").
+    Render()
+```
+
+The ImagePreview component automatically:
+- Listens to the file input's `change` event
+- Uses `FileReader` to preview images client-side
+- Only shows previews for image files
+- Clears previous previews on new selection
+- Supports both single and multiple file selection
+
+### Image Upload Component (Combined File + Preview)
+
+The `ImageUpload` component combines file input and image preview into a single unified component with inline preview:
+
+```go
+// Basic image upload with inline preview
+form.ImageUpload("image").
+    Zone("Add Image", "Click to upload").
+    MaxSize("320px").
+    Required().
+    Render("Image")
+
+// With custom zone styling
+form.ImageUpload("image").
+    Zone("Add Vehicle Photo", "Click to take or upload").
+    ZoneIcon("w-10 h-10 bg-gray-500 rounded-full p-2 flex items-center justify-center").
+    MaxSize("320px").
+    ClassPreview("mt-4").
+    Required().
+    Render("VEHICLE PHOTO")
+```
+
+**Key Features:**
+- **Inline Preview**: Selected image appears inside the upload zone (replacing the upload UI)
+- **Change Button**: Built-in "Change Image" button to re-select images
+- **Unified Experience**: Single component instead of separate File + ImagePreview
+- **Zone Mode**: Uses dropzone-style UI by default for better UX
+- **Auto-accept**: Defaults to `accept="image/*"` for images
+
+**ImageUpload Methods:**
+- `.Zone(title, hint)` - Enable dropzone mode with title and hint text
+- `.ZoneIcon(classes)` - Custom icon CSS classes for zone mode
+- `.ZoneContent(html)` - Completely custom HTML content for zone (overrides icon/title/hint)
+- `.ClassZone(classes...)` - Zone container CSS classes
+- `.MaxSize(size)` - Maximum image dimensions for preview (e.g., `"320px"`)
+- `.ClassPreview(classes...)` - Preview container CSS classes
+- `.Accept(types)` - Override default `"image/*"` (e.g., `"image/png,image/jpeg"`)
+- `.Multiple()` - Allow selecting multiple files (preview shows first image)
+- `.Required()`, `.Disabled()` - State modifiers
+- `.Class(s)`, `.ClassInput(s)`, `.ClassLabel(s)` - Custom classes
+- `.Change(action)` - OnChange handler (JavaScript string)
+- `.If(condition)` - Conditional render
+- `.Form(id)` - Associate with form by ID
+- `.ID(id)`, `.GetID()` - Custom ID management
+
+**Usage Pattern:**
+
+```go
+// Single component (recommended for images)
+form.ImageUpload("image").
+    Zone("Add Photo", "Click to upload").
+    MaxSize("320px").
+    Render("Photo")
+
+// Alternative: Separate File + ImagePreview (still available)
+id := ui.RandomString(10)
+form.File("image").ID(id).Accept("image/*").Render("Image")
+ui.ImagePreview(id).MaxSize("320px").Render()
+```
+
+The ImageUpload component automatically:
+- Shows upload zone initially (with icon/title/hint)
+- On file selection: hides upload zone, shows preview with image and "Change Image" button
+- On "Change Image" click: triggers file input again
+- Handles empty/no file cases by showing upload zone again
+- Only accepts image files (defaults to `accept="image/*"`)
 
 ### Button Component
 
@@ -2475,6 +2697,8 @@ func FormContent(ctx *ui.Context) string {
 | `.Radio(name, data...)` | `*TInput` | Radio button |
 | `.RadioButtons(name, data...)` | `*ARadio` | Radio button group |
 | `.RadioDiv(name, data...)` | `*ARadio` | Card-based radio (custom HTML) |
+| `.File(name)` | `*TFile` | File input |
+| `.ImageUpload(name)` | `*TImageUpload` | Image upload with inline preview |
 | `.Button()` | `*button` | Submit button |
 | `.Render()` | `string` | Hidden form element |
 
