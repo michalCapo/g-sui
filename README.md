@@ -115,7 +115,7 @@ g-sui provides smooth, SPA-like navigation with background loading and a smart l
 Use `ctx.Load()` for smooth navigation on links:
 
 ```go
-ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+ui.A(cls, ctx.Load(r.Path))(r.Title)
 ```
 
 This creates a link that:
@@ -136,7 +136,7 @@ ui.Map(routes, func(r *route, _ int) string {
     if ctx != nil && ctx.Request != nil && r.Path == ctx.Request.URL.Path {
         cls = base + " bg-blue-700 text-white hover:bg-blue-600"
     }
-    return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+    return ui.A(cls, ctx.Load(r.Path))(r.Title)
 })
 ```
 

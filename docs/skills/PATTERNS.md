@@ -229,8 +229,8 @@ func main() {
     layout := func(title string, content ui.Callable) ui.Callable {
         return func(ctx *ui.Context) string {
             nav := ui.Div("bg-white shadow p-4")(
-                ui.A("", ui.Href("/"), ctx.Load("/"))("Home"),
-                ui.A("", ui.Href("/users"), ctx.Load("/users"))("Users"),
+                ui.A("", ctx.Load("/"))("Home"),
+                ui.A("", ctx.Load("/users"))("Users"),
             )
 
             body := content(ctx)

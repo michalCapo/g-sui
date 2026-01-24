@@ -75,7 +75,7 @@ ctx.ErrorReload("Error - click to reload")  // Red toast with reload button
 ### Navigation
 
 ```go
-ctx.Load("/path")    // SPA-like navigation (no full reload) - returns Attr
+ctx.Load("/path")    // SPA-like navigation (no full reload) - returns Attr with href and onclick
 ctx.Reload()         // Reload current page - returns ""
 ctx.Redirect("/url") // Navigate to different URL - returns ""
 ctx.Title("New Title") // Update page title dynamically

@@ -187,7 +187,7 @@ SPA-like navigation without full page reload:
 
 ```go
 // Use ctx.Load() for smooth navigation
-ctx.Load("/path")  // Returns Attr for smooth navigation
+ctx.Load("/path")  // Returns Attr with href and onclick for smooth SPA navigation
 ```
 
 ### Navigation Example
@@ -199,7 +199,7 @@ ui.Button().
     Render("Go to About")
 
 // Or directly:
-ui.A("", ui.Href("/page"), ctx.Load("/page"))("Link")
+ui.A("", ctx.Load("/page"))("Link")
 ```
 
 ## Auto Restart (Development)

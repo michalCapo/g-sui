@@ -1297,8 +1297,8 @@ func main() {
     layout := func(title string, body ui.Callable) ui.Callable {
         return func(ctx *ui.Context) string {
             nav := ui.Div("bg-white shadow p-4 flex items-center gap-4")(
-                ui.A("hover:text-blue-600", ui.Href("/"), ctx.Load("/"))("Home"),
-                ui.A("hover:text-blue-600", ui.Href("/about"), ctx.Load("/about"))("About"),
+                ui.A("hover:text-blue-600", ctx.Load("/"))("Home"),
+                ui.A("hover:text-blue-600", ctx.Load("/about"))("About"),
                 ui.Flex1,
                 ui.ThemeSwitcher(""),
             )
@@ -1441,7 +1441,7 @@ func NavBar(ctx *ui.Context, currentPath string) string {
                 cls = "px-3 py-2 rounded bg-blue-700 text-white"
             }
             // ctx.Load() enables SPA navigation without full page reload
-            return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+            return ui.A(cls, ctx.Load(r.Path))(r.Title)
         }),
     )
 }
@@ -2581,11 +2581,13 @@ type Context struct {
 - `Title(title string)` - Update the page title dynamically
 
 #### Navigation
-- `Load(href string) Attr` - SPA-like navigation with background loading (returns Attr for onclick)
+- `Load(href string) Attr` - SPA-like navigation with background loading (returns Attr with href and onclick)
+  - Sets both `href` attribute and `onclick` handler for accessibility and SPA navigation
   - Fetches page content in the background
   - Shows loader only if fetch takes longer than 50ms
   - Replaces page content seamlessly without full reload
   - Updates browser history and title
+  - Supports right-click "Open in new tab", middle-click, and other native browser behaviors
 - `Reload() string` - JavaScript to reload page
 - `Redirect(url string) string` - JavaScript to navigate to URL
 
@@ -2631,10 +2633,10 @@ When using `ctx.Load()`, navigation works as follows:
 Use `ctx.Load()` to enable smooth navigation on specific links:
 
 ```go
-ui.A("px-2 py-1 rounded", ui.Href("/about"), ctx.Load("/about"))("About")
+ui.A("px-2 py-1 rounded", ctx.Load("/about"))("About")
 ```
 
-This creates an `<a>` element with an onclick handler that calls `__load()` for smooth navigation.
+This creates an `<a>` element with both `href` attribute and an onclick handler that calls `__load()` for smooth navigation. The `href` attribute ensures accessibility (right-click menu, middle-click, status bar preview) while the onclick handler provides SPA navigation.
 
 ### Implementation Details
 
@@ -2668,7 +2670,7 @@ func NavBar(ctx *ui.Context) string {
                 cls += " hover:bg-gray-200"
             }
             
-            return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+            return ui.A(cls, ctx.Load(r.Path))(r.Title)
         }),
     )
 }
