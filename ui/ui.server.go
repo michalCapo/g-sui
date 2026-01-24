@@ -1033,7 +1033,10 @@ func (ctx *Context) Call(method Callable, values ...any) Actions {
 }
 
 func (ctx *Context) Load(href string) Attr {
-	return Attr{OnClick: Trim(fmt.Sprintf(`event.preventDefault();if(window.__router&&window.__router.navigate){window.__router.navigate("%s");}else{__load("%s");}`, escapeJS(href), escapeJS(href)))}
+	return Attr{
+		Href:    href,
+		OnClick: Trim(fmt.Sprintf(`event.preventDefault();if(window.__router&&window.__router.navigate){window.__router.navigate("%s");}else{__load("%s");}`, escapeJS(href), escapeJS(href))),
+	}
 }
 
 // Reload adds a reload operation that will reload the page on the client

@@ -29,9 +29,9 @@ func RoutesExample(ctx *ui.Context) string {
 						"Click the links below to navigate to routes with single parameters:",
 					),
 					ui.Div("flex flex-wrap gap-2")(
-						ui.A("px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer inline-block", ui.Href("/routes/user/123"), ctx.Load("/routes/user/123"))("View User 123"),
-						ui.A("px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer inline-block", ui.Href("/routes/user/456"), ctx.Load("/routes/user/456"))("View User 456"),
-						ui.A("px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer inline-block", ui.Href("/routes/user/alice"), ctx.Load("/routes/user/alice"))("View User 'alice'"),
+						ui.A("px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer inline-block", ctx.Load("/routes/user/123"))("View User 123"),
+						ui.A("px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer inline-block", ctx.Load("/routes/user/456"))("View User 456"),
+						ui.A("px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer inline-block", ctx.Load("/routes/user/alice"))("View User 'alice'"),
 					),
 					ui.Div("text-xs text-gray-500 mt-2")(
 						"Route pattern: <code class='bg-gray-100 dark:bg-gray-800 px-1 rounded'>/routes/user/{id}</code>",
@@ -49,9 +49,9 @@ func RoutesExample(ctx *ui.Context) string {
 						"Navigate to routes with multiple parameters:",
 					),
 					ui.Div("flex flex-wrap gap-2")(
-						ui.A("px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 cursor-pointer inline-block", ui.Href("/routes/user/123/post/1"), ctx.Load("/routes/user/123/post/1"))("User 123, Post 1"),
-						ui.A("px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 cursor-pointer inline-block", ui.Href("/routes/user/456/post/42"), ctx.Load("/routes/user/456/post/42"))("User 456, Post 42"),
-						ui.A("px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 cursor-pointer inline-block", ui.Href("/routes/user/alice/post/my-first-post"), ctx.Load("/routes/user/alice/post/my-first-post"))("User alice, Post 'my-first-post'"),
+						ui.A("px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 cursor-pointer inline-block", ctx.Load("/routes/user/123/post/1"))("User 123, Post 1"),
+						ui.A("px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 cursor-pointer inline-block", ctx.Load("/routes/user/456/post/42"))("User 456, Post 42"),
+						ui.A("px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 cursor-pointer inline-block", ctx.Load("/routes/user/alice/post/my-first-post"))("User alice, Post 'my-first-post'"),
 					),
 					ui.Div("text-xs text-gray-500 mt-2")(
 						"Route pattern: <code class='bg-gray-100 dark:bg-gray-800 px-1 rounded'>/routes/user/{userId}/post/{postId}</code>",
@@ -69,8 +69,8 @@ func RoutesExample(ctx *ui.Context) string {
 						"Routes can have parameters at any level:",
 					),
 					ui.Div("flex flex-wrap gap-2")(
-						ui.A("px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 cursor-pointer inline-block", ui.Href("/routes/category/electronics/product/laptop"), ctx.Load("/routes/category/electronics/product/laptop"))("Electronics → Laptop"),
-						ui.A("px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 cursor-pointer inline-block", ui.Href("/routes/category/books/product/novel"), ctx.Load("/routes/category/books/product/novel"))("Books → Novel"),
+						ui.A("px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 cursor-pointer inline-block", ctx.Load("/routes/category/electronics/product/laptop"))("Electronics → Laptop"),
+						ui.A("px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 cursor-pointer inline-block", ctx.Load("/routes/category/books/product/novel"))("Books → Novel"),
 					),
 					ui.Div("text-xs text-gray-500 mt-2")(
 						"Route pattern: <code class='bg-gray-100 dark:bg-gray-800 px-1 rounded'>/routes/category/{category}/product/{product}</code>",
@@ -88,9 +88,9 @@ func RoutesExample(ctx *ui.Context) string {
 						"Query parameters are passed in the URL after a question mark. They work with any route:",
 					),
 					ui.Div("flex flex-wrap gap-2")(
-						ui.A("px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 cursor-pointer inline-block", ui.Href("/routes/search?name=Smith&age=30"), ctx.Load("/routes/search?name=Smith&age=30"))("Search: name=Smith, age=30"),
-						ui.A("px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 cursor-pointer inline-block", ui.Href("/routes/search?name=Johnson&city=NYC"), ctx.Load("/routes/search?name=Johnson&city=NYC"))("Search: name=Johnson, city=NYC"),
-						ui.A("px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 cursor-pointer inline-block", ui.Href("/routes/search?q=g-sui&type=tutorial"), ctx.Load("/routes/search?q=g-sui&type=tutorial"))("Search: q=g-sui, type=tutorial"),
+						ui.A("px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 cursor-pointer inline-block", ctx.Load("/routes/search?name=Smith&age=30"))("Search: name=Smith, age=30"),
+						ui.A("px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 cursor-pointer inline-block", ctx.Load("/routes/search?name=Johnson&city=NYC"))("Search: name=Johnson, city=NYC"),
+						ui.A("px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 cursor-pointer inline-block", ctx.Load("/routes/search?q=g-sui&type=tutorial"))("Search: q=g-sui, type=tutorial"),
 					),
 					ui.Div("text-xs text-gray-500 mt-2")(
 						"Route: <code class='bg-gray-100 dark:bg-gray-800 px-1 rounded'>/routes/search</code> (no path params needed)",
@@ -108,9 +108,9 @@ func RoutesExample(ctx *ui.Context) string {
 						"You can combine path parameters with query parameters:",
 					),
 					ui.Div("flex flex-wrap gap-2")(
-						ui.A("px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 cursor-pointer inline-block", ui.Href("/routes/user/123?tab=profile&view=detailed"), ctx.Load("/routes/user/123?tab=profile&view=detailed"))("User 123: tab=profile, view=detailed"),
-						ui.A("px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 cursor-pointer inline-block", ui.Href("/routes/user/456?tab=settings"), ctx.Load("/routes/user/456?tab=settings"))("User 456: tab=settings"),
-						ui.A("px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 cursor-pointer inline-block", ui.Href("/routes/user/alice?sort=name&order=asc"), ctx.Load("/routes/user/alice?sort=name&order=asc"))("User alice: sort=name, order=asc"),
+						ui.A("px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 cursor-pointer inline-block", ctx.Load("/routes/user/123?tab=profile&view=detailed"))("User 123: tab=profile, view=detailed"),
+						ui.A("px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 cursor-pointer inline-block", ctx.Load("/routes/user/456?tab=settings"))("User 456: tab=settings"),
+						ui.A("px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 cursor-pointer inline-block", ctx.Load("/routes/user/alice?sort=name&order=asc"))("User alice: sort=name, order=asc"),
 					),
 					ui.Div("text-xs text-gray-500 mt-2")(
 						"Route pattern: <code class='bg-gray-100 dark:bg-gray-800 px-1 rounded'>/routes/user/{id}</code> + query params",
@@ -135,7 +135,7 @@ func SearchExample(ctx *ui.Context) string {
 
 	return ui.Div("flex flex-col gap-6")(
 		ui.Div("flex items-center gap-4")(
-			ui.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer inline-block", ui.Href("/routes"), ctx.Load("/routes"))("← Back"),
+			ui.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer inline-block", ctx.Load("/routes"))("← Back"),
 			ui.Div("text-2xl font-bold")("Search Results"),
 		),
 
@@ -217,9 +217,9 @@ func SearchExample(ctx *ui.Context) string {
 		ui.Div("flex flex-col gap-2")(
 			ui.Div("text-sm font-bold")("Try different queries:"),
 			ui.Div("flex flex-wrap gap-2")(
-				ui.A("px-3 py-1 border-2 border-yellow-600 text-yellow-600 rounded hover:bg-yellow-50 cursor-pointer inline-block text-sm", ui.Href("/routes/search?name=Smith&age=30"), ctx.Load("/routes/search?name=Smith&age=30"))("name=Smith, age=30"),
-				ui.A("px-3 py-1 border-2 border-yellow-600 text-yellow-600 rounded hover:bg-yellow-50 cursor-pointer inline-block text-sm", ui.Href("/routes/search?name=Johnson&city=NYC"), ctx.Load("/routes/search?name=Johnson&city=NYC"))("name=Johnson, city=NYC"),
-				ui.A("px-3 py-1 border-2 border-yellow-600 text-yellow-600 rounded hover:bg-yellow-50 cursor-pointer inline-block text-sm", ui.Href("/routes/search?q=g-sui&type=tutorial"), ctx.Load("/routes/search?q=g-sui&type=tutorial"))("q=g-sui, type=tutorial"),
+				ui.A("px-3 py-1 border-2 border-yellow-600 text-yellow-600 rounded hover:bg-yellow-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/search?name=Smith&age=30"))("name=Smith, age=30"),
+				ui.A("px-3 py-1 border-2 border-yellow-600 text-yellow-600 rounded hover:bg-yellow-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/search?name=Johnson&city=NYC"))("name=Johnson, city=NYC"),
+				ui.A("px-3 py-1 border-2 border-yellow-600 text-yellow-600 rounded hover:bg-yellow-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/search?q=g-sui&type=tutorial"))("q=g-sui, type=tutorial"),
 			),
 		),
 	)
@@ -268,7 +268,7 @@ func UserDetail(ctx *ui.Context) string {
 
 	return ui.Div("flex flex-col gap-6")(
 		ui.Div("flex items-center gap-4")(
-			ui.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer inline-block", ui.Href("/routes"), ctx.Load("/routes"))("← Back"),
+			ui.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer inline-block", ctx.Load("/routes"))("← Back"),
 			ui.Div("text-2xl font-bold")("User Details"),
 		),
 
@@ -347,15 +347,15 @@ func UserDetail(ctx *ui.Context) string {
 		ui.Div("flex flex-col gap-2")(
 			ui.Div("text-sm font-bold")("Try other users:"),
 			ui.Div("flex flex-wrap gap-2")(
-				ui.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded hover:bg-blue-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/123"), ctx.Load("/routes/user/123"))("User 123"),
-				ui.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded hover:bg-blue-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/456"), ctx.Load("/routes/user/456"))("User 456"),
-				ui.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded hover:bg-blue-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/alice"), ctx.Load("/routes/user/alice"))("User alice"),
+				ui.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded hover:bg-blue-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/123"))("User 123"),
+				ui.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded hover:bg-blue-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/456"))("User 456"),
+				ui.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded hover:bg-blue-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/alice"))("User alice"),
 			),
 			ui.Div("text-sm font-bold mt-2")("Try with query parameters:"),
 			ui.Div("flex flex-wrap gap-2")(
-				ui.A("px-3 py-1 border-2 border-indigo-600 text-indigo-600 rounded hover:bg-indigo-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/123?tab=profile&view=detailed"), ctx.Load("/routes/user/123?tab=profile&view=detailed"))("User 123: tab=profile"),
-				ui.A("px-3 py-1 border-2 border-indigo-600 text-indigo-600 rounded hover:bg-indigo-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/456?tab=settings"), ctx.Load("/routes/user/456?tab=settings"))("User 456: tab=settings"),
-				ui.A("px-3 py-1 border-2 border-indigo-600 text-indigo-600 rounded hover:bg-indigo-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/alice?sort=name&order=asc"), ctx.Load("/routes/user/alice?sort=name&order=asc"))("User alice: sort=name"),
+				ui.A("px-3 py-1 border-2 border-indigo-600 text-indigo-600 rounded hover:bg-indigo-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/123?tab=profile&view=detailed"))("User 123: tab=profile"),
+				ui.A("px-3 py-1 border-2 border-indigo-600 text-indigo-600 rounded hover:bg-indigo-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/456?tab=settings"))("User 456: tab=settings"),
+				ui.A("px-3 py-1 border-2 border-indigo-600 text-indigo-600 rounded hover:bg-indigo-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/alice?sort=name&order=asc"))("User alice: sort=name"),
 			),
 		),
 	)
@@ -403,7 +403,7 @@ func UserPostDetail(ctx *ui.Context) string {
 
 	return ui.Div("flex flex-col gap-6")(
 		ui.Div("flex items-center gap-4")(
-			ui.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer inline-block", ui.Href("/routes"), ctx.Load("/routes"))("← Back"),
+			ui.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer inline-block", ctx.Load("/routes"))("← Back"),
 			ui.Div("text-2xl font-bold")("Post Details"),
 		),
 
@@ -431,7 +431,7 @@ func UserPostDetail(ctx *ui.Context) string {
 					),
 					ui.Div("flex items-center gap-2")(
 						ui.Div("text-sm font-bold text-gray-500")("Author:"),
-						ui.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded hover:bg-blue-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/"+userID), ctx.Load("/routes/user/"+userID))("User "+userID),
+						ui.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded hover:bg-blue-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/"+userID))("User "+userID),
 					),
 					ui.Div("text-xs text-gray-500 mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded")(
 						`<strong>Code:</strong> <code class="bg-white dark:bg-gray-800 px-1 rounded">userId := ctx.PathParam("userId")</code> and <code class="bg-white dark:bg-gray-800 px-1 rounded">postId := ctx.PathParam("postId")</code>`,
@@ -443,9 +443,9 @@ func UserPostDetail(ctx *ui.Context) string {
 		ui.Div("flex flex-col gap-2")(
 			ui.Div("text-sm font-bold")("Try other posts:"),
 			ui.Div("flex flex-wrap gap-2")(
-				ui.A("px-3 py-1 border-2 border-green-600 text-green-600 rounded hover:bg-green-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/123/post/1"), ctx.Load("/routes/user/123/post/1"))("User 123, Post 1"),
-				ui.A("px-3 py-1 border-2 border-green-600 text-green-600 rounded hover:bg-green-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/456/post/42"), ctx.Load("/routes/user/456/post/42"))("User 456, Post 42"),
-				ui.A("px-3 py-1 border-2 border-green-600 text-green-600 rounded hover:bg-green-50 cursor-pointer inline-block text-sm", ui.Href("/routes/user/alice/post/my-first-post"), ctx.Load("/routes/user/alice/post/my-first-post"))("User alice, Post 'my-first-post'"),
+				ui.A("px-3 py-1 border-2 border-green-600 text-green-600 rounded hover:bg-green-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/123/post/1"))("User 123, Post 1"),
+				ui.A("px-3 py-1 border-2 border-green-600 text-green-600 rounded hover:bg-green-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/456/post/42"))("User 456, Post 42"),
+				ui.A("px-3 py-1 border-2 border-green-600 text-green-600 rounded hover:bg-green-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/user/alice/post/my-first-post"))("User alice, Post 'my-first-post'"),
 			),
 		),
 	)
@@ -498,7 +498,7 @@ func CategoryProductDetail(ctx *ui.Context) string {
 
 	return ui.Div("flex flex-col gap-6")(
 		ui.Div("flex items-center gap-4")(
-			ui.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer inline-block", ui.Href("/routes"), ctx.Load("/routes"))("← Back"),
+			ui.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 cursor-pointer inline-block", ctx.Load("/routes"))("← Back"),
 			ui.Div("text-2xl font-bold")("Product Details"),
 		),
 
@@ -538,8 +538,8 @@ func CategoryProductDetail(ctx *ui.Context) string {
 		ui.Div("flex flex-col gap-2")(
 			ui.Div("text-sm font-bold")("Try other products:"),
 			ui.Div("flex flex-wrap gap-2")(
-				ui.A("px-3 py-1 border-2 border-purple-600 text-purple-600 rounded hover:bg-purple-50 cursor-pointer inline-block text-sm", ui.Href("/routes/category/electronics/product/laptop"), ctx.Load("/routes/category/electronics/product/laptop"))("Electronics → Laptop"),
-				ui.A("px-3 py-1 border-2 border-purple-600 text-purple-600 rounded hover:bg-purple-50 cursor-pointer inline-block text-sm", ui.Href("/routes/category/books/product/novel"), ctx.Load("/routes/category/books/product/novel"))("Books → Novel"),
+				ui.A("px-3 py-1 border-2 border-purple-600 text-purple-600 rounded hover:bg-purple-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/category/electronics/product/laptop"))("Electronics → Laptop"),
+				ui.A("px-3 py-1 border-2 border-purple-600 text-purple-600 rounded hover:bg-purple-50 cursor-pointer inline-block text-sm", ctx.Load("/routes/category/books/product/novel"))("Books → Novel"),
 			),
 		),
 	)

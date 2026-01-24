@@ -79,7 +79,7 @@ func main() {
 						base := "px-2 py-1 rounded text-sm whitespace-nowrap"
 						cls := base + " hover:bg-gray-200"
 						// Highlight will be handled by JS router based on current path
-						return ui.A(cls, ui.Href(r.Path), ctx.Load(r.Path))(r.Title)
+						return ui.A(cls, ctx.Load(r.Path))(r.Title)
 					}),
 				),
 				ui.Flex1,
