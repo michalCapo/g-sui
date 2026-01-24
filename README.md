@@ -459,7 +459,7 @@ The `deploy` script automatically:
 - Creates an annotated git tag
 - Pushes the tag to the remote repository
 
-After running `./deploy`, you can create a GitHub release by visiting the [releases page](https://github.com/michalCapo/go-srui/releases/new) and selecting the newly created tag.
+After running `./deploy`, you can create a GitHub release by visiting the [releases page](https://github.com/michalCapo/g-sui/releases/new) and selecting the newly created tag.
 
 ## Claude Code Skills
 

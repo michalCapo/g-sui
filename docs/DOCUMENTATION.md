@@ -3438,7 +3438,7 @@ The project uses semantic versioning with the format `v0.XXX`:
 ### After Deployment
 
 After running `./deploy`, you can:
-1. Create a GitHub release at https://github.com/michalCapo/go-srui/releases/new
+1. Create a GitHub release at https://github.com/michalCapo/g-sui/releases/new
 2. Select the newly created tag
 3. Add release notes describing the changes
 4. Publish the release

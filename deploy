@@ -2,8 +2,12 @@
 
 # Deploy script for g-sui
 # Automatically increments version (0.100 -> 0.101 -> 0.102, etc.)
+# Ensures the module can be used as a dependency in other projects
 
 set -e  # Exit on error
+
+# Module path from go.mod
+MODULE_PATH="github.com/michalCapo/g-sui"
 
 # Get the latest tag matching v0.* pattern
 LATEST_TAG=$(git tag -l "v0.*" | sort -V | tail -1)
@@ -30,22 +34,56 @@ if ! git diff-index --quiet HEAD --; then
     exit 1
 fi
 
+# Ensure go.mod is tidy
+echo "Ensuring go.mod is tidy..."
+go mod tidy
+
+# Check if go.mod has uncommitted changes after tidy
+if ! git diff-index --quiet HEAD -- go.mod go.sum; then
+    echo "Warning: go.mod or go.sum has changes after 'go mod tidy'"
+    echo "Please commit these changes before deploying:"
+    git diff --stat go.mod go.sum
+    exit 1
+fi
+
+# Verify module path matches go.mod
+MODULE_IN_GOMOD=$(grep "^module " go.mod | awk '{print $2}')
+if [ "$MODULE_IN_GOMOD" != "$MODULE_PATH" ]; then
+    echo "Error: Module path in go.mod ($MODULE_IN_GOMOD) doesn't match expected ($MODULE_PATH)"
+    exit 1
+fi
+
 # Check if we're on the correct branch (optional check)
 CURRENT_BRANCH=$(git branch --show-current)
 echo "Current branch: $CURRENT_BRANCH"
+
+# Ensure we have the latest from origin
+echo "Fetching latest from origin..."
+git fetch origin --tags
 
 # Create annotated tag
 echo "Creating tag $NEW_VERSION..."
 git tag -a "$NEW_VERSION" -m "Release version $NEW_VERSION"
 
-# Push tag to origin
+# Push tag to origin (with --follow-tags to ensure it's pushed)
 echo "Pushing tag $NEW_VERSION to origin..."
 git push origin "$NEW_VERSION"
+
+# Also ensure the current branch is pushed (tags are included)
+echo "Ensuring current branch is pushed..."
+git push origin "$CURRENT_BRANCH" --follow-tags || true
 
 echo ""
 echo "✓ Successfully deployed version $NEW_VERSION"
 echo "  Tag created and pushed to origin"
 echo ""
+echo "Module can now be used as a dependency:"
+echo "  go get $MODULE_PATH@$NEW_VERSION"
+echo ""
+echo "Or in go.mod:"
+echo "  $MODULE_PATH $NEW_VERSION"
+echo ""
 echo "Next steps:"
-echo "  - Create a GitHub release: https://github.com/michalCapo/go-srui/releases/new"
+echo "  - Verify the module can be fetched: go list -m -versions $MODULE_PATH"
+echo "  - Create a GitHub release: https://github.com/michalCapo/g-sui/releases/new"
 echo "  - Select tag: $NEW_VERSION"
