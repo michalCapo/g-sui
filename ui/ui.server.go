@@ -2300,6 +2300,9 @@ func (app *App) initWS() {
 	app.wsMu.Unlock()
 
 	http.Handle("/__ws", websocket.Handler(func(ws *websocket.Conn) {
+		// Allow large payloads for file uploads (10MB)
+		ws.MaxPayloadBytes = 10 * 1024 * 1024
+
 		// Register
 		st := &wsState{lastPong: time.Now()}
 		// Resolve session id from handshake cookies
@@ -2349,72 +2352,121 @@ func (app *App) initWS() {
 		}()
 
 		// Receive loop: handle ping/pong from client, invalid target notices, and callable actions
+		// Message buffer for handling WebSocket frame fragmentation (large messages may be split)
+		var messageBuffer strings.Builder
 		for {
 			var s string
 			if err := websocket.Message.Receive(ws, &s); err != nil {
 				close(done)
 				return
 			}
-			var obj map[string]any
-			if err := json.Unmarshal([]byte(s), &obj); err == nil {
-				if t, _ := obj["type"].(string); t != "" {
-					switch t {
-					case "ping":
-						_ = websocket.Message.Send(ws, `{"type":"pong"}`)
-					case "pong":
-						app.wsMu.Lock()
-						st.lastPong = time.Now()
-						app.wsMu.Unlock()
-						if st.sid != "" {
-							app.sessMu.Lock()
-							if rec := app.sessions[st.sid]; rec != nil {
-								rec.lastSeen = time.Now()
-							}
-							app.sessMu.Unlock()
-						}
-					case "invalid":
-						id, _ := obj["id"].(string)
-						if id != "" && st.sid != "" {
-							app.sessMu.Lock()
-							if rec := app.sessions[st.sid]; rec != nil {
-								fn := rec.targets[id]
-								delete(rec.targets, id)
-								app.sessMu.Unlock()
-								if fn != nil {
-									func() { defer func() { recover() }(); fn() }()
-								}
-							} else {
-								app.sessMu.Unlock()
-							}
-						}
-					case "call":
-						// Handle callable action request
-						msgRaw := s
-						go func(raw string) {
-							var callMsg JSCallMessage
-							defer func() {
-								if rec := recover(); rec != nil {
-									log.Printf("WebSocket call handler panic: %v", rec)
-									// Send error response
-									if callMsg.RID != "" {
-										errorEl := &JSElement{T: "span", C: []interface{}{"Error"}}
-										errorResp := JSResponseMessage{
-											Type: "response",
-											RID:  callMsg.RID,
-											El:   errorEl,
-											Ops:  []*JSPatchOp{{Op: "notify", Msg: "An error occurred", Variant: "error"}},
-										}
-										if data, err := json.Marshal(errorResp); err == nil {
-											_ = websocket.Message.Send(ws, string(data))
-										}
-									}
-								}
-							}()
 
-							if err := json.Unmarshal([]byte(raw), &callMsg); err != nil {
-								log.Printf("Failed to parse call message: %v", err)
-								return
+			// Check if this looks like the start of a new JSON message
+			trimmed := strings.TrimSpace(s)
+			if strings.HasPrefix(trimmed, "{") {
+				// Start of new message - reset buffer
+				messageBuffer.Reset()
+				messageBuffer.WriteString(s)
+			} else if messageBuffer.Len() > 0 {
+				// Continuation of previous message (WebSocket frame fragmentation)
+				messageBuffer.WriteString(s)
+			}
+
+			// Try to parse as JSON
+			fullMessage := messageBuffer.String()
+			if fullMessage == "" {
+				fullMessage = s
+			}
+
+			var obj map[string]any
+			if err := json.Unmarshal([]byte(fullMessage), &obj); err != nil {
+				// If buffer is getting too large, reset it to avoid memory issues
+				if messageBuffer.Len() > 20*1024*1024 {
+					messageBuffer.Reset()
+				}
+				continue
+			}
+
+			// Successfully parsed - reset buffer
+			messageBuffer.Reset()
+
+			t, _ := obj["type"].(string)
+			if t == "" {
+				continue
+			}
+			switch t {
+			case "ping":
+				_ = websocket.Message.Send(ws, `{"type":"pong"}`)
+			case "pong":
+				app.wsMu.Lock()
+				st.lastPong = time.Now()
+				app.wsMu.Unlock()
+				if st.sid != "" {
+					app.sessMu.Lock()
+					if rec := app.sessions[st.sid]; rec != nil {
+						rec.lastSeen = time.Now()
+					}
+					app.sessMu.Unlock()
+				}
+			case "invalid":
+				id, _ := obj["id"].(string)
+				if id != "" && st.sid != "" {
+					app.sessMu.Lock()
+					if rec := app.sessions[st.sid]; rec != nil {
+						fn := rec.targets[id]
+						delete(rec.targets, id)
+						app.sessMu.Unlock()
+						if fn != nil {
+							func() { defer func() { recover() }(); fn() }()
+						}
+					} else {
+						app.sessMu.Unlock()
+					}
+				}
+			case "call":
+				// Handle callable action request
+				msgRaw := fullMessage
+				go func(raw string) {
+					var callMsg JSCallMessage
+					defer func() {
+						if rec := recover(); rec != nil {
+							log.Printf("WebSocket call handler panic: %v", rec)
+							// Send error response
+							if callMsg.RID != "" {
+								errorEl := &JSElement{T: "span", C: []interface{}{"Error"}}
+								errorResp := JSResponseMessage{
+									Type: "response",
+									RID:  callMsg.RID,
+									El:   errorEl,
+									Ops:  []*JSPatchOp{{Op: "notify", Msg: "An error occurred", Variant: "error"}},
+								}
+								if data, err := json.Marshal(errorResp); err == nil {
+									_ = websocket.Message.Send(ws, string(data))
+								}
 							}
+						}
+					}()
+
+					if err := json.Unmarshal([]byte(raw), &callMsg); err != nil {
+						log.Printf("Failed to parse call message: %v", err)
+						// Try to extract RID from raw message to send error response
+						var partial struct {
+							RID string `json:"rid"`
+						}
+						if json.Unmarshal([]byte(raw), &partial) == nil && partial.RID != "" {
+							errorEl := &JSElement{T: "span", C: []interface{}{"Error parsing request"}}
+							errorResp := JSResponseMessage{
+								Type: "response",
+								RID:  partial.RID,
+								El:   errorEl,
+								Ops:  []*JSPatchOp{{Op: "notify", Msg: "Failed to process request: " + err.Error(), Variant: "error"}},
+							}
+							if data, err := json.Marshal(errorResp); err == nil {
+								_ = websocket.Message.Send(ws, string(data))
+							}
+						}
+						return
+					}
 
 							// Look up callable from stored map
 							mu.Lock()
@@ -2429,64 +2481,62 @@ func (app *App) initWS() {
 
 							if found == nil {
 								log.Printf("Callable not found for path: %s", callMsg.Path)
-								errorEl := &JSElement{T: "span", C: []interface{}{"Not found"}}
-								errorResp := JSResponseMessage{
-									Type: "response",
-									RID:  callMsg.RID,
-									El:   errorEl,
-									Ops:  []*JSPatchOp{{Op: "notify", Msg: "Action not found", Variant: "error"}},
-								}
-								if data, err := json.Marshal(errorResp); err == nil {
-									_ = websocket.Message.Send(ws, string(data))
-								}
-								return
-							}
+						errorEl := &JSElement{T: "span", C: []interface{}{"Not found"}}
+						errorResp := JSResponseMessage{
+							Type: "response",
+							RID:  callMsg.RID,
+							El:   errorEl,
+							Ops:  []*JSPatchOp{{Op: "notify", Msg: "Action not found", Variant: "error"}},
+						}
+						if data, err := json.Marshal(errorResp); err == nil {
+							_ = websocket.Message.Send(ws, string(data))
+						}
+						return
+					}
 
-							// Create context from WebSocket data
-							ctx, err := makeContextForWS(app, st.sid, callMsg.Vals)
-							if err != nil {
-								log.Printf("Failed to create context: %v", err)
-								errorEl := &JSElement{T: "span", C: []interface{}{"Error"}}
-								errorResp := JSResponseMessage{
-									Type: "response",
-									RID:  callMsg.RID,
-									El:   errorEl,
-									Ops:  []*JSPatchOp{{Op: "notify", Msg: "Failed to process request", Variant: "error"}},
-								}
-								if data, err := json.Marshal(errorResp); err == nil {
-									_ = websocket.Message.Send(ws, string(data))
-								}
-								return
-							}
+					// Create context from WebSocket data
+					ctx, err := makeContextForWS(app, st.sid, callMsg.Vals)
+					if err != nil {
+						log.Printf("Failed to create context: %v", err)
+						errorEl := &JSElement{T: "span", C: []interface{}{"Error"}}
+						errorResp := JSResponseMessage{
+							Type: "response",
+							RID:  callMsg.RID,
+							El:   errorEl,
+							Ops:  []*JSPatchOp{{Op: "notify", Msg: "Failed to process request", Variant: "error"}},
+						}
+						if data, err := json.Marshal(errorResp); err == nil {
+							_ = websocket.Message.Send(ws, string(data))
+						}
+						return
+					}
 
 							// Execute callable
 							html := (*found)(ctx)
-							if len(ctx.append) > 0 {
-								html += strings.Join(ctx.append, "")
-							}
-
-							// Convert HTML to JSON element
-							jsElement, err := htmlToJSElement(html)
-							if err != nil {
-								log.Printf("Error converting HTML to JSON: %v", err)
-								jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
-							}
-
-							// Send response
-							resp := JSResponseMessage{
-								Type: "response",
-								RID:  callMsg.RID,
-								El:   jsElement,
-								Ops:  ctx.ops,
-							}
-							if data, err := json.Marshal(resp); err == nil {
-								_ = websocket.Message.Send(ws, string(data))
-							} else {
-								log.Printf("Failed to marshal response: %v", err)
-							}
-						}(msgRaw)
+					if len(ctx.append) > 0 {
+						html += strings.Join(ctx.append, "")
 					}
-				}
+
+					// Convert HTML to JSON element
+					jsElement, err := htmlToJSElement(html)
+					if err != nil {
+						log.Printf("Error converting HTML to JSON: %v", err)
+						jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
+					}
+
+					// Send response
+					resp := JSResponseMessage{
+						Type: "response",
+						RID:  callMsg.RID,
+						El:   jsElement,
+						Ops:  ctx.ops,
+					}
+					if data, err := json.Marshal(resp); err == nil {
+						_ = websocket.Message.Send(ws, string(data))
+					} else {
+						log.Printf("Failed to marshal response: %v", err)
+					}
+				}(msgRaw)
 			}
 		}
 	}))
