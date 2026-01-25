@@ -115,11 +115,11 @@ func renderImageUploadForm(ctx *ui.Context, data *imageUploadData, err *error) s
 
 				// Image upload component with built-in preview (combined File + ImagePreview)
 				form.ImageUpload("image").
-					Zone("Add Vehicle Photo", "Click to take or upload").
-					ZoneIcon("w-10 h-10 bg-gray-500 rounded-full p-2 flex items-center justify-center").
+					Zone("", "Click to take or upload").
+					ZoneIcon(ui.Icon("fa fa-image fa-3x")).
 					MaxSize("320px").
 					Required().
-					Render("VEHICLE PHOTO (OPTIONAL)"),
+					Render("Image"),
 
 				ui.Div("text-xs text-gray-500 mt-1")(
 					"Accepted formats: JPG, PNG, GIF, WebP. Max size: 5MB",
@@ -128,58 +128,6 @@ func renderImageUploadForm(ctx *ui.Context, data *imageUploadData, err *error) s
 				// Submit button
 				ui.Div("flex justify-end")(
 					form.Button().Color(ui.Blue).Submit().Render("Upload Image"),
-				),
-			)).Render(),
-
-		// Code example
-		ui.Card().Header("<h3 class='font-bold text-lg'>Code Example</h3>").
-			Body(ui.Div("flex flex-col gap-2 text-sm")(
-				ui.Div("text-gray-600 dark:text-gray-400")(
-					"<strong>File Upload Handler:</strong>",
-				),
-				ui.Div("bg-gray-100 dark:bg-gray-800 p-3 rounded font-mono text-xs overflow-x-auto")(
-					`file, err := ctx.File("image")
-if err != nil {
-    ctx.Error("Failed to process file")
-    return renderForm(ctx, &form, nil)
-}
-if file == nil {
-    ctx.Error("No file uploaded")
-    return renderForm(ctx, &form, nil)
-}
-
-// Use file.Name, file.Data, file.ContentType, file.Size
-os.WriteFile("uploads/"+file.Name, file.Data, 0644)`,
-				),
-				ui.Div("text-gray-600 dark:text-gray-400 mt-2")(
-					"<strong>Combined Image Upload Component (File + Preview):</strong>",
-				),
-				ui.Div("bg-gray-100 dark:bg-gray-800 p-3 rounded font-mono text-xs overflow-x-auto")(
-					`// Single component combines file input and preview
-form.ImageUpload("image").
-    Zone("Add Vehicle Photo", "Click to take or upload").
-    ZoneIcon("w-10 h-10 bg-gray-500 rounded-full p-2").
-    MaxSize("320px").
-    Required().
-    Render("VEHICLE PHOTO (OPTIONAL)")`,
-				),
-				ui.Div("text-gray-600 dark:text-gray-400 mt-2")(
-					"<strong>Alternative: Separate File and ImagePreview (still available):</strong>",
-				),
-				ui.Div("bg-gray-100 dark:bg-gray-800 p-3 rounded font-mono text-xs overflow-x-auto")(
-					`id := ui.RandomString(10)
-fileInput := form.File("image").
-    ID(id).
-    Zone("Add Vehicle Photo", "Click to take or upload").
-    ZoneIcon("w-10 h-10 bg-gray-500 rounded-full p-2").
-    Accept("image/*").
-    Required()
-fileInput.Render("VEHICLE PHOTO (OPTIONAL)")
-
-// Image preview component (reuses the file input ID)
-ui.ImagePreview(id).
-    MaxSize("320px").
-    Render()`,
 				),
 			)).Render(),
 	)

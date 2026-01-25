@@ -158,14 +158,21 @@ form.ImageUpload("image").
     Required().
     Render("Image")
 
-// With custom zone styling
+// With custom zone styling and icon
 form.ImageUpload("image").
     Zone("Add Vehicle Photo", "Click to take or upload").
-    ZoneIcon("w-10 h-10 bg-gray-500 rounded-full p-2 flex items-center justify-center").
+    ZoneIcon(ui.Icon("fa fa-image fa-3x")).  // Using Icon() component
     MaxSize("320px").
     ClassPreview("mt-4").
     Required().
     Render("VEHICLE PHOTO")
+
+// Or with CSS classes directly
+form.ImageUpload("image").
+    Zone("Add Image", "Click to upload").
+    ZoneIcon("w-10 h-10 bg-gray-500 rounded-full p-2 flex items-center justify-center").
+    MaxSize("320px").
+    Render("Image")
 ```
 
 **Key Features:**
@@ -177,7 +184,7 @@ form.ImageUpload("image").
 
 **ImageUpload Methods:**
 - `.Zone(title, hint)` - Enable dropzone mode with title and hint text
-- `.ZoneIcon(classes)` - Custom icon CSS classes for zone mode
+- `.ZoneIcon(html)` - Custom icon HTML for zone mode (e.g., `ui.Icon("fa fa-image")` or CSS classes)
 - `.ZoneContent(html)` - Completely custom HTML content for zone (overrides icon/title/hint)
 - `.ClassZone(classes...)` - Zone container CSS classes
 - `.MaxSize(size)` - Maximum image dimensions for preview (e.g., `"320px"`)

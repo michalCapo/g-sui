@@ -763,6 +763,8 @@ ctx.DownloadAs(&reader, "application/xlsx", "export.xlsx")
 ```
 
 ### File Uploads
+
+**Single File Upload:**
 ```go
 file, err := ctx.File("image")
 if err != nil {
@@ -782,6 +784,27 @@ if file == nil {
 
 // Save file
 os.WriteFile("uploads/"+file.Name, file.Data, 0644)
+```
+
+**Multiple File Upload:**
+```go
+files, err := ctx.Files("images")  // Returns []*FileUpload
+if err != nil {
+    ctx.Error("Failed to process files: " + err.Error())
+    return renderForm(ctx)
+}
+if len(files) == 0 {
+    ctx.Error("No files uploaded")
+    return renderForm(ctx)
+}
+
+// Process each file
+for _, file := range files {
+    // Validate and save each file
+    if strings.HasPrefix(file.ContentType, "image/") {
+        os.WriteFile("uploads/"+file.Name, file.Data, 0644)
+    }
+}
 ```
 
 ### Security Headers
@@ -2048,7 +2071,7 @@ ui.IFile("image").
 - `.If(condition)` - Conditional render
 - `.Form(id)` - Associate with form by ID
 
-**File Upload Handler:**
+**File Upload Handler (Single File):**
 
 ```go
 func uploadHandler(ctx *ui.Context) string {
@@ -2078,6 +2101,42 @@ func uploadHandler(ctx *ui.Context) string {
     os.WriteFile("uploads/"+file.Name, file.Data, 0644)
 
     ctx.Success("File uploaded successfully!")
+    return renderUploadForm(ctx)
+}
+```
+
+**File Upload Handler (Multiple Files):**
+
+```go
+func uploadMultipleHandler(ctx *ui.Context) string {
+    files, err := ctx.Files("images")  // Use .Multiple() on file input
+    if err != nil {
+        ctx.Error("Failed to process files: " + err.Error())
+        return renderUploadForm(ctx)
+    }
+    if len(files) == 0 {
+        ctx.Error("No files uploaded")
+        return renderUploadForm(ctx)
+    }
+
+    var savedCount int
+    for _, file := range files {
+        // Validate file type
+        if !strings.HasPrefix(file.ContentType, "image/") {
+            continue
+        }
+
+        // Validate file size (max 5MB)
+        if file.Size > 5*1024*1024 {
+            continue
+        }
+
+        // Save file
+        os.WriteFile("uploads/"+file.Name, file.Data, 0644)
+        savedCount++
+    }
+
+    ctx.Success(fmt.Sprintf("%d files uploaded successfully!", savedCount))
     return renderUploadForm(ctx)
 }
 ```
@@ -2156,14 +2215,21 @@ form.ImageUpload("image").
     Required().
     Render("Image")
 
-// With custom zone styling
+// With custom zone styling and icon
 form.ImageUpload("image").
     Zone("Add Vehicle Photo", "Click to take or upload").
-    ZoneIcon("w-10 h-10 bg-gray-500 rounded-full p-2 flex items-center justify-center").
+    ZoneIcon(ui.Icon("fa fa-image fa-3x")).  // Using Icon() component
     MaxSize("320px").
     ClassPreview("mt-4").
     Required().
     Render("VEHICLE PHOTO")
+
+// Or with CSS classes directly
+form.ImageUpload("image").
+    Zone("Add Image", "Click to upload").
+    ZoneIcon("w-10 h-10 bg-gray-500 rounded-full p-2 flex items-center justify-center").
+    MaxSize("320px").
+    Render("Image")
 ```
 
 **Key Features:**
@@ -2175,7 +2241,7 @@ form.ImageUpload("image").
 
 **ImageUpload Methods:**
 - `.Zone(title, hint)` - Enable dropzone mode with title and hint text
-- `.ZoneIcon(classes)` - Custom icon CSS classes for zone mode
+- `.ZoneIcon(html)` - Custom icon HTML for zone mode (e.g., `ui.Icon("fa fa-image")` or CSS classes)
 - `.ZoneContent(html)` - Completely custom HTML content for zone (overrides icon/title/hint)
 - `.ClassZone(classes...)` - Zone container CSS classes
 - `.MaxSize(size)` - Maximum image dimensions for preview (e.g., `"320px"`)

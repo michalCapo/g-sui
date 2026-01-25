@@ -103,6 +103,7 @@ ctx.DownloadAs(reader, "application/pdf", "document.pdf")  // Trigger file downl
 
 ### File Uploads
 
+**Single File:**
 ```go
 file, err := ctx.File("image")
 if err != nil {
@@ -122,6 +123,20 @@ if file == nil {
 
 // Save file
 os.WriteFile("uploads/"+file.Name, file.Data, 0644)
+```
+
+**Multiple Files:**
+```go
+files, err := ctx.Files("images")  // Returns []*FileUpload
+if err != nil {
+    ctx.Error("Failed to process files: " + err.Error())
+    return renderForm(ctx)
+}
+
+// Process each file
+for _, file := range files {
+    os.WriteFile("uploads/"+file.Name, file.Data, 0644)
+}
 ```
 
 ### Translations

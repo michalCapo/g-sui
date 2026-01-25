@@ -1207,44 +1207,44 @@ func (c *TImagePreview) Render() string {
 // TImageUpload represents a combined image upload component with built-in preview
 // It combines TFile functionality with TImagePreview for a single, image-specific component
 type TImageUpload struct {
-	target       Attr
-	name         string
-	form         string
-	class        string
-	classLabel   string
-	classInput   string
-	accept       string // defaults to "image/*"
-	multiple     bool
-	required     bool
-	disabled     bool
-	visible      bool
-	onchange     string
+	target     Attr
+	name       string
+	form       string
+	class      string
+	classLabel string
+	classInput string
+	accept     string // defaults to "image/*"
+	multiple   bool
+	required   bool
+	disabled   bool
+	visible    bool
+	onchange   string
 	// Zone mode fields
-	zoneEnabled  bool
-	zoneIcon     string
-	zoneTitle    string
-	zoneHint     string
-	zoneContent  string
-	classZone    string
+	zoneEnabled bool
+	zoneIcon    string
+	zoneTitle   string
+	zoneHint    string
+	zoneContent string
+	classZone   string
 	// Preview fields (from TImagePreview)
-	maxSize      string // e.g., "320px"
-	classPreview string
-	previewID    string // Container ID for preview (deprecated, kept for compatibility)
-	zoneUploadID string // ID for upload zone container
+	maxSize       string // e.g., "320px"
+	classPreview  string
+	previewID     string // Container ID for preview (deprecated, kept for compatibility)
+	zoneUploadID  string // ID for upload zone container
 	zonePreviewID string // ID for preview zone container
-	Render       func(text string) string
+	Render        func(text string) string
 }
 
 // IImageUpload creates a new image upload component with default accept="image/*"
 func IImageUpload(name string) *TImageUpload {
 	c := &TImageUpload{
-		target:       Target(),
-		name:         name,
-		accept:       "image/*",
-		maxSize:      "320px",
-		visible:      true,
-		previewID:    Target().ID,
-		zoneUploadID: Target().ID,
+		target:        Target(),
+		name:          name,
+		accept:        "image/*",
+		maxSize:       "320px",
+		visible:       true,
+		previewID:     Target().ID,
+		zoneUploadID:  Target().ID,
 		zonePreviewID: Target().ID,
 	}
 
@@ -1304,7 +1304,7 @@ func IImageUpload(name string) *TImageUpload {
 			// Build default content with icon, title, hint
 			var iconHTML string
 			if c.zoneIcon != "" {
-				iconHTML = Div(Classes("flex items-center justify-center", c.zoneIcon))()
+				iconHTML = Div(Classes("flex items-center justify-center"))(c.zoneIcon)
 			} else {
 				// Default upload icon (simple circle with arrow)
 				iconHTML = Div("w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center")(
@@ -1362,8 +1362,8 @@ func IImageUpload(name string) *TImageUpload {
 		changeBtnHTML := El("button",
 			"mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors",
 			Attr{
-				ID:    changeButtonID,
-				Type:  "button",
+				ID:   changeButtonID,
+				Type: "button",
 			},
 		)(Text("Change Image"))
 

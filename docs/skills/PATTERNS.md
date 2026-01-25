@@ -346,6 +346,7 @@ ui.ImagePreview(id).
 
 ### File Upload Handler
 
+**Single File:**
 ```go
 func uploadHandler(ctx *ui.Context) string {
     file, err := ctx.File("image")
@@ -374,6 +375,27 @@ func uploadHandler(ctx *ui.Context) string {
     os.WriteFile("uploads/"+file.Name, file.Data, 0644)
 
     ctx.Success("File uploaded successfully!")
+    return renderUploadForm(ctx)
+}
+```
+
+**Multiple Files:**
+```go
+func uploadMultipleHandler(ctx *ui.Context) string {
+    files, err := ctx.Files("images")  // Use .Multiple() on file input
+    if err != nil {
+        ctx.Error("Failed to process files: " + err.Error())
+        return renderUploadForm(ctx)
+    }
+
+    for _, file := range files {
+        // Validate and save each file
+        if strings.HasPrefix(file.ContentType, "image/") && file.Size <= 5*1024*1024 {
+            os.WriteFile("uploads/"+file.Name, file.Data, 0644)
+        }
+    }
+
+    ctx.Success("Files uploaded successfully!")
     return renderUploadForm(ctx)
 }
 ```
