@@ -41,15 +41,6 @@ var (
 	reRemoveChars  = regexp.MustCompile(`[*()\[\]]`)
 )
 
-// generateUUID generates a simple UUID v4-like string
-func generateUUID() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	b[6] = (b[6] & 0x0f) | 0x40 // Version 4
-	b[8] = (b[8] & 0x3f) | 0x80 // Variant 10
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-}
-
 type BodyItem struct {
 	Name        string `json:"name"`
 	Value       string `json:"value"`
@@ -1366,7 +1357,6 @@ type PWAConfig struct {
 
 type Route struct {
 	Path       string
-	UUID       string
 	Title      string
 	Handler    *Callable
 	Pattern    string   // original pattern like "/vehicles/edit/{id}"
@@ -1389,7 +1379,6 @@ type App struct {
 	wsClients     map[*websocket.Conn]*wsState
 	assetHandlers map[string]http.Handler
 	routes        map[string]*Route // path → Route
-	routesByID    map[string]*Route // uuid → Route
 	routesMu      sync.RWMutex      // mutex for route maps
 	layout        Callable          // persistent layout function
 }
@@ -1511,7 +1500,6 @@ func (app *App) matchRoute(path string) (*Route, map[string]string) {
 // Page registers a route with a title and handler.
 // Usage: Page("/", "Page Title", handler)
 // Supports path parameters: Page("/vehicles/edit/{id}", "Edit Vehicle", handler)
-// Each page is assigned a UUID internally for client-side routing.
 func (app *App) Page(path string, title string, handler Callable) {
 	if path == "" {
 		panic("Page path cannot be empty")
@@ -1528,16 +1516,12 @@ func (app *App) Page(path string, title string, handler Callable) {
 		panic(fmt.Sprintf("Page path already registered: %s", path))
 	}
 
-	// Generate UUID for this route
-	uuid := generateUUID()
-
 	// Parse route pattern to extract segments and parameters
 	segments, paramNames, hasParams := parseRoutePattern(path)
 
 	// Create route
 	route := &Route{
 		Path:       path,
-		UUID:       uuid,
 		Title:      title,
 		Handler:    &handler,
 		Pattern:    path,
@@ -1546,9 +1530,8 @@ func (app *App) Page(path string, title string, handler Callable) {
 		HasParams:  hasParams,
 	}
 
-	// Store in both maps
+	// Store route
 	app.routes[path] = route
-	app.routesByID[uuid] = route
 }
 
 // Debug enables or disables server debug logging.
@@ -1890,10 +1873,8 @@ func (app *App) Listen(port string) {
 			}
 		}
 
-		// Handle /__page/{uuid} endpoint for SPA routing
-		if strings.HasPrefix(value, "/__page/") && r.Method == "POST" {
-			uuid := strings.TrimPrefix(value, "/__page/")
-
+		// Handle POST requests for SPA routing (fetch page content as JSON)
+		if r.Method == "POST" {
 			// Try to get actual path from request body or query string
 			var actualPath string
 			if r.Body != nil {
@@ -1905,9 +1886,14 @@ func (app *App) Listen(port string) {
 				}
 			}
 
-			// Fallback: try query parameter
+			// Fallback: use the path from URL if not in body
 			if actualPath == "" {
 				actualPath = r.URL.Query().Get("path")
+			}
+
+			// If still empty, use the URL path
+			if actualPath == "" {
+				actualPath = value
 			}
 
 			// Parse query parameters from actualPath and strip for route matching
@@ -1924,25 +1910,32 @@ func (app *App) Listen(port string) {
 				}
 			}
 
-			var route *Route
-			var pathParams map[string]string
-
-			if pathForMatching != "" {
-				// Use pattern matching to find route and extract parameters
-				route, pathParams = app.matchRoute(pathForMatching)
-			} else {
-				// Fallback to UUID lookup for backward compatibility
-				app.routesMu.RLock()
-				var exists bool
-				route, exists = app.routesByID[uuid]
-				app.routesMu.RUnlock()
-				if !exists {
-					http.Error(w, "Page not found", http.StatusNotFound)
-					return
-				}
-			}
+			// Use pattern matching to find route and extract parameters
+			route, pathParams := app.matchRoute(pathForMatching)
 
 			if route == nil {
+				// Not a page route, check for special routes (manifest, service worker)
+				mu.Lock()
+				for found, path := range stored {
+					if path == value {
+						mu.Unlock()
+						ctx := makeContext(app, r, w)
+						defer func() {
+							if rec := recover(); rec != nil {
+								log.Println("handler panic recovered:", rec)
+								w.WriteHeader(http.StatusInternalServerError)
+								w.Write([]byte(devErrorPage()))
+							}
+						}()
+						html := (*found)(ctx)
+						if len(html) > 0 {
+							w.Write([]byte(html))
+						}
+						return
+					}
+				}
+				mu.Unlock()
+
 				http.Error(w, "Page not found", http.StatusNotFound)
 				return
 			}
@@ -1972,7 +1965,7 @@ func (app *App) Listen(port string) {
 				}
 			}()
 
-			app.debugf("page fetch %s -> %s", route.UUID, route.Path)
+			app.debugf("page fetch %s", route.Path)
 			html := (*route.Handler)(ctx)
 			if len(ctx.append) > 0 {
 				html += strings.Join(ctx.append, "")
@@ -2028,20 +2021,20 @@ func (app *App) Listen(port string) {
 				// Render layout shell
 				layoutHTML := app.layout(ctx)
 
-				// Build route manifest
-				app.routesMu.RLock()
-				routeManifest := make(map[string]interface{})
-				for path, route := range app.routes {
-					if route.HasParams {
-						routeManifest[path] = map[string]interface{}{
-							"uuid":    route.UUID,
-							"pattern": true,
-						}
-					} else {
-						routeManifest[path] = route.UUID
+			// Build route manifest
+			app.routesMu.RLock()
+			routeManifest := make(map[string]interface{})
+			for path, route := range app.routes {
+				if route.HasParams {
+					routeManifest[path] = map[string]interface{}{
+						"path":    path,
+						"pattern": true,
 					}
+				} else {
+					routeManifest[path] = path
 				}
-				app.routesMu.RUnlock()
+			}
+			app.routesMu.RUnlock()
 
 				manifestJSON, err := json.Marshal(routeManifest)
 				if err != nil {
@@ -2070,7 +2063,7 @@ func (app *App) Listen(port string) {
 		}
 
 		// Callable actions are now handled via WebSocket, not HTTP POST
-		// HTTP POST is only used for SPA routing (/__page/{uuid})
+		// HTTP POST is used for SPA routing to fetch page content as JSON
 
 		// Serve static handlers (manifest, service worker) via GET
 		if r.Method == "GET" && (value == "/manifest.webmanifest" || value == "/sw.js") {
@@ -3449,7 +3442,7 @@ var __router = Trim(`
                 return;
             }
             
-            var uuid = typeof routeInfo === 'string' ? routeInfo : routeInfo.uuid;
+            var routePath = typeof routeInfo === 'string' ? routeInfo : routeInfo.path;
             
             var L = null;
             var loaderTimer = setTimeout(function() {
@@ -3461,7 +3454,7 @@ var __router = Trim(`
             // Send actual path to server for parameter extraction
             // Include query string in the path sent to server
             var pathToSend = pathname + query;
-            fetch('/__page/' + uuid, {
+            fetch(routePath, {
                 method: 'POST',
                 body: JSON.stringify({path: pathToSend}),
                 headers: {'Content-Type': 'application/json'}
@@ -4191,7 +4184,6 @@ func MakeApp(defaultLanguage string) *App {
 		DebugEnabled: false,
 		sessions:     make(map[string]*sessRec),
 		routes:       make(map[string]*Route),
-		routesByID:   make(map[string]*Route),
 	}
 }
 

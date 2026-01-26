@@ -241,21 +241,21 @@ func TestRouteManifest_WithPatterns(t *testing.T) {
 	for path, route := range app.routes {
 		if route.HasParams {
 			manifest[path] = map[string]interface{}{
-				"uuid":    route.UUID,
+				"path":    path,
 				"pattern": true,
 			}
 		} else {
-			manifest[path] = route.UUID
+			manifest[path] = path
 		}
 	}
 	app.routesMu.RUnlock()
 
-	// Check exact routes are strings
-	if uuid, ok := manifest["/"].(string); !ok || uuid == "" {
-		t.Error("Exact route should be UUID string")
+	// Check exact routes are strings (paths)
+	if path, ok := manifest["/"].(string); !ok || path == "" {
+		t.Error("Exact route should be path string")
 	}
-	if uuid, ok := manifest["/vehicles"].(string); !ok || uuid == "" {
-		t.Error("Exact route should be UUID string")
+	if path, ok := manifest["/vehicles"].(string); !ok || path == "" {
+		t.Error("Exact route should be path string")
 	}
 
 	// Check pattern route is object
@@ -263,8 +263,8 @@ func TestRouteManifest_WithPatterns(t *testing.T) {
 	if !ok {
 		t.Fatal("Pattern route should be object")
 	}
-	if patternRoute["uuid"] == "" {
-		t.Error("Pattern route should have uuid")
+	if patternRoute["path"] == "" {
+		t.Error("Pattern route should have path")
 	}
 	if patternRoute["pattern"] != true {
 		t.Error("Pattern route should have pattern = true")
