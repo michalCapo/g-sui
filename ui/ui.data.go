@@ -709,7 +709,7 @@ func (collate *collate[T]) renderEmpty(ctx *Context, result *TCollateResult[T]) 
 
 	icon := collate.IconEmpty
 	if icon == "" {
-		icon = "fa fa-inbox" // Generic empty state icon
+		icon = "inbox" // Generic empty state icon
 	}
 
 	title := collate.TextEmpty
@@ -733,7 +733,7 @@ func (collate *collate[T]) renderEmpty(ctx *Context, result *TCollateResult[T]) 
 				Class("rounded-lg px-6 h-12 font-bold").
 				Color(Black).
 				Click(collate.OnActionEmpty(ctx, collate.Target)).
-				Render(IconLeft("fa fa-plus", collate.ActionEmpty)),
+				Render(IconLeft("add", collate.ActionEmpty)),
 		)
 	}
 
@@ -770,7 +770,7 @@ func Filtering[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				Button().
 					Class("rounded-full w-9 h-9 border bg-white hover:bg-gray-50 flex items-center justify-center").
 					Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
-					Render(Icon("fa fa-fw fa-times")),
+					Render(Icon("close")),
 			),
 
 			Form("flex flex-col", ctx.Submit(collate.onSearch).Replace(collate.Target))(
@@ -862,12 +862,16 @@ for(var i=0;i<allBtns.length;i++){
 	var dir=(f.toLowerCase()===field.toLowerCase())?newDir:'';
 	
 	if(ic){
+		// Ensure material-icons class is present
+		if(!ic.classList.contains('material-icons')){
+			ic.classList.add('material-icons');
+		}
 		if(dir==='asc'){
-			ic.className='fa fa-fw fa-sort-amount-asc';
+			ic.textContent='arrow_upward';
 		}else if(dir==='desc'){
-			ic.className='fa fa-fw fa-sort-amount-desc';
+			ic.textContent='arrow_downward';
 		}else{
-			ic.className='fa fa-fw fa-sort';
+			ic.textContent='sort';
 		}
 	}
 	
@@ -886,11 +890,11 @@ for(var i=0;i<allBtns.length;i++){
 									buttonClass = activeClass
 								}
 
-								iconClass := "fa fa-fw fa-sort"
+								iconName := "sort"
 								if direction == "asc" {
-									iconClass = "fa fa-fw fa-sort-amount-asc"
+									iconName = "arrow_upward"
 								} else if direction == "desc" {
-									iconClass = "fa fa-fw fa-sort-amount-desc"
+									iconName = "arrow_downward"
 								}
 
 								return Div("", Attr{ID: btnID})(
@@ -899,7 +903,7 @@ for(var i=0;i<allBtns.length;i++){
 										Click(jsUpdateOrder).
 										Render(
 											Div("flex gap-2 items-center")(
-												I(iconClass, Attr{ID: iconID})(),
+												Icon(iconName, Attr{ID: iconID}),
 												sort.Text,
 											),
 										),
@@ -979,13 +983,13 @@ for(var i=0;i<allBtns.length;i++){
 						Color(White).
 						Class("flex items-center gap-2 rounded-full px-4 h-10 border border-gray-300 bg-white hover:bg-gray-50").
 						Click(ctx.Call(collate.onReset).Replace(collate.Target)).
-						Render(IconLeft("fa fa-fw fa-undo", "Reset")),
+						Render(IconLeft("undo", "Reset")),
 
 					Button().
 						Submit().
 						Class("flex items-center gap-2 rounded-full px-4 h-10").
 						Color(collate.Colors.Button).
-						Render(IconLeft("fa fa-fw fa-check", "Apply")),
+						Render(IconLeft("check", "Apply")),
 				),
 			),
 		),
@@ -1005,7 +1009,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 					Submit().
 					Class("rounded shadow").
 					Color(collate.Colors.Button).
-					Render(IconLeft("fa fa-download", "Export")),
+					Render(IconLeft("download", "Export")),
 			)
 		}),
 
@@ -1033,7 +1037,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 							Color(GrayOutline).
 							Class("absolute left-2 top-1/2 -translate-y-1/2 rounded-full w-8 h-8 flex items-center justify-center").
 							Click(`var el=event.target;while(el&&el.tagName!=='FORM'&&el.tagName!=='BODY'){if(el.tagName==='FORM')break;el=el.parentElement;}if(!el||el.tagName!=='FORM')return;var searchInput=el.querySelector('input[name="Search"]');var searchHidden=el.querySelector('input[type="hidden"][name="Search"]');if(searchInput)searchInput.value='';if(searchHidden)searchHidden.value='';el.requestSubmit();`).
-							Render(Icon("fa fa-fw fa-times"))
+							Render(Icon("close"))
 					}),
 
 					// Search button on the right
@@ -1041,7 +1045,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 						Submit().
 						Color(GrayOutline).
 						Class("absolute right-2 top-1/2 -translate-y-1/2 rounded-full w-8 h-8 flex items-center justify-center").
-						Render(Icon("fa fa-fw fa-search")),
+						Render(Icon("search")),
 				),
 			)
 		}),
@@ -1052,7 +1056,7 @@ func Header[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 				Class("rounded-r shadow").
 				Color(collate.Colors.Button).
 				Click(fmt.Sprintf("window.document.getElementById('%s')?.classList.toggle('hidden');", collate.TargetFilter.ID)).
-				Render(IconLeft("fa fa-fw fa-sliders", "Filter"))
+				Render(IconLeft("tune", "Filter"))
 		}),
 	)
 }
@@ -1102,9 +1106,9 @@ func Sorting[T any](ctx *Context, collate *collate[T], query *TQuery) string {
 					Color(color).
 					Render(
 						Div("flex gap-2 items-center")(
-							Iff(direction == "asc")(Icon("fa fa-fw fa-sort-amount-asc")),
-							Iff(direction == "desc")(Icon("fa fa-fw fa-sort-amount-desc")),
-							Iff(direction == "")(Icon("fa fa-fw fa-sort")),
+							Iff(direction == "asc")(Icon("arrow_upward")),
+							Iff(direction == "desc")(Icon("arrow_downward")),
+							Iff(direction == "")(Icon("sort")),
 							sort.Text,
 						),
 					),
@@ -1138,7 +1142,7 @@ func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T])
 				Disabled(size == 0 || size <= int(collate.Init.Limit)).
 				Click(ctx.Call(collate.onReset).Replace(collate.Target)).
 				Render(
-					Icon("fa fa-fw fa-undo"),
+					Icon("undo"),
 				),
 
 			// load more - use form to properly preserve filter state
@@ -1151,7 +1155,7 @@ func Paging[T any](ctx *Context, collate *collate[T], result *TCollateResult[T])
 					Disabled(size >= int(result.Filtered)).
 					Render(
 						Div("flex gap-2 items-center")(
-							Icon("fa fa-arrow-down"), more,
+							Icon("arrow_downward"), more,
 						),
 					),
 			),

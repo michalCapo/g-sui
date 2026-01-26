@@ -184,7 +184,7 @@ form.ImageUpload("image").
 
 **ImageUpload Methods:**
 - `.Zone(title, hint)` - Enable dropzone mode with title and hint text
-- `.ZoneIcon(html)` - Custom icon HTML for zone mode (e.g., `ui.Icon("fa fa-image")` or CSS classes)
+- `.ZoneIcon(html)` - Custom icon HTML for zone mode (e.g., `ui.Icon("image")` or CSS classes)
 - `.ZoneContent(html)` - Completely custom HTML content for zone (overrides icon/title/hint)
 - `.ClassZone(classes...)` - Zone container CSS classes
 - `.MaxSize(size)` - Maximum image dimensions for preview (e.g., `"320px"`)
@@ -510,18 +510,21 @@ ui.Label(&target).Required(true).Render("Required")
 ui.Label(&target).Class("text-lg").Render("Styled")
 ```
 
-### Icons (FontAwesome)
+### Icons (Material Icons)
 
 ```go
-// Include in app.HTMLHead
+// Include Material Icons and Google Fonts in app.HTMLHead
 app.HTMLHead = append(app.HTMLHead,
-    `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">`,
+    `<link rel="preconnect" href="https://fonts.googleapis.com">`,
+    `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>`,
+    `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">`,
+    `<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">`,
 )
 
-ui.Icon("fa fa-check")                       // <i class="fa fa-check"></i>
-ui.Icon2("fa fa-check", "text-green-500")    // With classes
-ui.IconLeft("fa fa-arrow-left", "Back")      // Icon + text
-ui.IconRight("Next", "fa fa-arrow-right")    // Text + icon
+ui.Icon("check")                       // <span class="material-icons">check</span>
+ui.Icon2("check", "text-green-500")    // With classes
+ui.IconLeft("arrow_back", "Back")      // Icon + text
+ui.IconRight("Next", "arrow_forward")  // Text + icon
 ```
 
 ## Theme Switcher

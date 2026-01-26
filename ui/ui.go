@@ -518,9 +518,118 @@ func SkeletonComponentBlock() string { return Attr{}.SkeletonComponent() }
 func SkeletonPageBlock() string      { return Attr{}.SkeletonPage() }
 func SkeletonFormBlock() string      { return Attr{}.SkeletonForm() }
 
+// faToMaterialIcon converts Font Awesome icon names to Material Icons names
+func faToMaterialIcon(faName string) string {
+	// Remove "fa fa-" prefix and common modifiers
+	name := strings.TrimPrefix(faName, "fa fa-")
+	name = strings.TrimPrefix(name, "fa-")
+	name = strings.ReplaceAll(name, "fa-fw ", "")
+	name = strings.TrimSpace(name)
+	
+	// Map Font Awesome icons to Material Icons
+	iconMap := map[string]string{
+		"check":              "check",
+		"arrow-left":         "arrow_back",
+		"arrow-right":        "arrow_forward",
+		"arrow-up":           "arrow_upward",
+		"arrow-down":         "arrow_downward",
+		"plus":               "add",
+		"times":              "close",
+		"search":             "search",
+		"sort":               "sort",
+		"sort-amount-asc":    "arrow_upward",
+		"sort-amount-desc":    "arrow_downward",
+		"undo":               "undo",
+		"download":           "download",
+		"sliders":            "tune",
+		"inbox":              "inbox",
+		"image":              "image",
+		"home":               "home",
+		"user":               "person",
+		"chevron-left":       "chevron_left",
+		"chevron-right":      "chevron_right",
+	}
+	
+	// Check if we have a mapping
+	if mapped, ok := iconMap[name]; ok {
+		return mapped
+	}
+	
+	// If no mapping found, try to use the name directly (might already be a Material Icon name)
+	// Convert kebab-case to snake_case for Material Icons
+	name = strings.ReplaceAll(name, "-", "_")
+	return name
+}
+
+// parseIconName extracts the icon name from a string that may contain CSS classes
+func parseIconName(input string) (iconName string, extraClasses string) {
+	parts := strings.Fields(input)
+	var iconParts []string
+	var classParts []string
+	foundIconPrefix := false
+	
+	for _, part := range parts {
+		if strings.HasPrefix(part, "fa") || strings.HasPrefix(part, "material-icons") {
+			iconParts = append(iconParts, part)
+			foundIconPrefix = true
+		} else if foundIconPrefix {
+			// After finding icon prefix, treat remaining as classes
+			classParts = append(classParts, part)
+		} else {
+			// Before finding icon prefix, treat as icon name (Material Icon name)
+			iconParts = append(iconParts, part)
+		}
+	}
+	
+	iconName = strings.Join(iconParts, " ")
+	extraClasses = strings.Join(classParts, " ")
+	return iconName, extraClasses
+}
+
 // Icon functions for creating icon elements and layouts
+// Icon accepts either Material Icon names (e.g., "check", "arrow_back") or Font Awesome format (e.g., "fa fa-check")
+// For backward compatibility, Font Awesome format is automatically converted to Material Icons
 func Icon(css string, attr ...Attr) string {
-	return Div(css, attr...)()
+	iconName, extraClasses := parseIconName(css)
+	
+	// Convert Font Awesome format to Material Icon name
+	materialIconName := faToMaterialIcon(iconName)
+	
+	// Build class string
+	classes := "material-icons"
+	if extraClasses != "" {
+		classes += " " + extraClasses
+	}
+	
+	// Merge extra classes from attributes
+	if len(attr) > 0 && attr[0].Class != "" {
+		classes += " " + attr[0].Class
+		attr[0].Class = classes
+	} else if len(attr) > 0 {
+		attr[0].Class = classes
+	} else {
+		attr = append(attr, Attr{Class: classes})
+	}
+	
+	// Generate attributes string
+	attrsStr := attributes(attr...)
+	if attrsStr != "" {
+		attrsStr = " " + attrsStr
+	}
+	
+	// Generate <span class="material-icons">icon_name</span>
+	return fmt.Sprintf(`<span%s>%s</span>`, 
+		attrsStr,
+		html.EscapeString(materialIconName))
+}
+
+// Icon2 creates an icon with additional CSS classes
+func Icon2(iconName string, extraClasses string) string {
+	fullClasses := iconName
+	if extraClasses != "" {
+		fullClasses += " " + extraClasses
+	}
+	return Icon(fullClasses)
 }
 
 func IconStart(css string, text string) string {

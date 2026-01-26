@@ -116,7 +116,7 @@ func renderImageUploadForm(ctx *ui.Context, data *imageUploadData, err *error) s
 				// Image upload component with built-in preview (combined File + ImagePreview)
 				form.ImageUpload("image").
 					Zone("", "Click to take or upload").
-					ZoneIcon(ui.Icon("fa fa-image fa-3x")).
+					ZoneIcon(ui.Icon("image", ui.Attr{Class: "text-5xl"})).
 					MaxSize("320px").
 					Required().
 					Render("Image"),

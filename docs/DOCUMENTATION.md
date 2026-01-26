@@ -23,7 +23,7 @@ This document combines the LLM Reference Guide and Architecture Documentation fo
 16. [Data Collation (Search, Sort, Filter, Pagination, Excel Export)](#data-collation-search-sort-filter-pagination-excel-export)
 17. [Stateful Components](#stateful-components)
 18. [Labels](#labels)
-19. [Icons (FontAwesome)](#icons-fontawesome)
+19. [Icons (Material Icons)](#icons-material-icons)
 20. [CAPTCHA Components](#captcha-components)
 21. [Theme Switcher](#theme-switcher)
 22. [Hidden Fields](#hidden-fields)
@@ -1215,20 +1215,27 @@ ui.Label(nil).Render("Label without target")  // No `for` attribute
 
 ---
 
-## Icons (FontAwesome)
+## Icons (Material Icons)
 
 ```go
-// Include FontAwesome in HTMLHead
+// Include Material Icons and Google Fonts in HTMLHead
 app.HTMLHead = append(app.HTMLHead,
-    `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">`,
+    `<link rel="preconnect" href="https://fonts.googleapis.com">`,
+    `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>`,
+    `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">`,
+    `<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">`,
 )
 
 // Icon helpers
-ui.Icon("fa fa-check")                       // <i class="fa fa-check"></i>
-ui.Icon2("fa fa-check", "text-green-500")    // Icon with extra classes
-ui.IconLeft("fa fa-arrow-left", "Back")      // Icon + text (icon on left)
-ui.IconRight("Next", "fa fa-arrow-right")    // Text + icon (icon on right)
-ui.IconStart("fa fa-download", "Download")   // Icon at start with gap
+ui.Icon("check")                             // <span class="material-icons">check</span>
+ui.Icon2("check", "text-green-500")         // Icon with extra classes
+ui.IconLeft("arrow_back", "Back")            // Icon + text (icon on left)
+ui.IconRight("Next", "arrow_forward")        // Text + icon (icon on right)
+ui.IconStart("download", "Download")         // Icon at start with gap
+
+// Common Material Icons:
+// check, arrow_back, arrow_forward, add, close, search, sort, arrow_upward, 
+// arrow_downward, undo, download, tune, inbox, image, home, person, etc.
 ```
 
 ---
@@ -1901,7 +1908,7 @@ ui/
 | `ui.check.go` | ~95 | Checkbox component |
 | `ui.radio.go` | ~330 | Radio button and radio button group |
 | `ui.select.go` | ~163 | Select dropdown component |
-| `ui.icon.go` | ~47 | Icon helpers (FontAwesome) |
+| `ui.icon.go` | ~47 | Icon helpers (Material Icons) |
 | `ui.captcha.go` | ~108 | Google reCAPTCHA integration |
 | `ui.captcha2.go` | ~487 | Image CAPTCHA generation and validation |
 | `ui.captcha3.go` | ~455 | Tile puzzle CAPTCHA |
@@ -2218,7 +2225,7 @@ form.ImageUpload("image").
 // With custom zone styling and icon
 form.ImageUpload("image").
     Zone("Add Vehicle Photo", "Click to take or upload").
-    ZoneIcon(ui.Icon("fa fa-image fa-3x")).  // Using Icon() component
+    ZoneIcon(ui.Icon("image", ui.Attr{Class: "text-5xl"})).  // Using Icon() component
     MaxSize("320px").
     ClassPreview("mt-4").
     Required().
@@ -2241,7 +2248,7 @@ form.ImageUpload("image").
 
 **ImageUpload Methods:**
 - `.Zone(title, hint)` - Enable dropzone mode with title and hint text
-- `.ZoneIcon(html)` - Custom icon HTML for zone mode (e.g., `ui.Icon("fa fa-image")` or CSS classes)
+- `.ZoneIcon(html)` - Custom icon HTML for zone mode (e.g., `ui.Icon("image")` or CSS classes)
 - `.ZoneContent(html)` - Completely custom HTML content for zone (overrides icon/title/hint)
 - `.ClassZone(classes...)` - Zone container CSS classes
 - `.MaxSize(size)` - Maximum image dimensions for preview (e.g., `"320px"`)
@@ -2372,10 +2379,10 @@ ui.TSelect("Country", &data).
 ### Icon Helpers
 
 ```go
-ui.Icon("fa fa-check")                    // <i class="fa fa-check"></i>
-ui.Icon2("fa fa-check", "text-green-500") // Icon with classes
-ui.IconLeft("fa fa-arrow-left", "Back")    // Icon + text
-ui.IconRight("Next", "fa fa-arrow-right")  // Text + icon
+ui.Icon("check")                    // <span class="material-icons">check</span>
+ui.Icon2("check", "text-green-500") // Icon with classes
+ui.IconLeft("arrow_back", "Back")    // Icon + text
+ui.IconRight("Next", "arrow_forward")  // Text + icon
 ui.IconStart("fa fa-download", "Download") // Icon with gap
 ```
 

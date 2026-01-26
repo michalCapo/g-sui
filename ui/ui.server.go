@@ -2050,6 +2050,8 @@ func (app *App) Listen(port string) {
 					fmt.Sprintf(`<title>%s</title>`, route.Title),
 				}
 				head = append(head, app.HTMLHead...)
+				// Ensure Material Icons CSS is applied
+				head = append(head, `<style>.material-icons{font-family:'Material Icons';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}</style>`)
 
 				html := app.HTMLBody("")
 				html = strings.ReplaceAll(html, "__lang__", app.Lanugage)
@@ -2965,6 +2967,8 @@ func (app *App) HTML(title string, class string, body ...string) string {
 	}
 
 	head = append(head, app.HTMLHead...)
+	// Ensure Material Icons CSS is applied
+	head = append(head, `<style>.material-icons{font-family:'Material Icons';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}</style>`)
 
 	html := app.HTMLBody(class)
 	html = strings.ReplaceAll(html, "__lang__", app.Lanugage)

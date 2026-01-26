@@ -10,21 +10,23 @@ import (
 // ============================================================================
 
 func TestIcon_BasicRendering(t *testing.T) {
-	html := Icon("fa fa-home")
+	html := Icon("home")
 
-	// Verify div element
-	assertContains(t, html, `<div`)
-	assertContains(t, html, `</div>`)
+	// Verify span element
+	assertContains(t, html, `<span`)
+	assertContains(t, html, `</span>`)
 
-	// Verify CSS class is included
-	assertContains(t, html, `fa fa-home`)
+	// Verify Material Icons class and icon name
+	assertContains(t, html, `material-icons`)
+	assertContains(t, html, `home`)
 }
 
 func TestIcon_WithAttributes(t *testing.T) {
-	html := Icon("fa fa-user", Attr{ID: "user-icon", Title: "User"})
+	html := Icon("person", Attr{ID: "user-icon", Title: "User"})
 
-	// Should have the icon class
-	assertContains(t, html, `fa fa-user`)
+	// Should have Material Icons class and icon name
+	assertContains(t, html, `material-icons`)
+	assertContains(t, html, `person`)
 
 	// Should have ID attribute
 	assertContains(t, html, `id="user-icon"`)
@@ -36,8 +38,9 @@ func TestIcon_WithAttributes(t *testing.T) {
 func TestIcon_EmptyClass(t *testing.T) {
 	html := Icon("")
 
-	// Should still render div
-	assertContains(t, html, `<div`)
+	// Should still render span
+	assertContains(t, html, `<span`)
+	assertContains(t, html, `material-icons`)
 }
 
 // ============================================================================
@@ -45,10 +48,11 @@ func TestIcon_EmptyClass(t *testing.T) {
 // ============================================================================
 
 func TestIconStart_Layout(t *testing.T) {
-	html := IconStart("fa fa-home", "Home")
+	html := IconStart("home", "Home")
 
-	// Should have icon class
-	assertContains(t, html, `fa fa-home`)
+	// Should have Material Icons class and icon name
+	assertContains(t, html, `material-icons`)
+	assertContains(t, html, `home`)
 
 	// Should have text
 	assertContains(t, html, `Home`)
@@ -58,16 +62,16 @@ func TestIconStart_Layout(t *testing.T) {
 }
 
 func TestIconStart_WithSpaces(t *testing.T) {
-	html := IconStart("fa fa-arrow-left", "Go Back")
+	html := IconStart("arrow_back", "Go Back")
 
-	assertContains(t, html, `fa fa-arrow-left`)
+	assertContains(t, html, `arrow_back`)
 	assertContains(t, html, `Go Back`)
 }
 
 func TestIconStart_SpecialCharacters(t *testing.T) {
-	html := IconStart("fa fa-icon", "Test & \"More\"")
+	html := IconStart("settings", "Test & \"More\"")
 
-	assertContains(t, html, `fa fa-icon`)
+	assertContains(t, html, `settings`)
 	assertContains(t, html, `Test`)
 }
 
@@ -76,10 +80,11 @@ func TestIconStart_SpecialCharacters(t *testing.T) {
 // ============================================================================
 
 func TestIconLeft_Layout(t *testing.T) {
-	html := IconLeft("fa fa-arrow-left", "Back")
+	html := IconLeft("arrow_back", "Back")
 
-	// Should have icon class
-	assertContains(t, html, `fa fa-arrow-left`)
+	// Should have Material Icons class and icon name
+	assertContains(t, html, `material-icons`)
+	assertContains(t, html, `arrow_back`)
 
 	// Should have text
 	assertContains(t, html, `Back`)
@@ -89,15 +94,15 @@ func TestIconLeft_Layout(t *testing.T) {
 }
 
 func TestIconLeft_Structure(t *testing.T) {
-	html := IconLeft("fa fa-chevron-left", "Previous")
+	html := IconLeft("chevron_left", "Previous")
 
 	// IconLeft layout: Flex1 - Icon - Text - Flex1
 	// This means icon comes before the text
-	iconPos := strings.Index(html, `fa fa-chevron-left`)
+	iconPos := strings.Index(html, `chevron_left`)
 	textPos := strings.Index(html, `Previous`)
 
 	if iconPos == -1 {
-		t.Error("Icon class not found")
+		t.Error("Icon name not found")
 	}
 
 	if textPos == -1 {
@@ -115,10 +120,11 @@ func TestIconLeft_Structure(t *testing.T) {
 // ============================================================================
 
 func TestIconRight_Layout(t *testing.T) {
-	html := IconRight("fa fa-arrow-right", "Next")
+	html := IconRight("arrow_forward", "Next")
 
-	// Should have icon class
-	assertContains(t, html, `fa fa-arrow-right`)
+	// Should have Material Icons class and icon name
+	assertContains(t, html, `material-icons`)
+	assertContains(t, html, `arrow_forward`)
 
 	// Should have text
 	assertContains(t, html, `Next`)
@@ -128,15 +134,15 @@ func TestIconRight_Layout(t *testing.T) {
 }
 
 func TestIconRight_Structure(t *testing.T) {
-	html := IconRight("fa fa-chevron-right", "Continue")
+	html := IconRight("chevron_right", "Continue")
 
 	// IconRight layout: Flex1 - Text - Icon - Flex1
 	// This means text comes before the icon
-	iconPos := strings.Index(html, `fa fa-chevron-right`)
+	iconPos := strings.Index(html, `chevron_right`)
 	textPos := strings.Index(html, `Continue`)
 
 	if iconPos == -1 {
-		t.Error("Icon class not found")
+		t.Error("Icon name not found")
 	}
 
 	if textPos == -1 {
@@ -154,10 +160,11 @@ func TestIconRight_Structure(t *testing.T) {
 // ============================================================================
 
 func TestIconEnd_Layout(t *testing.T) {
-	html := IconEnd("fa fa-check", "Done")
+	html := IconEnd("check", "Done")
 
-	// Should have icon class
-	assertContains(t, html, `fa fa-check`)
+	// Should have Material Icons class and icon name
+	assertContains(t, html, `material-icons`)
+	assertContains(t, html, `check`)
 
 	// Should have text
 	assertContains(t, html, `Done`)
@@ -191,19 +198,22 @@ func TestFlex1_EmptyContent(t *testing.T) {
 // ============================================================================
 
 func TestIcon_MultipleClasses(t *testing.T) {
-	html := Icon("fa fa-fw fa-home text-blue-500")
+	html := Icon("home text-blue-500")
 
-	assertContains(t, html, `fa fa-fw fa-home text-blue-500`)
+	assertContains(t, html, `material-icons`)
+	assertContains(t, html, `home`)
+	assertContains(t, html, `text-blue-500`)
 }
 
 func TestIcon_WithCustomAttributes(t *testing.T) {
-	html := Icon("custom-icon", Attr{
+	html := Icon("settings", Attr{
 		ID:    "my-icon",
 		Class: "additional-class",
 		Style: "color: red;",
 	})
 
-	assertContains(t, html, `custom-icon`)
+	assertContains(t, html, `material-icons`)
+	assertContains(t, html, `settings`)
 	assertContains(t, html, `additional-class`)
 	assertContains(t, html, `style="color: red;"`)
 }
@@ -213,27 +223,27 @@ func TestIcon_WithCustomAttributes(t *testing.T) {
 // ============================================================================
 
 func TestIconStart_EmptyText(t *testing.T) {
-	html := IconStart("fa fa-home", "")
+	html := IconStart("home", "")
 
-	assertContains(t, html, `fa fa-home`)
+	assertContains(t, html, `home`)
 }
 
 func TestIconLeft_EmptyText(t *testing.T) {
-	html := IconLeft("fa fa-arrow-left", "")
+	html := IconLeft("arrow_back", "")
 
-	assertContains(t, html, `fa fa-arrow-left`)
+	assertContains(t, html, `arrow_back`)
 }
 
 func TestIconRight_EmptyText(t *testing.T) {
-	html := IconRight("fa fa-arrow-right", "")
+	html := IconRight("arrow_forward", "")
 
-	assertContains(t, html, `fa fa-arrow-right`)
+	assertContains(t, html, `arrow_forward`)
 }
 
 func TestIconEnd_EmptyText(t *testing.T) {
-	html := IconEnd("fa fa-check", "")
+	html := IconEnd("check", "")
 
-	assertContains(t, html, `fa fa-check`)
+	assertContains(t, html, `check`)
 }
 
 func TestIconStart_EmptyIcon(t *testing.T) {
@@ -266,32 +276,32 @@ func TestIconEnd_EmptyIcon(t *testing.T) {
 
 func TestIconStart_LongText(t *testing.T) {
 	longText := strings.Repeat("Very Long Text ", 10)
-	html := IconStart("fa fa-home", longText)
+	html := IconStart("home", longText)
 
-	assertContains(t, html, `fa fa-home`)
+	assertContains(t, html, `home`)
 	assertContains(t, html, longText)
 }
 
 func TestIconLeft_LongText(t *testing.T) {
 	longText := strings.Repeat("Very Long Text ", 10)
-	html := IconLeft("fa fa-arrow-left", longText)
+	html := IconLeft("arrow_back", longText)
 
-	assertContains(t, html, `fa fa-arrow-left`)
+	assertContains(t, html, `arrow_back`)
 	assertContains(t, html, longText)
 }
 
 func TestIconRight_LongText(t *testing.T) {
 	longText := strings.Repeat("Very Long Text ", 10)
-	html := IconRight("fa fa-arrow-right", longText)
+	html := IconRight("arrow_forward", longText)
 
-	assertContains(t, html, `fa fa-arrow-right`)
+	assertContains(t, html, `arrow_forward`)
 	assertContains(t, html, longText)
 }
 
 func TestIconEnd_LongText(t *testing.T) {
 	longText := strings.Repeat("Very Long Text ", 10)
-	html := IconEnd("fa fa-check", longText)
+	html := IconEnd("check", longText)
 
-	assertContains(t, html, `fa fa-check`)
+	assertContains(t, html, `check`)
 	assertContains(t, html, longText)
 }
