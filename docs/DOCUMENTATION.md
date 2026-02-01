@@ -189,10 +189,32 @@ ui.Span(class, attr...)(children...)   // <span>
 ui.P(class, attr...)(children...)      // <p>
 ui.A(class, attr...)(children...)      // <a>
 ui.Form(class, attr...)(children...)   // <form>
+ui.H1(class, attr...)(children...)     // <h1>
+ui.H2(class, attr...)(children...)     // <h2>
+ui.H3(class, attr...)(children...)     // <h3>
 ui.List(class, attr...)(children...)   // <ul>
 ui.ListItem(class, attr...)(children...)// <li>
 ui.Img(class, attr...)                 // <img /> (self-closing)
 ui.Input(class, attr...)               // <input /> (self-closing)
+```
+
+**Example:**
+```go
+// Heading with Tailwind classes
+ui.H1("text-4xl font-bold text-blue-900")("Welcome")
+
+// Nested headings and paragraphs
+ui.Div("max-w-2xl")(
+    ui.H1("text-3xl font-bold mb-4")("Article Title"),
+    ui.H2("text-xl text-gray-600 mb-2")("Subtitle"),
+    ui.P("text-gray-700 leading-relaxed")("Article content goes here..."),
+)
+
+// With custom attributes
+ui.H3("", ui.Attr{ID: "section-1"})(
+    ui.Span("text-sm text-gray-500")("[1.5]"),
+    " Introduction",
+)
 ```
 
 ### Attributes

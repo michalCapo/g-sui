@@ -175,6 +175,9 @@ var (
 	Div      = func(class string, attr ...Attr) func(elements ...string) string { return El("div", class, attr...) }
 	Span     = func(class string, attr ...Attr) func(elements ...string) string { return El("span", class, attr...) }
 	Form     = func(class string, attr ...Attr) func(elements ...string) string { return El("form", class, attr...) }
+	H1       = func(class string, attr ...Attr) func(elements ...string) string { return El("h1", class, attr...) }
+	H2       = func(class string, attr ...Attr) func(elements ...string) string { return El("h2", class, attr...) }
+	H3       = func(class string, attr ...Attr) func(elements ...string) string { return El("h3", class, attr...) }
 	Textarea = func(class string, attr ...Attr) func(elements ...string) string {
 		return El("textarea", class, attr...)
 	}

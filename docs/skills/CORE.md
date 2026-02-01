@@ -293,6 +293,9 @@ ui.Span(class, attr...)(children...)   // <span>
 ui.P(class, attr...)(children...)      // <p>
 ui.A(class, attr...)(children...)      // <a>
 ui.Form(class, attr...)(children...)   // <form>
+ui.H1(class, attr...)(children...)     // <h1>
+ui.H2(class, attr...)(children...)     // <h2>
+ui.H3(class, attr...)(children...)     // <h3>
 ui.Input(class, attr...)               // <input />
 ui.Img(class, attr...)                 // <img />
 ```
