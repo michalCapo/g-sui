@@ -19,6 +19,8 @@ See documentation at [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) for a comp
 - Partial updates: re-render, replace, append, or prepend only the target
 - Smooth navigation with background loading and delayed loader (50ms threshold) via `ctx.Load()`
 - **Parameterized routes** with path parameters (`/user/{id}`) and query parameters (`?name=Smith`) - works seamlessly with SPA navigation
+- **Custom HTTP handlers** for REST APIs (`app.GET()`, `app.POST()`, etc.) - mix g-sui pages with standard HTTP endpoints
+- **Custom server configuration** via `app.Handler()` - wrap with middleware or integrate with existing HTTP servers
 - Built-in PWA support with manifest and service worker generation (`app.PWA()`)
 - Deferred fragments with skeletons via WebSocket patches (`ctx.Patch` + skeleton helpers)
 - Query/Collate helper for data UIs: search, sort, filters, paging, and XLS export (works with `gorm`)

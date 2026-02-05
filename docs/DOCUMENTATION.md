@@ -106,11 +106,47 @@ type AOption struct { ID, Value string }
 
 ```go
 app := ui.MakeApp("en")                           // Create app with locale
-app.Page("/path", handler)                        // Register page route
+app.Page("/path", "Page Title", handler)          // Register page route
 app.Favicon(embedFS, "assets/favicon.svg", 24*time.Hour)
 app.Assets(embedFS, "assets/", 24*time.Hour)      // Serve static files
 app.AutoRestart(true)                             // Dev: rebuild on file changes
 app.Listen(":8080")                               // Start server (also starts WS at /__ws)
+```
+
+### Custom HTTP Handlers (REST APIs)
+```go
+// Register custom HTTP handlers (checked before g-sui routes)
+app.Custom("GET", "/api/health", func(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    w.Write([]byte(`{"status": "ok"}`))
+})
+
+app.Custom("POST", "/api/users", createUserHandler)
+
+// Shorthand methods
+app.GET("/api/data", getDataHandler)
+app.POST("/api/data", createDataHandler)
+app.PUT("/api/data/:id", updateDataHandler)
+app.DELETE("/api/data/:id", deleteDataHandler)
+app.PATCH("/api/data/:id", patchDataHandler)
+```
+
+### Custom Server Configuration
+```go
+// Get http.Handler for custom server setups
+app := ui.MakeApp("en")
+app.Page("/", "Home", homeHandler)
+app.StartSweeper()  // Manually start session sweeper
+
+// Wrap with custom middleware
+handler := myLoggingMiddleware(app.Handler())
+
+// Use with custom server
+server := &http.Server{
+    Addr:    ":8080",
+    Handler: handler,
+}
+server.ListenAndServe()
 ```
 
 ### Testing Handler
@@ -158,11 +194,47 @@ type AOption struct { ID, Value string }
 
 ```go
 app := ui.MakeApp("en")                           // Create app with locale
-app.Page("/path", handler)                        // Register page route
+app.Page("/path", "Page Title", handler)          // Register page route
 app.Favicon(embedFS, "assets/favicon.svg", 24*time.Hour)
 app.Assets(embedFS, "assets/", 24*time.Hour)      // Serve static files
 app.AutoRestart(true)                             // Dev: rebuild on file changes
 app.Listen(":8080")                               // Start server (also starts WS at /__ws)
+```
+
+### Custom HTTP Handlers (REST APIs)
+```go
+// Register custom HTTP handlers (checked before g-sui routes)
+app.Custom("GET", "/api/health", func(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    w.Write([]byte(`{"status": "ok"}`))
+})
+
+app.Custom("POST", "/api/users", createUserHandler)
+
+// Shorthand methods
+app.GET("/api/data", getDataHandler)
+app.POST("/api/data", createDataHandler)
+app.PUT("/api/data/:id", updateDataHandler)
+app.DELETE("/api/data/:id", deleteDataHandler)
+app.PATCH("/api/data/:id", patchDataHandler)
+```
+
+### Custom Server Configuration
+```go
+// Get http.Handler for custom server setups
+app := ui.MakeApp("en")
+app.Page("/", "Home", homeHandler)
+app.StartSweeper()  // Manually start session sweeper
+
+// Wrap with custom middleware
+handler := myLoggingMiddleware(app.Handler())
+
+// Use with custom server
+server := &http.Server{
+    Addr:    ":8080",
+    Handler: handler,
+}
+server.ListenAndServe()
 ```
 
 ### Testing Handler

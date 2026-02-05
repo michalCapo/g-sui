@@ -1365,22 +1365,31 @@ type Route struct {
 	HasParams  bool     // whether this route has path parameters
 }
 
+// CustomRoute represents a custom HTTP handler registered with the app
+type CustomRoute struct {
+	Method  string           // HTTP method (GET, POST, PUT, DELETE, etc.)
+	Path    string           // URL path
+	Handler http.HandlerFunc // The handler function
+}
+
 type App struct {
-	Lanugage      string
-	HTMLBody      func(string) string
-	HTMLHead      []string
-	DebugEnabled  bool
-	pwaConfig     *PWAConfig
-	pwaManifest   []byte
-	swCacheKey    string // Generated on startup for cache versioning
-	sessMu        sync.Mutex
-	sessions      map[string]*sessRec
-	wsMu          sync.RWMutex
-	wsClients     map[*websocket.Conn]*wsState
-	assetHandlers map[string]http.Handler
-	routes        map[string]*Route // path → Route
-	routesMu      sync.RWMutex      // mutex for route maps
-	layout        Callable          // persistent layout function
+	Lanugage       string
+	HTMLBody       func(string) string
+	HTMLHead       []string
+	DebugEnabled   bool
+	pwaConfig      *PWAConfig
+	pwaManifest    []byte
+	swCacheKey     string // Generated on startup for cache versioning
+	sessMu         sync.Mutex
+	sessions       map[string]*sessRec
+	wsMu           sync.RWMutex
+	wsClients      map[*websocket.Conn]*wsState
+	assetHandlers  map[string]http.Handler
+	routes         map[string]*Route // path → Route
+	routesMu       sync.RWMutex      // mutex for route maps
+	layout         Callable          // persistent layout function
+	customRoutes   []*CustomRoute    // custom HTTP handlers
+	customRoutesMu sync.RWMutex      // mutex for custom routes
 }
 
 type sessRec struct {
@@ -1532,6 +1541,76 @@ func (app *App) Page(path string, title string, handler Callable) {
 
 	// Store route
 	app.routes[path] = route
+}
+
+// Custom registers a standard http.HandlerFunc for a specific path and HTTP method.
+// This allows integrating regular HTTP endpoints (like REST APIs) alongside g-sui pages.
+// Custom handlers are checked before g-sui routes, so they take priority.
+//
+// Example:
+//
+//	app.Custom("GET", "/api/health", func(w http.ResponseWriter, r *http.Request) {
+//	    w.Header().Set("Content-Type", "application/json")
+//	    w.Write([]byte(`{"status": "ok"}`))
+//	})
+//
+//	app.Custom("POST", "/api/users", createUserHandler)
+func (app *App) Custom(method string, path string, handler http.HandlerFunc) {
+	if method == "" {
+		panic("Custom: method cannot be empty")
+	}
+	if path == "" {
+		panic("Custom: path cannot be empty")
+	}
+	if handler == nil {
+		panic("Custom: handler cannot be nil")
+	}
+
+	app.customRoutesMu.Lock()
+	defer app.customRoutesMu.Unlock()
+
+	// Check for duplicate registration
+	for _, route := range app.customRoutes {
+		if route.Method == method && route.Path == path {
+			panic(fmt.Sprintf("Custom: route %s %s already registered", method, path))
+		}
+	}
+
+	app.customRoutes = append(app.customRoutes, &CustomRoute{
+		Method:  strings.ToUpper(method),
+		Path:    path,
+		Handler: handler,
+	})
+}
+
+// GET registers a custom handler for GET requests.
+// Shorthand for Custom("GET", path, handler).
+func (app *App) GET(path string, handler http.HandlerFunc) {
+	app.Custom("GET", path, handler)
+}
+
+// POST registers a custom handler for POST requests.
+// Shorthand for Custom("POST", path, handler).
+func (app *App) POST(path string, handler http.HandlerFunc) {
+	app.Custom("POST", path, handler)
+}
+
+// PUT registers a custom handler for PUT requests.
+// Shorthand for Custom("PUT", path, handler).
+func (app *App) PUT(path string, handler http.HandlerFunc) {
+	app.Custom("PUT", path, handler)
+}
+
+// DELETE registers a custom handler for DELETE requests.
+// Shorthand for Custom("DELETE", path, handler).
+func (app *App) DELETE(path string, handler http.HandlerFunc) {
+	app.Custom("DELETE", path, handler)
+}
+
+// PATCH registers a custom handler for PATCH requests.
+// Shorthand for Custom("PATCH", path, handler).
+func (app *App) PATCH(path string, handler http.HandlerFunc) {
+	app.Custom("PATCH", path, handler)
 }
 
 // Debug enables or disables server debug logging.
@@ -1850,13 +1929,44 @@ func (app *App) Listen(port string) {
 	// Init WebSocket endpoint for patches
 	app.initWS()
 
-	// Wrap the main handler with security headers middleware
-	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains("GET POST HEAD", r.Method) {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+	// Build and register the main handler
+	http.Handle("/", app.buildHandler())
 
+	if err := http.ListenAndServe(port, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Println("Error:", err)
+	}
+}
+
+// Handler returns an http.Handler that can be used in custom server configurations.
+// This allows wrapping the g-sui handler with custom middleware or integrating
+// with existing HTTP server setups.
+//
+// Note: When using Handler(), you must manually call app.StartSweeper() and
+// set up the WebSocket endpoint at "/__ws" if you want those features.
+//
+// Example:
+//
+//	app := ui.MakeApp("en")
+//	app.Page("/", "Home", homeHandler)
+//	app.StartSweeper()
+//
+//	// Wrap with custom middleware
+//	handler := myLoggingMiddleware(app.Handler())
+//
+//	// Use with custom server
+//	server := &http.Server{
+//	    Addr:    ":8080",
+//	    Handler: handler,
+//	}
+//	server.ListenAndServe()
+func (app *App) Handler() http.Handler {
+	return app.buildHandler()
+}
+
+// buildHandler creates the main HTTP handler for the app.
+// This is used internally by both Listen() and Handler().
+func (app *App) buildHandler() http.Handler {
+	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		value := r.URL.Path
 
 		if strings.Contains(strings.Join(r.Header["Upgrade"], " "), "websocket") {
@@ -1871,6 +1981,23 @@ func (app *App) Listen(port string) {
 				handler.ServeHTTP(w, r)
 				return
 			}
+		}
+
+		// Check custom handlers first (before g-sui routes)
+		app.customRoutesMu.RLock()
+		for _, route := range app.customRoutes {
+			if route.Method == r.Method && route.Path == value {
+				app.customRoutesMu.RUnlock()
+				route.Handler(w, r)
+				return
+			}
+		}
+		app.customRoutesMu.RUnlock()
+
+		// For non-custom routes, only allow GET, POST, HEAD
+		if !strings.Contains("GET POST HEAD", r.Method) {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
 
 		// Handle POST requests for SPA routing (fetch page content as JSON)
@@ -2021,20 +2148,20 @@ func (app *App) Listen(port string) {
 				// Render layout shell
 				layoutHTML := app.layout(ctx)
 
-			// Build route manifest
-			app.routesMu.RLock()
-			routeManifest := make(map[string]interface{})
-			for path, route := range app.routes {
-				if route.HasParams {
-					routeManifest[path] = map[string]interface{}{
-						"path":    path,
-						"pattern": true,
+				// Build route manifest
+				app.routesMu.RLock()
+				routeManifest := make(map[string]interface{})
+				for path, route := range app.routes {
+					if route.HasParams {
+						routeManifest[path] = map[string]interface{}{
+							"path":    path,
+							"pattern": true,
+						}
+					} else {
+						routeManifest[path] = path
 					}
-				} else {
-					routeManifest[path] = path
 				}
-			}
-			app.routesMu.RUnlock()
+				app.routesMu.RUnlock()
 
 				manifestJSON, err := json.Marshal(routeManifest)
 				if err != nil {
@@ -2094,12 +2221,7 @@ func (app *App) Listen(port string) {
 		http.Error(w, "Not found", http.StatusNotFound)
 	})
 
-	// Apply security headers middleware
-	http.Handle("/", securityHeadersMiddleware(mainHandler))
-
-	if err := http.ListenAndServe(port, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Println("Error:", err)
-	}
+	return securityHeadersMiddleware(mainHandler)
 }
 
 // TestHandler returns an http.Handler that uses g-sui's routing logic.
@@ -2463,19 +2585,19 @@ func (app *App) initWS() {
 						return
 					}
 
-							// Look up callable from stored map
-							mu.Lock()
-							var found *Callable
-							for storedCallable, path := range stored {
-								if path == callMsg.Path {
-									found = storedCallable
-									break
-								}
-							}
-							mu.Unlock()
+					// Look up callable from stored map
+					mu.Lock()
+					var found *Callable
+					for storedCallable, path := range stored {
+						if path == callMsg.Path {
+							found = storedCallable
+							break
+						}
+					}
+					mu.Unlock()
 
-							if found == nil {
-								log.Printf("Callable not found for path: %s", callMsg.Path)
+					if found == nil {
+						log.Printf("Callable not found for path: %s", callMsg.Path)
 						errorEl := &JSElement{T: "span", C: []interface{}{"Not found"}}
 						errorResp := JSResponseMessage{
 							Type: "response",
@@ -2506,8 +2628,8 @@ func (app *App) initWS() {
 						return
 					}
 
-							// Execute callable
-							html := (*found)(ctx)
+					// Execute callable
+					html := (*found)(ctx)
 					if len(ctx.append) > 0 {
 						html += strings.Join(ctx.append, "")
 					}

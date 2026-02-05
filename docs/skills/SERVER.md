@@ -11,12 +11,19 @@ func main() {
     app := ui.MakeApp("en")  // Locale for translations
 
     // Register pages
-    app.Page("/", homeHandler)
-    app.Page("/about", aboutHandler)
+    app.Page("/", "Home", homeHandler)
+    app.Page("/about", "About", aboutHandler)
 
     // Serve static assets
     app.Assets(embedFS, "assets/", 24*time.Hour)
     app.Favicon(embedFS, "assets/favicon.svg", 24*time.Hour)
+
+    // Register custom HTTP handlers (REST APIs)
+    app.Custom("GET", "/api/health", healthHandler)
+    app.GET("/api/users", getUsersHandler)
+    app.POST("/api/users", createUserHandler)
+    app.PUT("/api/users/:id", updateUserHandler)
+    app.DELETE("/api/users/:id", deleteUserHandler)
 
     // Development options
     app.AutoRestart(true)         // Rebuild on file changes
@@ -28,9 +35,10 @@ func main() {
 
 ## Route Registration
 
+### g-sui Page Routes
+
 ```go
-app.Page("/path", "Title", handler)           // GET route with title
-app.Page("/path", "Title", handler, "POST")   // POST route with title
+app.Page("/path", "Title", handler)  // Register page route with title
 ```
 
 ### Parameterized Routes
@@ -161,10 +169,95 @@ app.PWA(ui.PWAConfig{
 - `Type` - MIME type (e.g., `image/png`, `image/x-icon`)
 - `Purpose` - Icon purpose: `any`, `maskable`, or `any maskable`
 
+## Custom HTTP Handlers (REST APIs)
+
+Custom handlers are checked **before** g-sui page routes, so they take priority. This allows you to mix server-rendered pages with traditional REST API endpoints.
+
+```go
+// Full method signature
+app.Custom("GET", "/api/health", func(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    w.Write([]byte(`{"status": "ok"}`))
+})
+
+app.Custom("POST", "/api/users", createUserHandler)
+
+// Shorthand methods
+app.GET("/api/data", getDataHandler)
+app.POST("/api/data", createDataHandler)
+app.PUT("/api/data/:id", updateDataHandler)
+app.DELETE("/api/data/:id", deleteDataHandler)
+app.PATCH("/api/data/:id", patchDataHandler)
+```
+
+**Example REST API Handler:**
+```go
+func getUsersHandler(w http.ResponseWriter, r *http.Request) {
+    users := []User{
+        {ID: 1, Name: "Alice"},
+        {ID: 2, Name: "Bob"},
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(users)
+}
+
+func createUserHandler(w http.ResponseWriter, r *http.Request) {
+    var user User
+    if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+    
+    // Save user...
+    
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(user)
+}
+```
+
+**Handler Priority:**
+1. Asset handlers (e.g., `/assets/*`)
+2. Custom HTTP handlers (e.g., `/api/*`)
+3. g-sui Page routes (e.g., `/`, `/about`)
+
+## Custom Server Configuration
+
+You can retrieve the `http.Handler` and use it with a custom server setup or wrap it with middleware:
+
+```go
+app := ui.MakeApp("en")
+app.Page("/", "Home", homeHandler)
+app.StartSweeper()  // Manually start session sweeper when using Handler()
+
+// Get the handler
+handler := app.Handler()
+
+// Wrap with custom middleware
+handler = loggingMiddleware(handler)
+handler = corsMiddleware(handler)
+
+// Use with custom server
+server := &http.Server{
+    Addr:         ":8080",
+    Handler:      handler,
+    ReadTimeout:  10 * time.Second,
+    WriteTimeout: 10 * time.Second,
+}
+
+log.Fatal(server.ListenAndServe())
+```
+
+**Note:** When using `app.Handler()`:
+- You must manually call `app.StartSweeper()` to enable session cleanup
+- WebSocket endpoint at `/__ws` is automatically registered
+- Call `app.initWS()` is **not** needed (handled internally)
+
 ## Testing Handler
 
 ```go
-handler := app.TestHandler()              // Get http.Handler
+handler := app.TestHandler()              // Get http.Handler for testing (minimal setup)
 server := httptest.NewServer(handler)     // Create test server
 resp, _ := http.Get(server.URL + "/path") // Make requests
 ```

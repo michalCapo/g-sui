@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math"
+	"net/http"
 	"reflect"
 	"testing"
 	"time"
@@ -787,4 +788,127 @@ func TestParseTimeValue(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCustom(t *testing.T) {
+	t.Run("register custom handler", func(t *testing.T) {
+		app := &App{routes: make(map[string]*Route)}
+		app.Custom("GET", "/api/test", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		if len(app.customRoutes) != 1 {
+			t.Errorf("expected 1 custom route, got %d", len(app.customRoutes))
+		}
+
+		route := app.customRoutes[0]
+		if route.Method != "GET" {
+			t.Errorf("expected method GET, got %s", route.Method)
+		}
+		if route.Path != "/api/test" {
+			t.Errorf("expected path /api/test, got %s", route.Path)
+		}
+		if route.Handler == nil {
+			t.Error("handler is nil")
+		}
+	})
+
+	t.Run("register multiple methods", func(t *testing.T) {
+		app := &App{routes: make(map[string]*Route)}
+		app.GET("/api/users", func(w http.ResponseWriter, r *http.Request) {})
+		app.POST("/api/users", func(w http.ResponseWriter, r *http.Request) {})
+		app.PUT("/api/users/1", func(w http.ResponseWriter, r *http.Request) {})
+		app.DELETE("/api/users/1", func(w http.ResponseWriter, r *http.Request) {})
+		app.PATCH("/api/users/1", func(w http.ResponseWriter, r *http.Request) {})
+
+		if len(app.customRoutes) != 5 {
+			t.Errorf("expected 5 custom routes, got %d", len(app.customRoutes))
+		}
+
+		expectedMethods := []string{"GET", "POST", "PUT", "DELETE", "PATCH"}
+		for i, method := range expectedMethods {
+			if app.customRoutes[i].Method != method {
+				t.Errorf("route %d: expected method %s, got %s", i, method, app.customRoutes[i].Method)
+			}
+		}
+	})
+
+	t.Run("method case normalization", func(t *testing.T) {
+		app := &App{routes: make(map[string]*Route)}
+		app.Custom("get", "/api/test", func(w http.ResponseWriter, r *http.Request) {})
+
+		if app.customRoutes[0].Method != "GET" {
+			t.Errorf("expected method GET, got %s", app.customRoutes[0].Method)
+		}
+	})
+
+	t.Run("panic on duplicate registration", func(t *testing.T) {
+		app := &App{routes: make(map[string]*Route)}
+		app.GET("/api/test", func(w http.ResponseWriter, r *http.Request) {})
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic for duplicate registration")
+			}
+		}()
+
+		app.GET("/api/test", func(w http.ResponseWriter, r *http.Request) {})
+	})
+
+	t.Run("panic on empty method", func(t *testing.T) {
+		app := &App{routes: make(map[string]*Route)}
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic for empty method")
+			}
+		}()
+
+		app.Custom("", "/api/test", func(w http.ResponseWriter, r *http.Request) {})
+	})
+
+	t.Run("panic on empty path", func(t *testing.T) {
+		app := &App{routes: make(map[string]*Route)}
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic for empty path")
+			}
+		}()
+
+		app.Custom("GET", "", func(w http.ResponseWriter, r *http.Request) {})
+	})
+
+	t.Run("panic on nil handler", func(t *testing.T) {
+		app := &App{routes: make(map[string]*Route)}
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic for nil handler")
+			}
+		}()
+
+		app.Custom("GET", "/api/test", nil)
+	})
+
+	t.Run("same path different methods allowed", func(t *testing.T) {
+		app := &App{routes: make(map[string]*Route)}
+		app.GET("/api/users", func(w http.ResponseWriter, r *http.Request) {})
+		app.POST("/api/users", func(w http.ResponseWriter, r *http.Request) {})
+
+		if len(app.customRoutes) != 2 {
+			t.Errorf("expected 2 custom routes for same path different methods, got %d", len(app.customRoutes))
+		}
+	})
+}
+
+func TestHandler(t *testing.T) {
+	t.Run("returns http.Handler", func(t *testing.T) {
+		app := MakeApp("en")
+		handler := app.Handler()
+
+		if handler == nil {
+			t.Error("Handler() returned nil")
+		}
+	})
 }
