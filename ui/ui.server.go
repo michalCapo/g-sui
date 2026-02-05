@@ -2124,8 +2124,8 @@ func (app *App) buildHandler() http.Handler {
 			return
 		}
 
-		// If layout is set and this is a GET request, render layout shell with route manifest
-		if app.layout != nil && r.Method == "GET" {
+		// Handle GET requests for pages
+		if r.Method == "GET" {
 			// Try to match route (exact or pattern)
 			route, pathParams := app.matchRoute(value)
 
@@ -2144,9 +2144,6 @@ func (app *App) buildHandler() http.Handler {
 						w.Write([]byte(devErrorPage()))
 					}
 				}()
-
-				// Render layout shell
-				layoutHTML := app.layout(ctx)
 
 				// Build route manifest
 				app.routesMu.RLock()
@@ -2172,7 +2169,17 @@ func (app *App) buildHandler() http.Handler {
 				// Embed route manifest in script tag
 				manifestScript := fmt.Sprintf(`<script>window.__routes = %s;</script>`, string(manifestJSON))
 
-				// Build full HTML page with layout
+				var bodyHTML string
+				if app.layout != nil {
+					// Render with layout shell
+					bodyHTML = app.layout(ctx) + manifestScript
+				} else {
+					// No layout - render page content directly in a content div
+					pageHTML := (*route.Handler)(ctx)
+					bodyHTML = fmt.Sprintf(`<div id="%s">%s</div>%s`, ContentID.ID, pageHTML, manifestScript)
+				}
+
+				// Build full HTML page
 				head := []string{
 					fmt.Sprintf(`<title>%s</title>`, route.Title),
 				}
@@ -2183,7 +2190,7 @@ func (app *App) buildHandler() http.Handler {
 				html := app.HTMLBody("")
 				html = strings.ReplaceAll(html, "__lang__", app.Lanugage)
 				html = strings.ReplaceAll(html, "__head__", strings.Join(head, " "))
-				html = strings.ReplaceAll(html, "__body__", layoutHTML+manifestScript)
+				html = strings.ReplaceAll(html, "__body__", bodyHTML)
 
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Write([]byte(Trim(html)))

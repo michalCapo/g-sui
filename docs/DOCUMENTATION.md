@@ -1437,29 +1437,90 @@ ui.DISABLED // Disabled state styling
 
 ## Common Patterns
 
-### Page with Layout
+### Layouts (Optional)
+
+Layouts are optional. You can build applications with or without them.
+
+#### Global Layout with app.Layout()
+
+Use `app.Layout()` to wrap all pages consistently:
+
 ```go
 func main() {
     app := ui.MakeApp("en")
     
-    layout := func(title string, body ui.Callable) ui.Callable {
-        return func(ctx *ui.Context) string {
-            nav := ui.Div("bg-white shadow p-4 flex items-center gap-4")(
+    // Define global layout
+    app.Layout(func(ctx *ui.Context) string {
+        return ui.Div("flex flex-col min-h-screen", ui.Attr{})(
+            // Header
+            ui.Header("bg-white shadow p-4 flex items-center gap-4", ui.Attr{})(
                 ui.A("hover:text-blue-600", ctx.Load("/"))("Home"),
                 ui.A("hover:text-blue-600", ctx.Load("/about"))("About"),
                 ui.Flex1,
                 ui.ThemeSwitcher(""),
-            )
-            return app.HTML(title, "bg-gray-100 min-h-screen", 
-                nav + ui.Div("max-w-4xl mx-auto p-4")(body(ctx)),
-            )
-        }
-    }
+            ),
+            // Content slot - where pages are rendered
+            ui.Main("flex-1 max-w-4xl mx-auto p-4 w-full", ui.Attr{ID: "__content__"})(),
+            // Footer
+            ui.Footer("bg-gray-100 p-4 text-center", ui.Attr{})("© 2024"),
+        )
+    })
     
-    app.Page("/", layout("Home", HomePage))
-    app.Page("/about", layout("About", AboutPage))
+    app.Page("/", "Home", HomePage)
+    app.Page("/about", "About", AboutPage)
     app.Listen(":8080")
 }
+
+func HomePage(ctx *ui.Context) string {
+    return ui.Div("", ui.Attr{})(
+        ui.H1("text-2xl font-bold mb-4", ui.Attr{})("Welcome"),
+        ui.P("")("This content is rendered inside the layout"),
+    )
+}
+```
+
+#### Without Layout (Self-Contained Pages)
+
+Omit `app.Layout()` to render pages directly:
+
+```go
+func main() {
+    app := ui.MakeApp("en")
+    
+    // No app.Layout() call - pages render directly
+    app.Page("/", "Home", HomePage)
+    app.Page("/about", "About", AboutPage)
+    app.Listen(":8080")
+}
+
+func HomePage(ctx *ui.Context) string {
+    // Each page is self-contained
+    return ui.Div("bg-gray-100 min-h-screen", ui.Attr{})(
+        ui.Header("bg-white shadow p-4", ui.Attr{})(
+            ui.A("", ctx.Load("/"))("Home"),
+        ),
+        ui.Main("max-w-4xl mx-auto p-4", ui.Attr{})(
+            ui.H1("text-2xl font-bold", ui.Attr{})("Welcome"),
+        ),
+    )
+}
+```
+
+#### Per-Page Layout Helpers
+
+Create layout helpers for flexible page-specific styling:
+
+```go
+func withSidebar(content func(*ui.Context) string) func(*ui.Context) string {
+    return func(ctx *ui.Context) string {
+        return ui.Div("flex gap-4", ui.Attr{})(
+            ui.Aside("w-48 bg-gray-50 p-4", ui.Attr{})("Sidebar"),
+            ui.Main("flex-1", ui.Attr{})(content(ctx)),
+        )
+    }
+}
+
+app.Page("/dashboard", "Dashboard", withSidebar(DashboardPage))
 ```
 
 ### Reusable Form Component

@@ -14,6 +14,16 @@ func main() {
     app.Page("/", "Home", homeHandler)
     app.Page("/about", "About", aboutHandler)
 
+    // Optional: Define a layout (wraps all pages)
+    // If you don't define a layout, pages are rendered directly
+    app.Layout(func(ctx *ui.Context) string {
+        return ui.Div("layout-wrapper", ui.Attr{})(
+            ui.Div("header", ui.Attr{})("Header"),
+            ui.Div("", ui.Attr{ID: "__content__"})(),  // Content slot
+            ui.Div("footer", ui.Attr{})("Footer"),
+        )
+    })
+
     // Serve static assets
     app.Assets(embedFS, "assets/", 24*time.Hour)
     app.Favicon(embedFS, "assets/favicon.svg", 24*time.Hour)
@@ -92,6 +102,73 @@ func tagsHandler(ctx *ui.Context) string {
     tags := ctx.QueryParams("tag")  // []string{"a", "b"}
     allParams := ctx.AllQueryParams()  // map[string][]string
 }
+```
+
+## Optional Layout
+
+Layouts are **optional**. You can build applications with or without them.
+
+### With Layout
+
+Use a layout to wrap all pages with consistent structure (header, navigation, footer):
+
+```go
+app.Layout(func(ctx *ui.Context) string {
+    return ui.Div("container", ui.Attr{})(
+        ui.Header("sticky top-0", ui.Attr{})(
+            ui.Nav()(
+                ui.A("", ctx.Load("/"))("Home"),
+                ui.A("", ctx.Load("/about"))("About"),
+            ),
+        ),
+        // Content slot - where pages are rendered
+        ui.Div("main", ui.Attr{ID: "__content__"})(),
+        ui.Footer()(
+            ui.P("")("© 2024 My App"),
+        ),
+    )
+})
+
+app.Page("/", "Home", homeHandler)
+app.Page("/about", "About", aboutHandler)
+```
+
+The layout's `<div id="__content__"></div>` is the content slot where page content is inserted.
+
+### Without Layout
+
+Omit `app.Layout()` to render pages directly without a wrapper. Each page stands alone:
+
+```go
+// No app.Layout() call - pages render directly
+
+app.Page("/", "Home", homeHandler)
+app.Page("/about", "About", aboutHandler)
+
+// Each page renders as complete content
+func homeHandler(ctx *ui.Context) string {
+    return ui.Div("max-w-5xl mx-auto px-4 py-8", ui.Attr{})(
+        ui.H1("")("Welcome"),
+        ui.P("")("This page is self-contained"),
+    )
+}
+```
+
+### Layout Pattern: Per-Page Wrappers
+
+If you don't want a global layout, you can create layout helpers:
+
+```go
+func withSidebar(content func(*ui.Context) string) func(*ui.Context) string {
+    return func(ctx *ui.Context) string {
+        return ui.Div("flex gap-4", ui.Attr{})(
+            ui.Aside("w-48", ui.Attr{})("Sidebar"),
+            ui.Main("flex-1", ui.Attr{})(content(ctx)),
+        )
+    }
+}
+
+app.Page("/dashboard", "Dashboard", withSidebar(dashboardHandler))
 ```
 
 ## HTML Wrapper

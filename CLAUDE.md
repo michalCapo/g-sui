@@ -84,6 +84,17 @@ ui/
 ```go
 app := ui.MakeApp("en")              // Create app with locale
 app.Page("/path", "Title", handler)   // Register page route
+
+// Optional: Define a global layout (wraps all pages)
+// Omit this to render pages directly without a wrapper
+app.Layout(func(ctx *ui.Context) string {
+    return ui.Div("layout", ui.Attr{})(
+        ui.Div("header", ui.Attr{})("Header"),
+        ui.Div("", ui.Attr{ID: "__content__"})(),  // Content slot
+        ui.Div("footer", ui.Attr{})("Footer"),
+    )
+})
+
 app.Favicon(embedFS, "path", 24*time.Hour)
 app.Assets(embedFS, "assets/", 24*time.Hour)
 app.AutoRestart(true)                 // Dev: rebuild on file changes
@@ -91,8 +102,8 @@ app.PWA(ui.PWAConfig{...})           // Enable PWA
 
 // Custom HTTP handlers (REST APIs)
 app.Custom("GET", "/api/health", healthHandler)  // Register custom handler
-app.GET("/api/users", getUsersHandler)                  // Shorthand for GET
-app.POST("/api/users", createUserHandler)               // Shorthand for POST
+app.GET("/api/users", getUsersHandler)           // Shorthand for GET
+app.POST("/api/users", createUserHandler)        // Shorthand for POST
 
 app.Listen(":8080")                   // Start server (also starts WebSocket)
 
