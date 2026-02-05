@@ -347,9 +347,9 @@ func (a Attr) Prepend() TargetSwap { return TargetSwap{ID: a.ID, Swap: PREPEND} 
 // It relies on the global setTheme(mode) provided by the server (__theme script).
 func ThemeSwitcher(css string) string {
 	id := "tsui_theme_" + RandomString(8)
-	sun := `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.8 1.42-1.42zm10.48 14.32l1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM12 4V1h-0 0 0 0v3zm0 19v-3h0 0 0 0v3zM4 12H1v0 0 0 0h3zm19 0h-3v0 0 0 0h3zM6.76 19.16l-1.79 1.8 1.41 1.41 1.8-1.79-1.42-1.42zM19.16 6.76l1.8-1.79-1.41-1.41-1.8 1.79 1.41 1.41zM12 8a4 4 0 100 8 4 4 0 000-8z"/></svg>`
-	moon := `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`
-	desktop := `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 4h18v12H3z"/><path d="M8 20h8v-2H8z"/></svg>`
+	sun := Icon("light_mode", Attr{Class: "text-base"})
+	moon := Icon("dark_mode", Attr{Class: "text-base"})
+	desktop := Icon("computer", Attr{Class: "text-base"})
 
 	btn := Div("")(
 		fmt.Sprintf(`<button id="%s" type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 shadow-sm %s">`, escapeAttr(id), escapeAttr(css)),
@@ -525,36 +525,36 @@ func faToMaterialIcon(faName string) string {
 	name = strings.TrimPrefix(name, "fa-")
 	name = strings.ReplaceAll(name, "fa-fw ", "")
 	name = strings.TrimSpace(name)
-	
+
 	// Map Font Awesome icons to Material Icons
 	iconMap := map[string]string{
-		"check":              "check",
-		"arrow-left":         "arrow_back",
-		"arrow-right":        "arrow_forward",
-		"arrow-up":           "arrow_upward",
-		"arrow-down":         "arrow_downward",
-		"plus":               "add",
-		"times":              "close",
-		"search":             "search",
-		"sort":               "sort",
-		"sort-amount-asc":    "arrow_upward",
-		"sort-amount-desc":    "arrow_downward",
-		"undo":               "undo",
-		"download":           "download",
-		"sliders":            "tune",
-		"inbox":              "inbox",
-		"image":              "image",
-		"home":               "home",
-		"user":               "person",
-		"chevron-left":       "chevron_left",
-		"chevron-right":      "chevron_right",
+		"check":            "check",
+		"arrow-left":       "arrow_back",
+		"arrow-right":      "arrow_forward",
+		"arrow-up":         "arrow_upward",
+		"arrow-down":       "arrow_downward",
+		"plus":             "add",
+		"times":            "close",
+		"search":           "search",
+		"sort":             "sort",
+		"sort-amount-asc":  "arrow_upward",
+		"sort-amount-desc": "arrow_downward",
+		"undo":             "undo",
+		"download":         "download",
+		"sliders":          "tune",
+		"inbox":            "inbox",
+		"image":            "image",
+		"home":             "home",
+		"user":             "person",
+		"chevron-left":     "chevron_left",
+		"chevron-right":    "chevron_right",
 	}
-	
+
 	// Check if we have a mapping
 	if mapped, ok := iconMap[name]; ok {
 		return mapped
 	}
-	
+
 	// If no mapping found, try to use the name directly (might already be a Material Icon name)
 	// Convert kebab-case to snake_case for Material Icons
 	name = strings.ReplaceAll(name, "-", "_")
@@ -567,7 +567,7 @@ func parseIconName(input string) (iconName string, extraClasses string) {
 	var iconParts []string
 	var classParts []string
 	foundIconPrefix := false
-	
+
 	for _, part := range parts {
 		if strings.HasPrefix(part, "fa") || strings.HasPrefix(part, "material-icons") {
 			iconParts = append(iconParts, part)
@@ -580,7 +580,7 @@ func parseIconName(input string) (iconName string, extraClasses string) {
 			iconParts = append(iconParts, part)
 		}
 	}
-	
+
 	iconName = strings.Join(iconParts, " ")
 	extraClasses = strings.Join(classParts, " ")
 	return iconName, extraClasses
@@ -591,16 +591,16 @@ func parseIconName(input string) (iconName string, extraClasses string) {
 // For backward compatibility, Font Awesome format is automatically converted to Material Icons
 func Icon(css string, attr ...Attr) string {
 	iconName, extraClasses := parseIconName(css)
-	
+
 	// Convert Font Awesome format to Material Icon name
 	materialIconName := faToMaterialIcon(iconName)
-	
+
 	// Build class string
-	classes := "material-icons"
+	classes := "material-icons w-8"
 	if extraClasses != "" {
 		classes += " " + extraClasses
 	}
-	
+
 	// Merge extra classes from attributes
 	if len(attr) > 0 && attr[0].Class != "" {
 		classes += " " + attr[0].Class
@@ -610,15 +610,15 @@ func Icon(css string, attr ...Attr) string {
 	} else {
 		attr = append(attr, Attr{Class: classes})
 	}
-	
+
 	// Generate attributes string
 	attrsStr := attributes(attr...)
 	if attrsStr != "" {
 		attrsStr = " " + attrsStr
 	}
-	
+
 	// Generate <span class="material-icons">icon_name</span>
-	return fmt.Sprintf(`<span%s>%s</span>`, 
+	return fmt.Sprintf(`<div%s>%s</div>`,
 		attrsStr,
 		html.EscapeString(materialIconName))
 }

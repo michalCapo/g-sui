@@ -8,16 +8,16 @@ func Icons() string {
 	return ui.Div("")(
 		ui.Div("flex flex-col gap-3")(
 			icon(
-				ui.IconStart("w-6 h-6 bg-gray-400 rounded", "Start aligned icon"),
+				ui.IconStart("home text-gray-600", "Start aligned icon"),
 			),
 			icon(
-				ui.IconLeft("w-6 h-6 bg-blue-600 rounded", "Centered with icon left"),
+				ui.IconLeft("person text-blue-600", "Centered with icon left"),
 			),
 			icon(
-				ui.IconRight("w-6 h-6 bg-green-600 rounded", "Centered with icon right"),
+				ui.IconRight("check_circle text-green-600", "Centered with icon right"),
 			),
 			icon(
-				ui.IconEnd("w-6 h-6 bg-purple-600 rounded", "End-aligned icon"),
+				ui.IconEnd("settings text-purple-600", "End-aligned icon"),
 			),
 		),
 	)
