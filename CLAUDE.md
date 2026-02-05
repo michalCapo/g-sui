@@ -174,6 +174,11 @@ content := collate.Render(ctx, db)
 - **Tailwind CSS**: Utility-first CSS loaded via CDN in development
 - **Dark Mode**: Built-in dark theme overrides; use `ui.ThemeSwitcher("")` for toggle
 - **CSS Constants**: Pre-defined color constants (Blue, Green, Red, etc.) and size constants (XS, SM, MD, ST, LG, XL)
+- **Icons**: Material Icons (with Google Fonts) are automatically included in all apps
+  - Use `ui.Icon("icon_name")` for single icons (renders as `<div class="material-icons w-8">icon_name</div>`)
+  - Font Awesome names are automatically converted (e.g., `fa-home` → `home`)
+  - Customize size and style: `ui.Icon("home", ui.Attr{Class: "text-lg text-blue-500"})`
+  - Helper functions: `ui.IconLeft()`, `ui.IconRight()`, `ui.IconStart()`, `ui.IconEnd()`
 
 ## Dependencies
 

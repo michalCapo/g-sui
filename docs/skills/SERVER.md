@@ -189,8 +189,20 @@ func homeHandler(ctx *ui.Context) string {
 
 ## Custom Head Content
 
+Material Icons and Google Fonts (Inter font family) are automatically included by default. Add additional meta tags or stylesheets as needed:
+
 ```go
+// Extend default head content with additional meta tags
+app.HTMLHead = append(app.HTMLHead,
+    `<meta name="description" content="My app">`,
+    `<meta name="theme-color" content="#ffffff">`,
+    `<link rel="canonical" href="https://example.com">`,
+)
+
+// Or replace entirely (if you need to customize fonts/icons)
 app.HTMLHead = []string{
+    `<meta charset="UTF-8">`,
+    `<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
     `<link rel="preconnect" href="https://fonts.googleapis.com">`,
     `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>`,
     `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">`,

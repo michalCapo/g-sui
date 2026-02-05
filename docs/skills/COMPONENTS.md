@@ -512,19 +512,29 @@ ui.Label(&target).Class("text-lg").Render("Styled")
 
 ### Icons (Material Icons)
 
-```go
-// Include Material Icons and Google Fonts in app.HTMLHead
-app.HTMLHead = append(app.HTMLHead,
-    `<link rel="preconnect" href="https://fonts.googleapis.com">`,
-    `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>`,
-    `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">`,
-    `<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">`,
-)
+Material Icons and Google Fonts are automatically included by default in all apps.
 
-ui.Icon("check")                       // <span class="material-icons">check</span>
-ui.Icon2("check", "text-green-500")    // With classes
-ui.IconLeft("arrow_back", "Back")      // Icon + text
-ui.IconRight("Next", "arrow_forward")  // Text + icon
+```go
+// Basic icon - renders as <div class="material-icons w-8">icon_name</div>
+ui.Icon("check")
+
+// Icon with custom styling
+ui.Icon("check_circle", ui.Attr{Class: "text-green-500 text-lg"})
+
+// Icon positioning helpers with text
+ui.IconLeft("person", "Profile")                    // Icon + text (left aligned)
+ui.IconRight("Settings", "tune")                    // Text + icon (right aligned)
+ui.IconStart("download", "Download")                // Icon at start with gap
+ui.IconEnd("Next", "arrow_forward")                 // Icon at end with gap
+
+// Common Material Icons: check, check_circle, error, warning, info,
+// arrow_back, arrow_forward, add, close, search, sort, home, person,
+// edit, delete, settings, image, download, etc.
+
+// Font Awesome format is automatically converted to Material Icons
+ui.Icon("fa fa-home")            // Automatically converted to "home"
+ui.Icon("fa-person")             // Automatically converted to "person"
+ui.Icon("fa-arrow-left")         // Automatically converted to "arrow_back"
 ```
 
 ## Theme Switcher

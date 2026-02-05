@@ -1311,25 +1311,32 @@ ui.Label(nil).Render("Label without target")  // No `for` attribute
 
 ## Icons (Material Icons)
 
-```go
-// Include Material Icons and Google Fonts in HTMLHead
-app.HTMLHead = append(app.HTMLHead,
-    `<link rel="preconnect" href="https://fonts.googleapis.com">`,
-    `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>`,
-    `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">`,
-    `<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">`,
-)
+Material Icons and Google Fonts are automatically included by default when you create an app with `ui.MakeApp()`.
 
-// Icon helpers
-ui.Icon("check")                             // <span class="material-icons">check</span>
-ui.Icon2("check", "text-green-500")         // Icon with extra classes
-ui.IconLeft("arrow_back", "Back")            // Icon + text (icon on left)
-ui.IconRight("Next", "arrow_forward")        // Text + icon (icon on right)
-ui.IconStart("download", "Download")         // Icon at start with gap
+```go
+// Icon helpers - Material Icons rendered as <div> with default width w-8
+ui.Icon("check")                                    // <div class="material-icons w-8">check</div>
+ui.Icon("check", ui.Attr{Class: "text-green-500"}) // Icon with extra classes
+
+// Icon positioning helpers
+ui.IconLeft("person", "Profile")                    // Icon + text (icon on left with gap)
+ui.IconRight("Settings", "tune")                    // Text + icon (icon on right with gap)
+ui.IconStart("download", "Download")                // Icon at start with gap
+ui.IconEnd("Next", "arrow_forward")                 // Icon at end with gap
+
+// Using icons in alerts
+ui.Alert("Success").
+    Icon(ui.Icon("check_circle", ui.Attr{Class: "text-lg"})).
+    Render()
 
 // Common Material Icons:
-// check, arrow_back, arrow_forward, add, close, search, sort, arrow_upward, 
-// arrow_downward, undo, download, tune, inbox, image, home, person, etc.
+// check, check_circle, error, warning, info, arrow_back, arrow_forward, add,
+// close, search, sort, arrow_upward, arrow_downward, undo, download, tune,
+// inbox, image, home, person, edit, delete, settings, etc.
+
+// Font Awesome names are automatically converted to Material Icons
+ui.Icon("fa fa-home")    // Automatically converted to "home"
+ui.Icon("fa-person")     // Automatically converted to "person"
 ```
 
 ---
