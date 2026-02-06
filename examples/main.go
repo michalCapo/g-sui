@@ -44,6 +44,7 @@ var routes = []route{
 	{Path: "/spa", Title: "SPA"},
 	{Path: "/reload-redirect", Title: "Reload & Redirect"},
 	{Path: "/routes", Title: "Route Params"},
+	{Path: "/proxy", Title: "Proxy"},
 }
 
 func main() {
@@ -121,6 +122,7 @@ func main() {
 	app.Page("/routes/user/{id}", "User Detail", pages.UserDetail)
 	app.Page("/routes/user/{userId}/post/{postId}", "User Post Detail", pages.UserPostDetail)
 	app.Page("/routes/category/{category}/product/{product}", "Category Product Detail", pages.CategoryProductDetail)
+	app.Page("/proxy", "Proxy", pages.Proxy)
 
 	app.Listen(":1422")
 }

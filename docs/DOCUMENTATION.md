@@ -3904,6 +3904,92 @@ After running `./deploy`, you can:
 
 ---
 
+## Reverse Proxy Package
+
+The `proxy` package provides a reverse proxy server with WebSocket support and URL rewriting. It forwards HTTP and WebSocket requests to a target server while automatically rewriting port references in responses to maintain transparent proxying.
+
+### Basic Usage
+
+```go
+package main
+
+import (
+    "log"
+    "github.com/michalCapo/g-sui/proxy"
+)
+
+func main() {
+    p, err := proxy.New(proxy.Config{
+        ProxyPort:  "8640",          // Port to listen on
+        TargetPort: "8642",          // Target server port
+        TargetHost: "localhost",     // Target server host
+        Logger:     log.Default(),   // Optional logger
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    log.Println("Proxy starting on :8640 -> localhost:8642")
+    if err := p.Start(); err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+### Features
+
+- **HTTP Request Forwarding** - Forward all HTTP requests to target server
+- **WebSocket Proxying** - Full WebSocket support with connection tunneling
+- **URL Rewriting** - Automatic rewriting of port references in:
+  - HTML responses
+  - CSS stylesheets
+  - JavaScript code
+  - JSON responses
+- **Transparent Proxying** - URLs in responses are rewritten to point to proxy port
+- **Graceful Shutdown** - Clean server shutdown via `Stop()` method
+- **Debug Logging** - Optional debug logging for WebSocket messages (injected into HTML)
+
+### Configuration
+
+```go
+type Config struct {
+    ProxyPort  string        // Port to listen on (e.g., "8640")
+    TargetPort string        // Target port (e.g., "8642")
+    TargetHost string        // Target host (e.g., "localhost")
+    Logger     *log.Logger   // Optional logger for debug output
+}
+```
+
+### Methods
+
+```go
+// Create new proxy with configuration
+proxy, err := proxy.New(config)
+
+// Start listening and forwarding (blocking call)
+err := proxy.Start()
+
+// Gracefully stop the proxy
+err := proxy.Stop()
+```
+
+### Example with g-sui
+
+See `examples/pages/proxy.go` for a complete example of:
+- Creating and managing proxy instances
+- Exposing proxy control via UI (start/stop buttons)
+- Handling configuration updates
+- Displaying real-time status
+
+### Use Cases
+
+- **Development**: Run multiple services on different ports and access through single proxy
+- **Testing**: Test applications with different proxy configurations
+- **Staging**: Frontend and backend on separate ports but accessed through single proxy
+- **WebSocket Support**: Proxy WebSocket connections transparently to target server
+
+---
+
 ## Future Considerations
 
 ### Potential Enhancements

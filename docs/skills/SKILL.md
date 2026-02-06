@@ -1,6 +1,6 @@
 ---
 name: g-sui
-description: Server-rendered Go UI framework. Use when building g-sui applications, creating UI components, handling forms with server actions, using data tables, setting up routes, or implementing WebSocket patches. Triggered by "g-sui", "server-rendered UI", "Go UI framework", form handling, or data collation.
+description: Server-rendered Go UI framework. Use when building g-sui applications, creating UI components, handling forms with server actions, using data tables, setting up routes, implementing WebSocket patches, or working with the reverse proxy package. Triggered by "g-sui", "server-rendered UI", "Go UI framework", form handling, data collation, or reverse proxy.
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write
 ---
 

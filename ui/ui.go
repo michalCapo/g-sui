@@ -349,11 +349,11 @@ func ThemeSwitcher(css string) string {
 	id := "tsui_theme_" + RandomString(8)
 	sun := Icon("light_mode", Attr{Class: "text-base"})
 	moon := Icon("dark_mode", Attr{Class: "text-base"})
-	desktop := Icon("computer", Attr{Class: "text-base"})
+	auto := Icon("brightness_auto", Attr{Class: "text-base"})
 
 	btn := Div("")(
-		fmt.Sprintf(`<button id="%s" type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 shadow-sm %s">`, escapeAttr(id), escapeAttr(css)),
-		`<span class="icon">`+desktop+`</span>`,
+		fmt.Sprintf(`<button id="%s" type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 shadow-sm cursor-pointer %s">`, escapeAttr(id), escapeAttr(css)),
+		`<span class="icon flex items-center justify-center">`+auto+`</span>`,
 		`<span class="label">Auto</span>`,
 		`</button>`,
 	)
@@ -361,7 +361,7 @@ func ThemeSwitcher(css string) string {
 	// Escape quotes for JavaScript strings
 	moonJS := strings.ReplaceAll(moon, `"`, `\"`)
 	sunJS := strings.ReplaceAll(sun, `"`, `\"`)
-	desktopJS := strings.ReplaceAll(desktop, `"`, `\"`)
+	autoJS := strings.ReplaceAll(auto, `"`, `\"`)
 
 	script := Script(
 		Trim(fmt.Sprintf(`(function(){
@@ -371,12 +371,12 @@ func ThemeSwitcher(css string) string {
             function resolve(mode){ if(mode==='system'){ try { return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'; } catch(_) { return 'light'; } } return mode; }
             function setMode(mode){ try { if (typeof setTheme==='function') setTheme(mode); } catch(_){} }
             function labelFor(mode){ return mode==='system'?'Auto':(mode.charAt(0).toUpperCase()+mode.slice(1)); }
-            function iconFor(eff){ if(eff==='dark'){ return "%s"; } if(eff==='light'){ return "%s"; } return "%s"; }
-            function render(){ var pref=getPref(); var eff=resolve(pref); var i=btn.querySelector('.icon'); if(i){ i.innerHTML=iconFor(eff); } var l=btn.querySelector('.label'); if(l){ l.textContent=labelFor(pref); } }
+            function iconFor(pref){ if(pref==='system'){ return "%s"; } if(pref==='dark'){ return "%s"; } if(pref==='light'){ return "%s"; } }
+            function render(){ var pref=getPref(); var i=btn.querySelector('.icon'); if(i){ i.innerHTML=iconFor(pref); } var l=btn.querySelector('.label'); if(l){ l.textContent=labelFor(pref); } }
             render();
             btn.addEventListener('click', function(){ var pref=getPref(); var idx=modes.indexOf(pref); var next=modes[(idx+1)%%modes.length]; setMode(next); render(); });
             try { if (window.matchMedia){ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(){ if(getPref()==='system'){ render(); } }); } } catch(_){ }
-        })();`, id, moonJS, sunJS, desktopJS)),
+        })();`, id, autoJS, moonJS, sunJS)),
 	)
 
 	return btn + script

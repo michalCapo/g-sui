@@ -540,10 +540,18 @@ ui.Icon("fa-arrow-left")         // Automatically converted to "arrow_back"
 ## Theme Switcher
 
 ```go
-// Cycles: System → Light → Dark
-ui.ThemeSwitcher("")                         // Default
-ui.ThemeSwitcher("fixed bottom-4 right-4")   // Positioned
+// Cycles: System (brightness_auto icon) → Light (light_mode icon) → Dark (dark_mode icon)
+ui.ThemeSwitcher("")                         // Default styling
+ui.ThemeSwitcher("fixed bottom-4 right-4")   // Custom positioning
 ```
+
+**Features**:
+- Displays proper Material Icons for each mode (brightness_auto, light_mode, dark_mode)
+- Icons are vertically centered with flexbox alignment
+- Includes cursor-pointer class for better UX
+- Stores preference in localStorage
+- Smooth transitions between modes
+- Works with system dark mode preference
 
 ## Hidden Fields
 

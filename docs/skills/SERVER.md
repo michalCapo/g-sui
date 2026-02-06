@@ -521,3 +521,89 @@ Format: `v0.XXX`
 - Minor version: Auto-incremented starting from `100`
 
 After running `./deploy`, create a GitHub release at the repository's releases page.
+
+---
+
+## Reverse Proxy Package
+
+The `proxy` package provides HTTP and WebSocket reverse proxying with automatic URL rewriting. Use it for development scenarios where you need to forward requests from one port to another.
+
+### Basic Usage
+
+```go
+package main
+
+import (
+    "log"
+    "github.com/michalCapo/g-sui/proxy"
+)
+
+func main() {
+    p, err := proxy.New(proxy.Config{
+        ProxyPort:  "8640",          // Listen on this port
+        TargetPort: "8642",          // Forward to this port
+        TargetHost: "localhost",     // Target server
+        Logger:     log.Default(),   // Optional logger
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    log.Println("Proxy listening on :8640 -> localhost:8642")
+    if err := p.Start(); err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+### Configuration
+
+```go
+type Config struct {
+    ProxyPort  string        // Port to listen on (e.g., "8640")
+    TargetPort string        // Target port (e.g., "8642")
+    TargetHost string        // Target host (e.g., "localhost")
+    Logger     *log.Logger   // Optional logger
+}
+```
+
+### Methods
+
+```go
+// Create new proxy with configuration
+proxy, err := proxy.New(config)
+
+// Start listening (blocking call)
+err := proxy.Start()
+
+// Gracefully stop
+err := proxy.Stop()
+```
+
+### Features
+
+- **HTTP Forwarding**: Forward all HTTP requests to target server
+- **WebSocket Support**: Full WebSocket proxying with connection tunneling
+- **URL Rewriting**: Automatic rewriting of port references in:
+  - HTML responses
+  - CSS stylesheets
+  - JavaScript code
+  - JSON responses
+- **Transparent Proxying**: URLs in responses point to proxy port
+- **Debug Logging**: Optional debug logging for WebSocket messages
+- **Graceful Shutdown**: Clean server shutdown
+
+### Use Cases
+
+- **Development**: Frontend on port 8640, backend on port 8642, accessed through proxy
+- **Testing**: Test with different proxy configurations
+- **Staging**: Frontend and backend on separate ports accessed through single proxy
+- **WebSocket Support**: Proxy WebSocket connections transparently
+
+### Integration with g-sui UI
+
+You can expose proxy controls via g-sui UI components. See `examples/pages/proxy.go` for a complete example with:
+- Configuration form (update proxy settings)
+- Start/Stop buttons
+- Real-time status display
+- Usage instructions

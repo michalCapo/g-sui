@@ -77,6 +77,10 @@ ui/
 ├── ui.progress.go     # Progress bar component
 ├── ui.step.go         # Step/wizard component
 └── *_test.go          # Comprehensive test coverage
+
+proxy/
+├── proxy.go           # Reverse proxy with HTTP/WebSocket forwarding and URL rewriting
+└── *_test.go          # Comprehensive test coverage
 ```
 
 ### App Initialization Pattern
@@ -173,12 +177,56 @@ content := collate.Render(ctx, db)
 
 - **Tailwind CSS**: Utility-first CSS loaded via CDN in development
 - **Dark Mode**: Built-in dark theme overrides; use `ui.ThemeSwitcher("")` for toggle
+  - Theme switcher displays brightness_auto icon for system/auto mode, light_mode for light, dark_mode for dark
+  - Icons are properly centered with flexbox alignment
+  - Includes cursor-pointer class for better UX
 - **CSS Constants**: Pre-defined color constants (Blue, Green, Red, etc.) and size constants (XS, SM, MD, ST, LG, XL)
 - **Icons**: Material Icons (with Google Fonts) are automatically included in all apps
   - Use `ui.Icon("icon_name")` for single icons (renders as `<div class="material-icons w-8">icon_name</div>`)
   - Font Awesome names are automatically converted (e.g., `fa-home` → `home`)
   - Customize size and style: `ui.Icon("home", ui.Attr{Class: "text-lg text-blue-500"})`
   - Helper functions: `ui.IconLeft()`, `ui.IconRight()`, `ui.IconStart()`, `ui.IconEnd()`
+
+## Reverse Proxy Package
+
+The `proxy` package provides HTTP and WebSocket reverse proxying with automatic URL rewriting:
+
+```go
+import "github.com/michalCapo/g-sui/proxy"
+
+p, err := proxy.New(proxy.Config{
+    ProxyPort:  "8640",
+    TargetPort: "8642",
+    TargetHost: "localhost",
+    Logger:     log.Default(),
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+// Start blocks while serving requests
+if err := p.Start(); err != nil {
+    log.Fatal(err)
+}
+
+// Later, stop gracefully
+p.Stop()
+```
+
+**Features**:
+- HTTP request forwarding with transparent proxying
+- WebSocket connection tunneling
+- Automatic URL rewriting in HTML, CSS, JavaScript, and JSON responses
+- Port reference rewriting
+- Optional debug logging for WebSocket messages
+- Graceful shutdown support
+
+**Use cases**:
+- Development: frontend on one port, backend on another, accessed through single proxy
+- Testing: swap proxy targets without changing frontend URLs
+- Staging: transparent port forwarding for distributed services
+
+See `examples/pages/proxy.go` for a complete UI example with start/stop controls and real-time status updates.
 
 ## Dependencies
 

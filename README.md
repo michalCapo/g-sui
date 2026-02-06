@@ -28,7 +28,8 @@ See documentation at [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) for a comp
 - A small set of UI inputs (text, email, phone, password, number, date/time/datetime, select, checkbox, radio, radio cards, textarea), buttons, tables, icons
 - Toast messages: `Success`, `Error`, `Info`, and an error toast with a Reload button
 - Built-in live status via WebSocket (`/__ws`) with an offline banner, automatic reconnect, and auto-reload on reconnect
-- Built-in dark mode with a tiny theme switcher (`ui.ThemeSwitcher`) cycling System → Light → Dark
+- Built-in dark mode with a tiny theme switcher (`ui.ThemeSwitcher`) cycling System → Light → Dark with proper icon alignment
+- Reverse proxy package (`proxy`) for HTTP and WebSocket forwarding with automatic URL rewriting
 - Optional dev autorestart (`app.AutoRestart(true)`) to rebuild and restart on changes
 
 ## Lighthouse snapshot
@@ -112,6 +113,7 @@ The examples include:
 - Query demo: in-memory SQLite + GORM with `ui.TCollate` (search, sort, filters, paging, XLS export)
 - Append/Prepend demo for list updates
 - Clock demo and deferred fragments (skeleton → WS patch)
+- **Reverse Proxy Demo**: HTTP/WebSocket proxying with port forwarding and URL rewriting
 - Navigation bar that highlights the current page based on the URL path
 
 ### Smooth Navigation
@@ -328,17 +330,56 @@ For production deployments, back the shared session store with Redis or a databa
 ## Theme & Dark Mode
 
 - Built-in dark theme overrides load with `ui.MakeApp`. Use `ui.ThemeSwitcher("")` to render a compact toggle that cycles System → Light → Dark.
-- Typical placement is in your layout’s top bar:
+- The theme switcher includes properly aligned icons and smooth transitions between system, light, and dark modes
+- Typical placement is in your layout's top bar:
 
 ```go
 nav := ui.Div("bg-white shadow mb-6")(
     ui.Div("max-w-5xl mx-auto px-4 py-2 flex items-center gap-2")(
         // ... your nav links ...
         ui.Flex1,
-        ui.ThemeSwitcher(""),
+        ui.ThemeSwitcher(""),  // Shows auto/light/dark icons with proper alignment
     ),
 )
 ```
+
+## Reverse Proxy
+
+The `proxy` package provides a reverse proxy server with WebSocket support and automatic URL rewriting. Perfect for development scenarios where you need to forward requests from one port to another while keeping URLs transparent.
+
+```go
+import "github.com/michalCapo/g-sui/proxy"
+
+p, err := proxy.New(proxy.Config{
+    ProxyPort:  "8640",          // Listen on this port
+    TargetPort: "8642",          // Forward to this port
+    TargetHost: "localhost",     // Target server host
+    Logger:     log.Default(),   // Optional logger
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+log.Println("Proxy starting on :8640 -> localhost:8642")
+if err := p.Start(); err != nil {
+    log.Fatal(err)
+}
+```
+
+**Features**:
+- HTTP request forwarding to target server
+- WebSocket connection tunneling (no frame overhead)
+- Automatic URL rewriting in HTML, CSS, and JavaScript
+- Port reference rewriting in response content
+- Debug logging injected into HTML responses
+- Graceful shutdown support
+
+**Use cases**:
+- Development: Run frontend and backend on different ports, access through single proxy
+- Testing: Test applications with different proxy configurations
+- Staging: Frontend and backend on separate ports through single proxy
+
+See `examples/pages/proxy.go` for a complete UI example with start/stop controls.
 
 ## Deferred fragments (WS + Skeleton)
 
