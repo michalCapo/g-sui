@@ -1,18 +1,15 @@
-<div align="center">
+# g-sui
 
-# g-sui — Go Server‑Rendered UI
+Go server-rendered UI framework with real-time WebSocket patches.
 
-Build interactive, component‑styled pages in Go with server actions, simple partial updates, and no client framework.
+g-sui renders HTML on the server, sends actions over WebSocket, and updates specific DOM targets without full page reloads.
 
-</div>
+## Documentation
 
----
+- Full API docs: [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md)
+- Assistant skill docs: [`docs/skills/SKILL.md`](docs/skills/SKILL.md)
 
-See documentation at [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) for a comprehensive reference guide and architecture documentation. See [`examples/`](examples/) for working examples.
-
-**Claude Code users**: Install the [g-sui skills](#claude-code-skills) to help Claude understand the framework better.
-
-## Highlights
+## Features
 
 - Server-rendered HTML components with a small helper DSL
 - Lightweight interactivity via server actions (`Click`, `Submit`, `Send`)
@@ -72,21 +69,6 @@ func main() {
 
 Run and open http://localhost:8080
 
-### Favicon (optional)
-
-If you have a favicon, serve it with caching and add a link tag:
-
-```go
-// embed your assets
-//go:embed assets/*
-var assets embed.FS
-
-app.Favicon(assets, "assets/favicon.svg", 24*time.Hour)
-app.HTMLHead = append(app.HTMLHead, `<link rel="icon" href="/favicon.ico" type="image/svg+xml">`)
-```
-
-The server sets the proper Content-Type for common favicon formats (including `image/svg+xml`).
-
 ## Examples
 
 This repo ships an example app showcasing most components and patterns.
@@ -98,55 +80,11 @@ go run examples/main.go
 ```
 
 The examples include:
-- **Component Showcase**: Alerts, Badges, Cards, Progress Bars, Tooltips, Tabs, Accordion, Dropdown Menus
-- Showcase form with validations
-- Inputs: text/email/phone/password/number/date/time/datetime/textarea/select/checkbox/radio/radio cards
-- Buttons and color variants (solid/outline)
-- Tables with simple helpers (including colspan and empty cells)
-- Icons helpers and Hello demo (success/info/error/crash)
-- Markdown rendering and a CAPTCHA demo
-- **Route Parameters**: Path parameters (`/user/{id}`) and query parameters (`?name=Smith`) examples
-  ```go
-  userID := ctx.PathParam("id")           // From /user/{id}
-  tab := ctx.QueryParam("tab")            // From ?tab=profile (works with SPA navigation)
-  ```
-- Query demo: in-memory SQLite + GORM with `ui.TCollate` (search, sort, filters, paging, XLS export)
-- Append/Prepend demo for list updates
-- Clock demo and deferred fragments (skeleton → WS patch)
-- **Reverse Proxy Demo**: HTTP/WebSocket proxying with port forwarding and URL rewriting
-- Navigation bar that highlights the current page based on the URL path
-
-### Smooth Navigation
-
-g-sui provides smooth, SPA-like navigation with background loading and a smart loader that only appears if the fetch takes longer than 50ms.
-
-Use `ctx.Load()` for smooth navigation on links:
-
-```go
-ui.A(cls, ctx.Load(r.Path))(r.Title)
-```
-
-This creates a link that:
-- Fetches the page in the background on click
-- Shows a loader only if the fetch takes longer than 50ms
-- Replaces the page content seamlessly without a full reload
-- Updates the browser history and title
-
-#### Active Navigation Highlight
-
-The examples' top navigation highlights the last selected page (the current route) without any extra state. Compare each route path to `ctx.Request.URL.Path` and choose classes accordingly:
-
-```go
-// inside a layout callable
-ui.Map(routes, func(r *route, _ int) string {
-    base := "px-2 py-1 rounded text-sm whitespace-nowrap"
-    cls := base + " hover:bg-gray-200"
-    if ctx != nil && ctx.Request != nil && r.Path == ctx.Request.URL.Path {
-        cls = base + " bg-blue-700 text-white hover:bg-blue-600"
-    }
-    return ui.A(cls, ctx.Load(r.Path))(r.Title)
-})
-```
+- Core UI components (alerts, badges, cards, tabs, accordion, dropdowns, tooltips)
+- Forms and inputs with validation
+- Tables, icons, and markdown rendering
+- Route params and navigation examples
+- WebSocket patches, deferred loading, and reverse proxy demo
 
 ## Progressive Web App (PWA)
 
@@ -191,70 +129,6 @@ On the server, an action has the signature `func(*ui.Context) string` and return
 
 Forms can use `ctx.Submit(fn).Render/Replace/None()` and `ctx.Body(out)` to bind values to a struct.
 
-## Query/Collate (search, sort, filters, paging, XLS)
-
-Build data-centric pages quickly using `ui.TCollate`. Define fields, choose which ones participate in search/sort/filter, optionally enable Excel export, and provide a row renderer. Works with `gorm` and SQLite (and other DBs).
-
-Minimal example (excerpt):
-
-```go
-type Person struct {
-    ID        uint `gorm:"primaryKey"`
-    Name      string
-    Surname   string
-    Email     string
-    Country   string
-    Status    string
-    Active    bool
-    CreatedAt time.Time
-    LastLogin time.Time // zero means "never"
-}
-
-// Recommended for SQLite: install normalize() for accent-insensitive search
-_ = ui.RegisterSQLiteNormalize(db)
-
-// Define fields
-name := ui.TField{DB: "name", Field: "Name", Text: "Name"}
-surname := ui.TField{DB: "surname", Field: "Surname", Text: "Surname"}
-email := ui.TField{DB: "email", Field: "Email", Text: "Email"}
-status := ui.TField{DB: "status", Field: "Status", Text: "Status", As: ui.SELECT, Options: ui.MakeOptions([]string{"new","active","blocked"})}
-active := ui.TField{DB: "active", Field: "Active", Text: "Active", As: ui.BOOL}
-created := ui.TField{DB: "created_at", Field: "CreatedAt", Text: "Created", As: ui.DATES}
-lastLogin := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Has logged in", As: ui.NOT_ZERO_DATE}
-neverLogin := ui.TField{DB: "last_login", Field: "LastLogin", Text: "Never logged in", As: ui.ZERO_DATE}
-
-init := &ui.TQuery{Limit: 8, Order: "surname asc"}
-
-collate := ui.Collate[Person](init)
-collate.Search(surname, name, email, status)
-collate.Sort(surname, email, lastLogin)
-collate.Filter(active, lastLogin, neverLogin, created)
-collate.Excel(surname, name, email, status, active, created, lastLogin)
-
-// How each row renders
-collate.Row(func(p *Person, _ int) string {
-    badge := ui.Span("px-2 py-0.5 rounded text-xs border "+
-        map[bool]string{true: "bg-green-100 text-green-700 border-green-200", false: "bg-gray-100 text-gray-700 border-gray-200"}[p.Active])(
-        map[bool]string{true: "active", false: "inactive"}[p.Active],
-    )
-    return ui.Div("bg-white rounded border p-3 flex items-center justify-between")(
-        ui.Div("font-semibold")(fmt.Sprintf("%s %s", p.Surname, p.Name))+
-        ui.Div("text-sm text-gray-500 ml-2")(p.Email)+
-        badge,
-    )
-})
-
-// Render the full UI (search/sort/filters/paging/export)
-content := collate.Render(ctx, db)
-```
-
-Notes:
-
-- Use `ui.MakeOptions(slice)` to build options for `SELECT` fields quickly.
-- `ZERO_DATE` / `NOT_ZERO_DATE` are convenient filters for nullable timestamps or "never" semantics.
-- Excel export is enabled by calling `collate.Excel(...)` with the fields to include.
-- For SQLite, `ui.RegisterSQLiteNormalize(db)` installs a `normalize()` function to improve diacritics/accents-insensitive search.
-
 ## Messages and errors
 
 - Toasts: `ctx.Success(msg)`, `ctx.Error(msg)`, `ctx.Info(msg)`
@@ -285,48 +159,6 @@ Notes:
 
 Refer to the `examples/` directory for practical usage and composition patterns.
 
-## CAPTCHA components
-
-- `ui.Captcha(siteKey, solvedHTML)` renders the Google reCAPTCHA widget and swaps in the `solvedHTML` fragment once the challenge completes (falls back to a helper note if the script is missing).
-- `ui.Captcha2(onValidated)` generates an image-based challenge entirely in Go, keeps the session in memory, and optionally calls `onValidated` to stream a success fragment back through server actions.
-- `ui.Captcha3(onValidated)` renders draggable tiles that must be ordered to match the target string; uses the same session helpers as `Captcha2` and supports the optional success action.
-
-`Captcha2` and `Captcha3` expose configuration helpers such as `SessionField`, `ClientVerifiedField`, `Attempts`, and `Lifetime`, plus `AnswerField`/`ArrangementField` or `Count` to tailor the challenge. Each call to `Render(ctx)` creates a fresh session using cryptographically secure IDs.
-
-Validate the submitted form server-side with the convenience methods:
-
-```go
-func handler(ctx *ui.Context) string {
-    successAction := func(inner *ui.Context) string {
-        inner.Success("Captcha solved")
-        return ""
-    }
-    captcha := ui.Captcha3(successAction).Count(5)
-
-    if ctx.Request.Method == http.MethodPost {
-        ok, err := captcha.ValidateRequest(ctx.Request)
-        if err != nil {
-            ctx.Error(err.Error())
-            return ""
-        }
-        if !ok {
-            ctx.Error("Captcha mismatch, please try again")
-            return ""
-        }
-        // proceed with the protected action
-    }
-
-    return ui.Form("post", "/submit")(
-        captcha.Render(ctx),
-        ui.Button().Color(ui.Blue).Submit().Render("Submit"),
-    )
-}
-```
-
-Import `net/http` to use `http.MethodPost` within your handlers.
-
-For production deployments, back the shared session store with Redis or a database by swapping out the in-memory map used in `ui.Captcha2`/`ui.Captcha3`.
-
 ## Theme & Dark Mode
 
 - Built-in dark theme overrides load with `ui.MakeApp`. Use `ui.ThemeSwitcher("")` to render a compact toggle that cycles System → Light → Dark.
@@ -342,109 +174,6 @@ nav := ui.Div("bg-white shadow mb-6")(
     ),
 )
 ```
-
-## Reverse Proxy
-
-The `proxy` package provides a reverse proxy server with WebSocket support and automatic URL rewriting. Perfect for development scenarios where you need to forward requests from one port to another while keeping URLs transparent.
-
-```go
-import "github.com/michalCapo/g-sui/proxy"
-
-p, err := proxy.New(proxy.Config{
-    ProxyPort:  "8640",          // Listen on this port
-    TargetPort: "8642",          // Forward to this port
-    TargetHost: "localhost",     // Target server host
-    Logger:     log.Default(),   // Optional logger
-})
-if err != nil {
-    log.Fatal(err)
-}
-
-log.Println("Proxy starting on :8640 -> localhost:8642")
-if err := p.Start(); err != nil {
-    log.Fatal(err)
-}
-```
-
-**Features**:
-- HTTP request forwarding to target server
-- WebSocket connection tunneling (no frame overhead)
-- Automatic URL rewriting in HTML, CSS, and JavaScript
-- Port reference rewriting in response content
-- Debug logging injected into HTML responses
-- Graceful shutdown support
-
-**Use cases**:
-- Development: Run frontend and backend on different ports, access through single proxy
-- Testing: Test applications with different proxy configurations
-- Staging: Frontend and backend on separate ports through single proxy
-
-See `examples/pages/proxy.go` for a complete UI example with start/stop controls.
-
-## Deferred fragments (WS + Skeleton)
-
-Show a skeleton immediately, then push server patches when background work finishes. The example below mirrors the TS version: it returns a skeleton, then replaces it after ~2s and appends controls after ~3s.
-
-```go
-package pages
-
-import (
-    "time"
-    "github.com/michalCapo/g-sui/ui"
-)
-
-// optional body payload to choose a skeleton kind
-type deferForm struct { As ui.Skeleton }
-
-// Deffered: return a skeleton now; push WS patches when ready
-func Deffered(ctx *ui.Context) string {
-    target := ui.Target()
-
-    // read preferred skeleton type from the request (optional)
-    form := deferForm{}
-    _ = ctx.Body(&form)
-
-    // replace the skeleton when the data is ready (~2s)
-    go func() {
-        time.Sleep(2 * time.Second)
-        html := ui.Div("space-y-4", target)(
-            ui.Div("bg-gray-50 dark:bg-gray-900 p-4 rounded shadow border rounded p-4")(
-                ui.Div("text-lg font-semibold")("Deferred content loaded"),
-                ui.Div("text-gray-600 text-sm")("This block replaced the skeleton via WebSocket patch."),
-            ),
-        )
-        ctx.Patch(target.Replace(), html)
-    }()
-
-    // append more controls after more work (~3s)
-    go func() {
-        time.Sleep(3 * time.Second)
-        controls := ui.Div("grid grid-cols-5 gap-4")(
-            ui.Button().Color(ui.Blue).Class("rounded text-sm").
-                Click(ctx.Call(Deffered, &deferForm{}).Replace(target)).Render("Default skeleton"),
-            ui.Button().Color(ui.Blue).Class("rounded text-sm").
-                Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonComponent}).Replace(target)).Render("Component skeleton"),
-            ui.Button().Color(ui.Blue).Class("rounded text-sm").
-                Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonList}).Replace(target)).Render("List skeleton"),
-            ui.Button().Color(ui.Blue).Class("rounded text-sm").
-                Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonPage}).Replace(target)).Render("Page skeleton"),
-            ui.Button().Color(ui.Blue).Class("rounded text-sm").
-                Click(ctx.Call(Deffered, &deferForm{As: ui.SkeletonForm}).Replace(target)).Render("Form skeleton"),
-        )
-        ctx.Patch(target.Append(), controls)
-    }()
-
-    // return chosen skeleton immediately
-    return target.Skeleton(form.As)
-}
-```
-
-Notes:
-
-- `ctx.Render(target, html)` and `ctx.Replace(target, html)` are convenience methods for WebSocket patches (recommended).
-- `ctx.Patch(ts, html)` is the full API for server‑initiated patches. Use `target.Render()`, `target.Replace()`, `target.Append()`, or `target.Prepend()` to describe the swap.
-- Skeleton helpers: `target.Skeleton(kind)`, `target.SkeletonList(n)`, `target.SkeletonComponent()`, `target.SkeletonPage()`, `target.SkeletonForm()`.
-- Actions: `ctx.Call(fn).Render/Replace/Append/Prepend/None()` for user‑initiated interactions.
 
 ## Security
 
@@ -467,42 +196,6 @@ func handler(ctx *ui.Context) string {
     return ui.Div("")("Your content")
 }
 ```
-
-### Best Practices
-
-1. **Use text-safe methods** when displaying user input:
-   - Tables: `table.FieldText(func(item *T) string { return item.UserInput }, "class")`
-   - Headers: `table.Head("User Text", "class")` (automatically escaped)
-
-2. **Set CSP headers** in your handlers to prevent inline script execution
-
-3. **Validate input** server-side using `go-playground/validator` before rendering
-
-4. **Avoid raw HTML** in user-controlled content; use the component methods which handle escaping
-
-## Development notes
-
-- Live status: pages include a lightweight WS client bound to `/__ws` that shows an offline banner, reconnects automatically, and reloads the page on reconnect (useful when the server restarts). The panic fallback page also auto-reloads on reconnect.
-- Autorestart: `app.AutoRestart(true)` watches your main package for file changes and rebuilds + restarts the app process. The built‑in WS client then reloads the page automatically on reconnect, so you get a smooth local DX without any extra setup.
-- The library favors simple strings for HTML; helpers build class names and attributes for you.
-- Validation uses `go-playground/validator`; see the login and showcase examples.
-
-## Releases
-
-To create and push a new version:
-
-```bash
-./deploy
-```
-
-The `deploy` script automatically:
-- Starts at version `v0.100` if no tags exist
-- Increments the minor version by 1 (e.g., `v0.100` → `v0.101` → `v0.102`)
-- Ensures your working tree is clean before tagging
-- Creates an annotated git tag
-- Pushes the tag to the remote repository
-
-After running `./deploy`, you can create a GitHub release by visiting the [releases page](https://github.com/michalCapo/g-sui/releases/new) and selecting the newly created tag.
 
 ## Claude Code Skills
 
