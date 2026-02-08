@@ -7,7 +7,7 @@
 ```go
 func TestHomePage(t *testing.T) {
     app := ui.MakeApp("en")
-    app.Page("/", func(ctx *ui.Context) string {
+    app.Page("/", "Home", func(ctx *ui.Context) string {
         return app.HTML("Test", "bg-white",
             ui.Div("p-4")("Hello"),
         )
@@ -41,7 +41,7 @@ func TestButton(t *testing.T) {
 ```go
 func TestFormSubmission(t *testing.T) {
     app := ui.MakeApp("en")
-    app.Page("/form", formHandler)
+    app.Page("/form", "Form", formHandler)
 
     handler := app.TestHandler()
     server := httptest.NewServer(handler)
@@ -226,25 +226,18 @@ func handler(ctx *ui.Context, db *gorm.DB) string {
 func main() {
     app := ui.MakeApp("en")
 
-    layout := func(title string, content ui.Callable) ui.Callable {
-        return func(ctx *ui.Context) string {
-            nav := ui.Div("bg-white shadow p-4")(
+    app.Layout(func(ctx *ui.Context) string {
+        return ui.Div("bg-gray-100 min-h-screen")(
+            ui.Div("bg-white shadow p-4 flex gap-3")(
                 ui.A("", ctx.Load("/"))("Home"),
                 ui.A("", ctx.Load("/users"))("Users"),
-            )
+            ),
+            ui.Div("p-8", ui.Attr{ID: "__content__"})(),
+        )
+    })
 
-            body := content(ctx)
-
-            return app.HTML(title, "bg-gray-100",
-                ui.Div("")(
-                    nav,
-                    ui.Div("p-8")(body),
-                ),
-            )
-        }
-    }
-
-    app.PageWithLayout("/", homeHandler, layout("Home", homeHandler))
+    app.Page("/", "Home", homeHandler)
+    app.Page("/users", "Users", usersHandler)
     app.Listen(":8080")
 }
 ```

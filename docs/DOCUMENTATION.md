@@ -35,7 +35,6 @@ This document combines the LLM Reference Guide and Architecture Documentation fo
 28. [Project Structure](#project-structure)
 29. [Dependencies](#dependencies)
 30. [Quick Reference](#quick-reference)
-30. [UI Components](#ui-components)
 
 ### Part II: Architecture Documentation
 31. [Architecture Overview](#architecture-overview)
@@ -78,7 +77,7 @@ import (
 func main() {
     app := ui.MakeApp("en")
     
-    app.Page("/", func(ctx *ui.Context) string {
+    app.Page("/", "Home", func(ctx *ui.Context) string {
         return app.HTML("Home", "bg-gray-100", 
             ui.Div("p-8")(
                 ui.Div("text-2xl font-bold")("Hello World"),
@@ -126,97 +125,9 @@ app.Custom("POST", "/api/users", createUserHandler)
 // Shorthand methods
 app.GET("/api/data", getDataHandler)
 app.POST("/api/data", createDataHandler)
-app.PUT("/api/data/:id", updateDataHandler)
-app.DELETE("/api/data/:id", deleteDataHandler)
-app.PATCH("/api/data/:id", patchDataHandler)
-```
-
-### Custom Server Configuration
-```go
-// Get http.Handler for custom server setups
-app := ui.MakeApp("en")
-app.Page("/", "Home", homeHandler)
-app.StartSweeper()  // Manually start session sweeper
-
-// Wrap with custom middleware
-handler := myLoggingMiddleware(app.Handler())
-
-// Use with custom server
-server := &http.Server{
-    Addr:    ":8080",
-    Handler: handler,
-}
-server.ListenAndServe()
-```
-
-### Testing Handler
-```go
-handler := app.TestHandler()                      // Get http.Handler for testing
-server := httptest.NewServer(handler)             // Create test server
-resp, _ := http.Get(server.URL + "/path")         // Make test requests
-```
-
-### HTML Wrapper
-```go
-app.HTML(title, bodyClass, content) string        // Full HTML document with Tailwind
-app.HTMLHead = append(app.HTMLHead, `<link ...>`) // Add to <head>
-```
-
----
-
-g-sui is a server-rendered UI framework for Go that enables building interactive web applications without client-side JavaScript frameworks. The architecture follows these key principles:
-
-- **Server-Centric**: All HTML generation, business logic, and state management occur on the server
-- **String-Based Rendering**: Components are plain Go functions that return HTML strings
-- **HTPX-Inspired Actions**: User interactions trigger server actions that return partial HTML updates
-- **WebSocket-Enhanced**: Real-time updates and server-initiated DOM patches via WebSocket
-- **Security-First**: Built-in XSS protection, CSP headers, and input validation
-
-### Technology Stack
-
-- **Go 1.21+**: Core language and standard library
-- **Tailwind CSS**: Utility-first CSS (loaded via CDN in dev)
-- **go-playground/validator**: Struct validation
-- **GORM**: Optional database ORM for sessions and data collation
-
----
-
-
-```go
-type Callable = func(*ui.Context) string  // All handlers return HTML strings
-type Attr struct { ID, Href, Class, Value, OnClick, OnSubmit string; ... }
-type AOption struct { ID, Value string }
-```
-
----
-
-## App Setup
-
-```go
-app := ui.MakeApp("en")                           // Create app with locale
-app.Page("/path", "Page Title", handler)          // Register page route
-app.Favicon(embedFS, "assets/favicon.svg", 24*time.Hour)
-app.Assets(embedFS, "assets/", 24*time.Hour)      // Serve static files
-app.AutoRestart(true)                             // Dev: rebuild on file changes
-app.Listen(":8080")                               // Start server (also starts WS at /__ws)
-```
-
-### Custom HTTP Handlers (REST APIs)
-```go
-// Register custom HTTP handlers (checked before g-sui routes)
-app.Custom("GET", "/api/health", func(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    w.Write([]byte(`{"status": "ok"}`))
-})
-
-app.Custom("POST", "/api/users", createUserHandler)
-
-// Shorthand methods
-app.GET("/api/data", getDataHandler)
-app.POST("/api/data", createDataHandler)
-app.PUT("/api/data/:id", updateDataHandler)
-app.DELETE("/api/data/:id", deleteDataHandler)
-app.PATCH("/api/data/:id", patchDataHandler)
+app.PUT("/api/data/update", updateDataHandler)
+app.DELETE("/api/data/delete", deleteDataHandler)
+app.PATCH("/api/data/patch", patchDataHandler)
 ```
 
 ### Custom Server Configuration
@@ -3033,7 +2944,7 @@ type Context struct {
 **Example: Using Path and Query Parameters Together**
 
 ```go
-// Route: app.Page("/user/{id}", userDetailHandler)
+// Route: app.Page("/user/{id}", "User Detail", userDetailHandler)
 // URL: /user/123?tab=profile&view=detailed&sort=name&order=asc
 
 func userDetailHandler(ctx *ui.Context) string {
@@ -3852,7 +3763,7 @@ func TestButtonAction(t *testing.T) {
 ```go
 func TestPageRender(t *testing.T) {
     app := ui.MakeApp("en")
-    app.Page("/test", func(ctx *ui.Context) string {
+    app.Page("/test", "Test", func(ctx *ui.Context) string {
         return ui.Div("test-class")("Test Content")
     })
 

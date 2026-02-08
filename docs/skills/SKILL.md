@@ -18,7 +18,7 @@ import "github.com/michalCapo/g-sui/ui"
 func main() {
     app := ui.MakeApp("en")
 
-    app.Page("/", func(ctx *ui.Context) string {
+    app.Page("/", "Home", func(ctx *ui.Context) string {
         return app.HTML("Home", "bg-gray-100",
             ui.Div("p-8")(
                 ui.Div("text-2xl font-bold")("Hello World"),

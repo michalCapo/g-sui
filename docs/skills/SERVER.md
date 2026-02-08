@@ -32,8 +32,8 @@ func main() {
     app.Custom("GET", "/api/health", healthHandler)
     app.GET("/api/users", getUsersHandler)
     app.POST("/api/users", createUserHandler)
-    app.PUT("/api/users/:id", updateUserHandler)
-    app.DELETE("/api/users/:id", deleteUserHandler)
+    app.PUT("/api/users/update", updateUserHandler)
+    app.DELETE("/api/users/delete", deleteUserHandler)
 
     // Development options
     app.AutoRestart(true)         // Rebuild on file changes
@@ -271,12 +271,12 @@ app.Custom("GET", "/api/health", func(w http.ResponseWriter, r *http.Request) {
 
 app.Custom("POST", "/api/users", createUserHandler)
 
-// Shorthand methods
+// Shorthand methods (exact path match)
 app.GET("/api/data", getDataHandler)
 app.POST("/api/data", createDataHandler)
-app.PUT("/api/data/:id", updateDataHandler)
-app.DELETE("/api/data/:id", deleteDataHandler)
-app.PATCH("/api/data/:id", patchDataHandler)
+app.PUT("/api/data/update", updateDataHandler)
+app.DELETE("/api/data/delete", deleteDataHandler)
+app.PATCH("/api/data/patch", patchDataHandler)
 ```
 
 **Example REST API Handler:**
@@ -439,9 +439,9 @@ func main() {
     }
 
     // Routes
-    app.Page("/", homePage)
-    app.Page("/users", usersPage)
-    app.Page("/users/:id", userDetailPage)
+    app.Page("/", "Home", homePage)
+    app.Page("/users", "Users", usersPage)
+    app.Page("/users/{id}", "User Detail", userDetailPage)
 
     // Assets
     app.Assets(assets, "assets", 24*time.Hour)

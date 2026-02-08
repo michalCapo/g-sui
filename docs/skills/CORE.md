@@ -32,7 +32,7 @@ allParams := ctx.AllQueryParams()     // Returns map[string][]string
 
 **Example:**
 ```go
-// Route: app.Page("/user/{id}", handler)
+// Route: app.Page("/user/{id}", "User Detail", handler)
 // URL: /user/123?tab=profile&view=detailed
 
 func handler(ctx *ui.Context) string {

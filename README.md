@@ -55,7 +55,7 @@ import (
 func main() {
     app := ui.MakeApp("en")
     
-    app.Page("/", func(ctx *ui.Context) string {
+    app.Page("/", "Home", func(ctx *ui.Context) string {
         return app.HTML("Hello World", "bg-gray-100", 
             ui.Div("p-8")(
                 ui.Div("text-2xl font-bold")("Hello World"),
