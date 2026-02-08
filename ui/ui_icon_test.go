@@ -12,9 +12,9 @@ import (
 func TestIcon_BasicRendering(t *testing.T) {
 	html := Icon("home")
 
-	// Verify span element
-	assertContains(t, html, `<span`)
-	assertContains(t, html, `</span>`)
+	// Verify div element
+	assertContains(t, html, `<div`)
+	assertContains(t, html, `</div>`)
 
 	// Verify Material Icons class and icon name
 	assertContains(t, html, `material-icons`)
@@ -38,8 +38,8 @@ func TestIcon_WithAttributes(t *testing.T) {
 func TestIcon_EmptyClass(t *testing.T) {
 	html := Icon("")
 
-	// Should still render span
-	assertContains(t, html, `<span`)
+	// Should still render div
+	assertContains(t, html, `<div`)
 	assertContains(t, html, `material-icons`)
 }
 
@@ -198,7 +198,7 @@ func TestFlex1_EmptyContent(t *testing.T) {
 // ============================================================================
 
 func TestIcon_MultipleClasses(t *testing.T) {
-	html := Icon("home text-blue-500")
+	html := Icon("home", Attr{Class: "text-blue-500"})
 
 	assertContains(t, html, `material-icons`)
 	assertContains(t, html, `home`)
