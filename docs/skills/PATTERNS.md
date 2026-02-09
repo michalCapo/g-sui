@@ -58,6 +58,34 @@ func TestFormSubmission(t *testing.T) {
 }
 ```
 
+### Multiple Submit Button Testing
+
+```go
+func TestMultipleSubmitButtons(t *testing.T) {
+    app := ui.MakeApp("en")
+    app.Page("/form", "Form", formHandler)
+
+    handler := app.TestHandler()
+    server := httptest.NewServer(handler)
+    defer server.Close()
+
+    // Submit with "save" action
+    form := url.Values{}
+    form.Set("Title", "My Post")
+    form.Set("Action", "save")  // Maps to Submit("save") button
+
+    resp, err := http.PostForm(server.URL+"/form", form)
+    assert.NoError(t, err)
+    assert.Equal(t, 200, resp.StatusCode)
+    
+    // The handler can check form.Action to determine which button was clicked
+    // switch form.Action {
+    //   case "save": ...
+    //   case "preview": ...
+    // }
+}
+```
+
 ## Validation
 
 ### go-playground/validator

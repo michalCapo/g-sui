@@ -151,8 +151,11 @@ Forms can use `ctx.Submit(fn).Render/Replace/None()` and `ctx.Body(out)` to bind
 - **Dropdown**: `ui.Dropdown().Trigger(html).Item(label, onclick, icon).Header("Group").Divider().Danger("Delete", onclick).Position("bottom-right").Render()` - Context menus with headers, dividers, danger items, and 4 positions
 
 ### Form Components
-- Buttons: `ui.Button().Color(...).Size(...).Class(...).Href(...).Submit().Reset().Click(...)`
+- Buttons: `ui.Button().Color(...).Size(...).Class(...).Href(...).Submit().Submit(action).Reset().Click(...)`
+  - Multiple submit buttons with different actions: `Submit("save")`, `Submit("preview")`
+  - Form handler receives `Action` field identifying which button was clicked
 - Inputs: `ui.IText`, `ui.IEmail`, `ui.IPhone`, `ui.IPassword`, `ui.INumber`, `ui.IDate`, `ui.ITime`, `ui.IDateTime`, `ui.IArea`, `ui.ISelect`, `ui.ICheckbox`, `ui.IRadio`, `ui.IRadioButtons`, `ui.IRadioDiv`
+- FormInstance: Decouple form element from inputs with `ui.FormNew()` for flexible layouts
 - Table: `ui.SimpleTable(cols, classes...)` with `Field`, `Empty`, `Class`, `Attr` (supports `colspan`)
 - Icons: `ui.Icon`, `ui.Icon2`, `ui.Icon3`, `ui.Icon4`
 - Markdown: `ui.Markdown(classes...)(content)`

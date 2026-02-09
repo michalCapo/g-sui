@@ -2800,28 +2800,31 @@ func Submit(ctx *ui.Context) string {
 }
 
 func FormContent(ctx *ui.Context) string {
-    target := ui.Target()
+     target := ui.Target()
 
-    // Create form with submit handler
-    form := ui.FormNew(ctx.Submit(Submit).Replace(target))
+     // Create form with submit handler
+     form := ui.FormNew(ctx.Submit(Submit).Replace(target))
 
-    return ui.Div("max-w-5xl mx-auto")(
-        form.Render(),                    // Hidden form element
-        form.Text("Title").Required().Render("Title"),
-        form.Email("Email").Required().Render("Email"),
-        form.Phone("Phone").Render("Phone"),
-        form.Number("Age").Render("Age"),
-        form.Area("Address").Render("Address"),
-        form.Password("Password").Render("Password"),
-        form.Date("BirthDate").Render("Birth Date"),
-        form.Time("AppointmentTime").Render("Time"),
-        form.DateTime("CreatedAt").Render("Created At"),
-        form.Select("Country").Options(options).Render("Country"),
-        form.Checkbox("Agree").Required().Render("I agree"),
-        form.Radio("Gender", data).Value("male").Render("Male"),
-        form.RadioButtons("Plan").Options(planOptions).Render("Plan"),
-        form.Button().Color(ui.Blue).Submit().Render("Submit"),
-    )
+     return ui.Div("max-w-5xl mx-auto")(
+         form.Render(),                    // Hidden form element
+         form.Text("Title").Required().Render("Title"),
+         form.Email("Email").Required().Render("Email"),
+         form.Phone("Phone").Render("Phone"),
+         form.Number("Age").Render("Age"),
+         form.Area("Address").Render("Address"),
+         form.Password("Password").Render("Password"),
+         form.Date("BirthDate").Render("Birth Date"),
+         form.Time("AppointmentTime").Render("Time"),
+         form.DateTime("CreatedAt").Render("Created At"),
+         form.Select("Country").Options(options).Render("Country"),
+         form.Checkbox("Agree").Required().Render("I agree"),
+         form.Radio("Gender", data).Value("male").Render("Male"),
+         form.RadioButtons("Plan").Options(planOptions).Render("Plan"),
+         ui.Div("flex gap-2")(
+             form.Button().Color(ui.Blue).Submit("save").Render("Save"),
+             form.Button().Color(ui.Purple).Submit().Render("Submit"),
+         ),
+     )
 }
 ```
 
@@ -2845,6 +2848,7 @@ func FormContent(ctx *ui.Context) string {
 | `.RadioDiv(name, data...)` | `*ARadio` | Card-based radio (custom HTML) |
 | `.File(name)` | `*TFile` | File input |
 | `.ImageUpload(name)` | `*TImageUpload` | Image upload with inline preview |
+| `.Hidden(name, value, attr...)` | `string` | Hidden input field |
 | `.Button()` | `*button` | Submit button |
 | `.Render()` | `string` | Hidden form element |
 
@@ -2861,6 +2865,56 @@ func FormContent(ctx *ui.Context) string {
 - **Reusability**: Same form definition can be used in multiple contexts
 - **Flexibility**: Fields can be placed anywhere in the DOM, not just inside the form element
 - **Automatic Association**: No need to manually set `form` attributes on each field
+
+### Multiple Submit Buttons
+
+Forms can have multiple submit buttons with different actions. Use the `.Submit(action)` method to identify which button was clicked:
+
+```go
+type formData struct {
+    Title  string `validate:"required"`
+    Action string // Identifies which submit button was clicked
+}
+
+func Submit(ctx *ui.Context) string {
+    form := formData{}
+    ctx.Body(&form)
+    
+    switch form.Action {
+    case "save":
+        // Handle save action
+        ctx.Success("Form saved successfully")
+    case "preview":
+        // Handle preview action
+        ctx.Success("Form preview displayed")
+    default:
+        // Handle default submit
+        ctx.Success("Form submitted")
+    }
+    
+    return renderForm(ctx)
+}
+
+func renderForm(ctx *ui.Context) string {
+    target := ui.Target()
+    form := ui.FormNew(ctx.Submit(Submit).Replace(target))
+    
+    return ui.Div("flex flex-col gap-4")(
+        form.Render(),
+        form.Text("Title").Render("Title"),
+        ui.Div("flex gap-2")(
+            form.Button().Color(ui.Blue).Submit("save").Render("Save"),
+            form.Button().Color(ui.Purple).Submit("preview").Render("Preview"),
+            form.Button().Color(ui.GrayOutline).Submit().Render("Submit"),
+        ),
+    )
+}
+```
+
+When a form is submitted:
+- The clicked submit button's `name` and `value` are automatically included in the form data as `Action`
+- Multiple submit buttons can have different values passed to `.Submit(value)`
+- The default submit button (without an action value) doesn't include an Action field
 
 ---
 

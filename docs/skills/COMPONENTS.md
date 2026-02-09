@@ -9,7 +9,8 @@ ui.Button().
     Class("rounded px-4").    // Custom classes
     Click(ctx.Call(...)).     // Click handler (returns JS string)
     Href("/path").            // Make link (<a> element)
-    Submit().                 // type="submit"
+    Submit().                 // type="submit" (default action)
+    Submit("action").         // type="submit" with action value (sent as 'Action' field)
     Reset().                  // type="reset"
     Disabled(true).           // Disable button
     Form("form-id").          // Associate with form by ID
@@ -289,6 +290,42 @@ return ui.Div("max-w-5xl")(
     form.Text("Title").Required().Render("Title"),
     form.Email("Email").Required().Render("Email"),
     form.Button().Color(ui.Blue).Submit().Render("Submit"),
+)
+```
+
+### Multiple Submit Buttons
+
+Forms can have multiple submit buttons with different actions. Use `.Submit(action)`:
+
+```go
+// Handler receives form with Action field set to button value
+type FormData struct {
+    Title  string `validate:"required"`
+    Action string // Identifies which button was clicked
+}
+
+func handler(ctx *ui.Context) string {
+    var data FormData
+    ctx.Body(&data)
+    
+    switch data.Action {
+    case "save":
+        // Save action
+    case "preview":
+        // Preview action
+    default:
+        // Default submit
+    }
+    
+    return renderForm(ctx)
+}
+
+// Render multiple buttons
+form := ui.FormNew(ctx.Submit(handler).Replace(target))
+return ui.Div("flex gap-2")(
+    form.Button().Color(ui.Blue).Submit("save").Render("Save"),
+    form.Button().Color(ui.Purple).Submit("preview").Render("Preview"),
+    form.Button().Color(ui.Gray).Submit().Render("Cancel"),
 )
 ```
 

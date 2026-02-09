@@ -196,6 +196,45 @@ ctx.Submit(handler, payload).Prepend(target)
 ctx.Submit(handler, payload).None()
 ```
 
+**Form Submission with Multiple Submit Buttons:**
+When a form has multiple submit buttons, the clicked button's value is automatically included in the form data:
+
+```go
+type FormData struct {
+    Title  string // Form field
+    Action string // Automatically set to the clicked button's value
+}
+
+func submitHandler(ctx *ui.Context) string {
+    var data FormData
+    ctx.Body(&data)  // Parses form including Action field
+    
+    switch data.Action {
+    case "save":
+        // Handle save action
+    case "preview":
+        // Handle preview action
+    default:
+        // Default submit behavior
+    }
+    return renderForm(ctx)
+}
+
+// In your form template:
+form := ui.FormNew(ctx.Submit(submitHandler).Replace(target))
+return ui.Div("flex gap-2")(
+    form.Button().Color(ui.Blue).Submit("save").Render("Save"),
+    form.Button().Color(ui.Purple).Submit("preview").Render("Preview"),
+    form.Button().Color(ui.Gray).Submit().Render("Cancel"),
+)
+```
+
+The form submission handler automatically:
+- Captures which submit button was clicked via `event.submitter`
+- Includes the button's `name` and `value` as the `Action` field
+- Filters out other submit buttons from the form data
+- Handles file uploads and special field types correctly
+
 **ctx.Click** - Returns Attr{OnClick: ...} for elements:
 ```go
 ctx.Click(handler, payload).Render(target)   // Returns Attr
