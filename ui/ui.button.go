@@ -25,8 +25,15 @@ func Button(attr ...Attr) *button {
 	}
 }
 
-func (b *button) Submit() *button {
+// Submit makes this button a submit button.
+// Optionally pass an action value to identify which button was clicked
+// when multiple submit buttons exist in a form. The value is sent as
+// form field "Action" (follows struct field naming convention).
+func (b *button) Submit(action ...string) *button {
 	b.as = "submit"
+	if len(action) > 0 && action[0] != "" {
+		b.attr = append(b.attr, Attr{Name: "Action", Value: action[0]})
+	}
 	return b
 }
 

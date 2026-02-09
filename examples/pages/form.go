@@ -18,6 +18,7 @@ type formData struct {
 	Number     int    `validate:"required"`
 	Country    uint   `validate:"required"`
 	Agree      bool
+	Action     string // Identifies which submit button was clicked
 }
 
 func Submit(ctx *ui.Context) string {
@@ -32,7 +33,14 @@ func Submit(ctx *ui.Context) string {
 		return render(ctx, &form, &err)
 	}
 
-	ctx.Success("Form submitted successfully")
+	switch form.Action {
+	case "save":
+		ctx.Success("Form saved successfully")
+	case "preview":
+		ctx.Success("Form preview displayed")
+	default:
+		ctx.Success("Form submitted successfully")
+	}
 
 	return render(ctx, &form, nil)
 }
@@ -80,7 +88,11 @@ func render(ctx *ui.Context, data *formData, err *error) string {
 			form.Select("Country", data).Options(countries).Render("Country"),
 			form.Hidden("Some", 123),
 			form.RadioDiv("Number", data).Options(numbers).Render("Number"),
-			form.Button().Color(ui.Blue).Submit().Render("Submit"),
+			ui.Div("flex gap-2")(
+				form.Button().Color(ui.Blue).Submit("save").Render("Save"),
+				form.Button().Color(ui.Purple).Submit("preview").Render("Preview"),
+				form.Button().Color(ui.GrayOutline).Submit().Render("Submit"),
+			),
 		),
 	)
 }

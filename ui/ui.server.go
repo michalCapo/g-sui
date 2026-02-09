@@ -3293,6 +3293,14 @@ var __submit = Trim(`
 		const id = form.getAttribute("id");
 		let body = values; 
 
+		// Capture clicked submit button's name/value using event.submitter (standard API)
+		// Falls back to checking if event.target is the button itself
+		var clickedSubmit = null;
+		var submitter = event.submitter || (tag === "button" ? el : null);
+		if (submitter && submitter.getAttribute("type") === "submit" && submitter.getAttribute("name")) {
+			clickedSubmit = { name: submitter.getAttribute("name"), value: submitter.value || "" };
+		}
+
 		let found = Array.from(document.querySelectorAll('[form=' + id + '][name]'));
 
 		if (found.length === 0) {
@@ -3307,6 +3315,11 @@ var __submit = Trim(`
 			var total = found.length;
 			
 			if (total === 0) {
+				// Add clicked submit button value if present
+				if (clickedSubmit) {
+					body = body.filter(element => element.name !== clickedSubmit.name);
+					body.push({ name: clickedSubmit.name, type: "submit", value: clickedSubmit.value });
+				}
 				callback(body);
 				return;
 			}
@@ -3328,6 +3341,20 @@ var __submit = Trim(`
 					return;
 				}
 
+				// Skip submit buttons - only the clicked one should be included
+				if (type === "submit") {
+					processed++;
+					if (processed === total) {
+						// Add clicked submit button value if present
+						if (clickedSubmit) {
+							body = body.filter(element => element.name !== clickedSubmit.name);
+							body.push({ name: clickedSubmit.name, type: "submit", value: clickedSubmit.value });
+						}
+						callback(body);
+					}
+					return;
+				}
+
 				if (type === "file" && item.files && item.files.length > 0) {
 					// Read file as Base64
 					var file = item.files[0];
@@ -3338,11 +3365,23 @@ var __submit = Trim(`
 						body = body.filter(element => element.name !== name);
 						body.push({ name: name, type: "file", value: base64, filename: file.name || name, content_type: file.type || '' });
 						processed++;
-						if (processed === total) callback(body);
+						if (processed === total) {
+							if (clickedSubmit) {
+								body = body.filter(element => element.name !== clickedSubmit.name);
+								body.push({ name: clickedSubmit.name, type: "submit", value: clickedSubmit.value });
+							}
+							callback(body);
+						}
 					};
 					reader.onerror = function() {
 						processed++;
-						if (processed === total) callback(body);
+						if (processed === total) {
+							if (clickedSubmit) {
+								body = body.filter(element => element.name !== clickedSubmit.name);
+								body.push({ name: clickedSubmit.name, type: "submit", value: clickedSubmit.value });
+							}
+							callback(body);
+						}
 					};
 					reader.readAsDataURL(item.files[0]);
 				} else {
@@ -3353,7 +3392,13 @@ var __submit = Trim(`
 					body = body.filter(element => element.name !== name);
 					body.push({ name: name, type: type || 'text', value: value });
 					processed++;
-					if (processed === total) callback(body);
+					if (processed === total) {
+						if (clickedSubmit) {
+							body = body.filter(element => element.name !== clickedSubmit.name);
+							body.push({ name: clickedSubmit.name, type: "submit", value: clickedSubmit.value });
+						}
+						callback(body);
+					}
 				}
 			});
 		};
