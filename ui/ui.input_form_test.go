@@ -130,7 +130,7 @@ func TestInputComponents_FormAttribute(t *testing.T) {
 
 func TestFormInstance_AllComponents(t *testing.T) {
 	// Create a FormInstance to test that all methods properly set the Form ID
-	form := FormNew()
+	form := FormNew(Attr{})
 	formID := form.FormId
 
 	tests := []struct {

@@ -7,16 +7,10 @@ type FormInstance struct {
 	OnSubmit Attr
 }
 
-func FormNew(onSubmit ...Attr) *FormInstance {
-	submit := Attr{}
-
-	if len(onSubmit) > 0 {
-		submit = onSubmit[0]
-	}
-
+func FormNew(onSubmit Attr) *FormInstance {
 	return &FormInstance{
 		FormId:   "i" + RandomString(15),
-		OnSubmit: submit,
+		OnSubmit: onSubmit,
 	}
 }
 
