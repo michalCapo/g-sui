@@ -118,7 +118,7 @@ func TestInputComponents_FormAttribute(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			html := tt.component()
-			
+
 			// Check that the form attribute is present in the HTML
 			formAttr := `form="` + tt.expectedFormID + `"`
 			if !strings.Contains(html, formAttr) {
@@ -130,7 +130,7 @@ func TestInputComponents_FormAttribute(t *testing.T) {
 
 func TestFormInstance_AllComponents(t *testing.T) {
 	// Create a FormInstance to test that all methods properly set the Form ID
-	form := FormNew(Attr{})
+	form := FormNew()
 	formID := form.FormId
 
 	tests := []struct {
@@ -243,7 +243,7 @@ func TestFormInstance_AllComponents(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			html := tt.component()
-			
+
 			// Check that the form attribute is present in the HTML
 			formAttr := `form="` + tt.expectedFormID + `"`
 			if !strings.Contains(html, formAttr) {
@@ -252,4 +252,3 @@ func TestFormInstance_AllComponents(t *testing.T) {
 		})
 	}
 }
-
