@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"bufio"
 	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"embed"
 	"encoding/base64"
@@ -10,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -1323,6 +1326,60 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	writer io.Writer
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.writer.Write(b)
+}
+
+func (w *gzipResponseWriter) Flush() {
+	if f, ok := w.writer.(*gzip.Writer); ok {
+		_ = f.Flush()
+	}
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *gzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("hijacker not supported")
+	}
+	return hj.Hijack()
+}
+
+func (w *gzipResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(strings.ToLower(strings.Join(r.Header["Upgrade"], " ")), "websocket") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		headers := w.Header()
+		headers.Set("Content-Encoding", "gzip")
+		headers.Add("Vary", "Accept-Encoding")
+		headers.Del("Content-Length")
+
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+
+		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, writer: gz}, r)
+	})
+}
+
 func cacheControlMiddleware(next http.Handler, maxAge time.Duration) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Set the Cache-Control header
@@ -1387,9 +1444,11 @@ type App struct {
 	assetHandlers  map[string]http.Handler
 	routes         map[string]*Route // path → Route
 	routesMu       sync.RWMutex      // mutex for route maps
-	layout         Callable          // persistent layout function
-	customRoutes   []*CustomRoute    // custom HTTP handlers
-	customRoutesMu sync.RWMutex      // mutex for custom routes
+	routesManifest string
+	routesCached   bool
+	layout         Callable       // persistent layout function
+	customRoutes   []*CustomRoute // custom HTTP handlers
+	customRoutesMu sync.RWMutex   // mutex for custom routes
 }
 
 type sessRec struct {
@@ -1506,6 +1565,46 @@ func (app *App) matchRoute(path string) (*Route, map[string]string) {
 	return nil, nil
 }
 
+func (app *App) routeManifestScript() string {
+	app.routesMu.RLock()
+	if app.routesCached {
+		cached := app.routesManifest
+		app.routesMu.RUnlock()
+		return cached
+	}
+	app.routesMu.RUnlock()
+
+	app.routesMu.Lock()
+	defer app.routesMu.Unlock()
+
+	if app.routesCached {
+		return app.routesManifest
+	}
+
+	routeManifest := make(map[string]interface{}, len(app.routes))
+	for path, route := range app.routes {
+		if route.HasParams {
+			routeManifest[path] = map[string]interface{}{
+				"path":    path,
+				"pattern": true,
+			}
+		} else {
+			routeManifest[path] = path
+		}
+	}
+
+	manifestJSON, err := json.Marshal(routeManifest)
+	if err != nil {
+		log.Printf("Error marshaling route manifest: %v", err)
+		manifestJSON = []byte("{}")
+	}
+
+	app.routesManifest = fmt.Sprintf(`<script>window.__routes = %s;</script>`, string(manifestJSON))
+	app.routesCached = true
+
+	return app.routesManifest
+}
+
 // Page registers a route with a title and handler.
 // Usage: Page("/", "Page Title", handler)
 // Supports path parameters: Page("/vehicles/edit/{id}", "Edit Vehicle", handler)
@@ -1541,6 +1640,7 @@ func (app *App) Page(path string, title string, handler Callable) {
 
 	// Store route
 	app.routes[path] = route
+	app.routesCached = false
 }
 
 // Custom registers a standard http.HandlerFunc for a specific path and HTTP method.
@@ -1966,6 +2066,10 @@ func (app *App) Handler() http.Handler {
 // buildHandler creates the main HTTP handler for the app.
 // This is used internally by both Listen() and Handler().
 func (app *App) buildHandler() http.Handler {
+	bodyTemplate := app.HTMLBody("")
+	bodyTemplate = strings.ReplaceAll(bodyTemplate, "__lang__", app.Lanugage)
+	bodyTemplate = Trim(bodyTemplate)
+
 	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		value := r.URL.Path
 
@@ -2145,29 +2249,7 @@ func (app *App) buildHandler() http.Handler {
 					}
 				}()
 
-				// Build route manifest
-				app.routesMu.RLock()
-				routeManifest := make(map[string]interface{})
-				for path, route := range app.routes {
-					if route.HasParams {
-						routeManifest[path] = map[string]interface{}{
-							"path":    path,
-							"pattern": true,
-						}
-					} else {
-						routeManifest[path] = path
-					}
-				}
-				app.routesMu.RUnlock()
-
-				manifestJSON, err := json.Marshal(routeManifest)
-				if err != nil {
-					log.Printf("Error marshaling route manifest: %v", err)
-					manifestJSON = []byte("{}")
-				}
-
-				// Embed route manifest in script tag
-				manifestScript := fmt.Sprintf(`<script>window.__routes = %s;</script>`, string(manifestJSON))
+				manifestScript := app.routeManifestScript()
 
 				var bodyHTML string
 				if app.layout != nil {
@@ -2187,13 +2269,12 @@ func (app *App) buildHandler() http.Handler {
 				// Ensure Material Icons CSS is applied
 				head = append(head, `<style>.material-icons{font-family:'Material Icons';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}</style>`)
 
-				html := app.HTMLBody("")
-				html = strings.ReplaceAll(html, "__lang__", app.Lanugage)
+				html := bodyTemplate
 				html = strings.ReplaceAll(html, "__head__", strings.Join(head, " "))
 				html = strings.ReplaceAll(html, "__body__", bodyHTML)
 
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Write([]byte(Trim(html)))
+				w.Write([]byte(html))
 				return
 			}
 		}
@@ -2228,7 +2309,7 @@ func (app *App) buildHandler() http.Handler {
 		http.Error(w, "Not found", http.StatusNotFound)
 	})
 
-	return securityHeadersMiddleware(mainHandler)
+	return securityHeadersMiddleware(gzipMiddleware(mainHandler))
 }
 
 // TestHandler returns an http.Handler that uses g-sui's routing logic.
