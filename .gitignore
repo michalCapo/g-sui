@@ -1,5 +1,7 @@
 .idea
 .vscode
+.cluade
+.cursor
 docs/.~*
 
 tmp/
