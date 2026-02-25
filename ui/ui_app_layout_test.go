@@ -34,7 +34,7 @@ func TestAppWithoutLayout(t *testing.T) {
 	}
 
 	// Verify content is wrapped in ContentID div
-	if !strings.Contains(body, ContentID.ID) {
+	if !strings.Contains(body, app.ContentID.ID) {
 		t.Error("Expected content div with ContentID to be present")
 	}
 

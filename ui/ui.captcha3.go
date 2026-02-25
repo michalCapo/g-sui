@@ -11,6 +11,7 @@ import (
 // Captcha3Component provides a drag-and-drop captcha experience where users
 // rearrange characters to match the target sequence rendered inline.
 type Captcha3Component struct {
+	app                     *App
 	sessionFieldName        string
 	arrangementFieldName    string
 	clientVerifiedFieldName string
@@ -141,12 +142,16 @@ func (c *Captcha3Component) Render(ctx *Context) string {
 		return renderCaptchaError("Captcha component not initialised")
 	}
 
+	if ctx != nil && ctx.App != nil {
+		c.app = ctx.App
+	}
+
 	sessionID, err := generateSecureID("captcha_session_")
 	if err != nil {
 		return renderCaptchaError("Error generating CAPTCHA IDs")
 	}
 
-	session, err := createCaptchaSession(sessionID, c.characterCountValue(), c.lifetimeValue(), c.attemptLimitValue())
+	session, err := ctx.App.createCaptchaSession(sessionID, c.characterCountValue(), c.lifetimeValue(), c.attemptLimitValue())
 	if err != nil {
 		return renderCaptchaError("Error generating CAPTCHA. Please refresh the page and try again.")
 	}
@@ -175,9 +180,11 @@ func (c *Captcha3Component) Render(ctx *Context) string {
 	successPath := ""
 	if ctx != nil && ctx.App != nil && c.onValidated != nil {
 		if callable := ctx.Callable(c.onValidated); callable != nil {
-			if path, ok := stored[*callable]; ok {
+			ctx.App.storedMu.Lock()
+			if path, ok := ctx.App.stored[*callable]; ok {
 				successPath = path
 			}
+			ctx.App.storedMu.Unlock()
 		}
 	}
 
@@ -383,7 +390,10 @@ func (c *Captcha3Component) ValidateValues(sessionID, arrangement string) (bool,
 	if sessionID == "" {
 		return false, fmt.Errorf("CAPTCHA session missing")
 	}
-	return validateCaptcha(sessionID, arrangement)
+	if c.app == nil {
+		return false, fmt.Errorf("CAPTCHA component not bound to app (call Render first)")
+	}
+	return c.app.validateCaptcha(sessionID, arrangement)
 }
 
 // Validate offers a convenience alias for ValidateValues.

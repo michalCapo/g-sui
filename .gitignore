@@ -2,6 +2,7 @@
 .vscode
 .cluade
 .cursor
+.opencode
 docs/.~*
 
 tmp/

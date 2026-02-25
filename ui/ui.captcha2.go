@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -18,12 +17,6 @@ type CaptchaSession struct {
 	ExpiresAt   time.Time
 	MaxAttempts int
 }
-
-// Global CAPTCHA session store (in production, use Redis or database)
-var (
-	captchaSessions   = make(map[string]*CaptchaSession)
-	captchaSessionsMu sync.RWMutex
-)
 
 const (
 	defaultCaptchaLength   = 6
@@ -61,16 +54,16 @@ func generateSecureID(prefix string) (string, error) {
 	return fmt.Sprintf("%s%x", prefix, b), nil
 }
 
-// StoreCaptchaSession manually stores a captcha session (for testing purposes)
-func storeCaptchaSession(sessionID string, session *CaptchaSession) {
-	cleanupExpiredCaptchaSessions()
-	captchaSessionsMu.Lock()
-	captchaSessions[sessionID] = session
-	captchaSessionsMu.Unlock()
+// storeCaptchaSession manually stores a captcha session (for testing purposes)
+func (app *App) storeCaptchaSession(sessionID string, session *CaptchaSession) {
+	app.cleanupExpiredCaptchaSessions()
+	app.captchaSessionsMu.Lock()
+	app.captchaSessions[sessionID] = session
+	app.captchaSessionsMu.Unlock()
 }
 
-// CreateCaptchaSession creates a new server-side CAPTCHA session
-func createCaptchaSession(sessionID string, length int, lifetime time.Duration, attemptLimit int) (*CaptchaSession, error) {
+// createCaptchaSession creates a new server-side CAPTCHA session
+func (app *App) createCaptchaSession(sessionID string, length int, lifetime time.Duration, attemptLimit int) (*CaptchaSession, error) {
 	if length <= 0 {
 		length = defaultCaptchaLength
 	}
@@ -97,23 +90,23 @@ func createCaptchaSession(sessionID string, length int, lifetime time.Duration, 
 		MaxAttempts: attemptLimit,
 	}
 
-	storeCaptchaSession(sessionID, session)
+	app.storeCaptchaSession(sessionID, session)
 	return session, nil
 }
 
-// ValidateCaptcha validates a CAPTCHA answer against the server-side session
-func validateCaptcha(sessionID, answer string) (bool, error) {
-	captchaSessionsMu.Lock()
-	defer captchaSessionsMu.Unlock()
+// validateCaptcha validates a CAPTCHA answer against the server-side session
+func (app *App) validateCaptcha(sessionID, answer string) (bool, error) {
+	app.captchaSessionsMu.Lock()
+	defer app.captchaSessionsMu.Unlock()
 
-	session, exists := captchaSessions[sessionID]
+	session, exists := app.captchaSessions[sessionID]
 	if !exists {
 		return false, fmt.Errorf("CAPTCHA session not found")
 	}
 
 	now := time.Now()
 	if sessionExpired(session, now) {
-		delete(captchaSessions, sessionID)
+		delete(app.captchaSessions, sessionID)
 		return false, fmt.Errorf("CAPTCHA session expired")
 	}
 
@@ -124,7 +117,7 @@ func validateCaptcha(sessionID, answer string) (bool, error) {
 
 	session.Attempts++
 	if session.Attempts > limit {
-		delete(captchaSessions, sessionID)
+		delete(app.captchaSessions, sessionID)
 		return false, fmt.Errorf("too many CAPTCHA attempts")
 	}
 
@@ -153,19 +146,20 @@ func sessionExpired(session *CaptchaSession, now time.Time) bool {
 }
 
 // cleanupExpiredCaptchaSessions removes expired sessions
-func cleanupExpiredCaptchaSessions() {
+func (app *App) cleanupExpiredCaptchaSessions() {
 	now := time.Now()
-	captchaSessionsMu.Lock()
-	defer captchaSessionsMu.Unlock()
+	app.captchaSessionsMu.Lock()
+	defer app.captchaSessionsMu.Unlock()
 
-	for id, session := range captchaSessions {
+	for id, session := range app.captchaSessions {
 		if sessionExpired(session, now) || now.Sub(session.CreatedAt) > cleanupGracePeriod {
-			delete(captchaSessions, id)
+			delete(app.captchaSessions, id)
 		}
 	}
 }
 
 type Captcha2Component struct {
+	app                     *App
 	answerFieldName         string
 	sessionFieldName        string
 	clientVerifiedFieldName string
@@ -293,12 +287,16 @@ func (c *Captcha2Component) Render(ctx *Context) string {
 		return renderCaptchaError("Captcha component not initialised")
 	}
 
+	if ctx != nil && ctx.App != nil {
+		c.app = ctx.App
+	}
+
 	sessionID, err := generateSecureID("captcha_session_")
 	if err != nil {
 		return renderCaptchaError("Error generating CAPTCHA IDs")
 	}
 
-	session, err := createCaptchaSession(sessionID, c.codeLengthValue(), c.lifetimeValue(), c.attemptLimitValue())
+	session, err := ctx.App.createCaptchaSession(sessionID, c.codeLengthValue(), c.lifetimeValue(), c.attemptLimitValue())
 	if err != nil {
 		return renderCaptchaError("Error generating CAPTCHA. Please refresh the page and try again.")
 	}
@@ -323,9 +321,11 @@ func (c *Captcha2Component) Render(ctx *Context) string {
 	successPath := ""
 	if ctx != nil && ctx.App != nil && c.onValidated != nil {
 		if callable := ctx.Callable(c.onValidated); callable != nil {
-			if path, ok := stored[*callable]; ok {
+			ctx.App.storedMu.Lock()
+			if path, ok := ctx.App.stored[*callable]; ok {
 				successPath = path
 			}
+			ctx.App.storedMu.Unlock()
 		}
 	}
 
@@ -471,7 +471,10 @@ func (c *Captcha2Component) ValidateValues(sessionID, answer string) (bool, erro
 	if sessionID == "" {
 		return false, fmt.Errorf("CAPTCHA session missing")
 	}
-	return validateCaptcha(sessionID, answer)
+	if c.app == nil {
+		return false, fmt.Errorf("CAPTCHA component not bound to app (call Render first)")
+	}
+	return c.app.validateCaptcha(sessionID, answer)
 }
 
 // Validate provides a convenience alias for ValidateValues.

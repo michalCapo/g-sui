@@ -38,8 +38,6 @@ type Callable = func(*Context) string
 
 var (
 	eventPath      = "/"
-	mu             sync.Mutex
-	stored         = make(map[*Callable]string)
 	reReplaceChars = regexp.MustCompile(`[./:-]`)
 	reRemoveChars  = regexp.MustCompile(`[*()\[\]]`)
 )
@@ -895,7 +893,9 @@ func parseEventHandler(handler string, eventType string) *JSEvent {
 }
 
 func (ctx *Context) Post(as ActionType, swap Swap, action *Action) string {
-	path, ok := stored[action.Method]
+	ctx.App.storedMu.Lock()
+	path, ok := ctx.App.stored[action.Method]
+	ctx.App.storedMu.Unlock()
 
 	if !ok {
 		funcName := reflect.ValueOf(*action.Method).String()
@@ -1430,25 +1430,33 @@ type CustomRoute struct {
 }
 
 type App struct {
-	Lanugage       string
-	HTMLBody       func(string) string
-	HTMLHead       []string
-	DebugEnabled   bool
-	pwaConfig      *PWAConfig
-	pwaManifest    []byte
-	swCacheKey     string // Generated on startup for cache versioning
-	sessMu         sync.Mutex
-	sessions       map[string]*sessRec
-	wsMu           sync.RWMutex
-	wsClients      map[*websocket.Conn]*wsState
-	assetHandlers  map[string]http.Handler
-	routes         map[string]*Route // path → Route
-	routesMu       sync.RWMutex      // mutex for route maps
-	routesManifest string
-	routesCached   bool
-	layout         Callable       // persistent layout function
-	customRoutes   []*CustomRoute // custom HTTP handlers
-	customRoutesMu sync.RWMutex   // mutex for custom routes
+	Lanugage          string
+	ContentID         Attr
+	BasePath          string // URL prefix for path-prefix mounting (e.g., "/admin")
+	HTMLBody          func(string) string
+	HTMLHead          []string
+	DebugEnabled      bool
+	pwaConfig         *PWAConfig
+	pwaManifest       []byte
+	swCacheKey        string // Generated on startup for cache versioning
+	mux               *http.ServeMux
+	muxOnce           sync.Once
+	storedMu          sync.Mutex
+	stored            map[*Callable]string
+	sessMu            sync.Mutex
+	sessions          map[string]*sessRec
+	captchaSessions   map[string]*CaptchaSession
+	captchaSessionsMu sync.RWMutex
+	wsMu              sync.RWMutex
+	wsClients         map[*websocket.Conn]*wsState
+	assetHandlers     map[string]http.Handler
+	routes            map[string]*Route // path → Route
+	routesMu          sync.RWMutex      // mutex for route maps
+	routesManifest    string
+	routesCached      bool
+	layout            Callable       // persistent layout function
+	customRoutes      []*CustomRoute // custom HTTP handlers
+	customRoutesMu    sync.RWMutex   // mutex for custom routes
 }
 
 type sessRec struct {
@@ -1472,20 +1480,20 @@ func (app *App) Register(httpMethod string, path string, method *Callable) strin
 		panic("Method cannot be empty")
 	}
 
-	_, ok := stored[method]
+	_, ok := app.stored[method]
 	if ok {
 		panic("Method already registered: " + funcName)
 	}
 
-	for _, value := range stored {
+	for _, value := range app.stored {
 		if value == path {
 			panic("Path already registered: " + path)
 		}
 	}
 
-	mu.Lock()
-	stored[method] = path
-	mu.Unlock()
+	app.storedMu.Lock()
+	app.stored[method] = path
+	app.storedMu.Unlock()
 
 	// fmt.Println("Registering: ", httpMethod, path, " -> ", funcName)
 
@@ -1736,7 +1744,7 @@ func (app *App) Action(uid string, action Callable) **Callable {
 
 	uid = strings.ToLower(uid)
 
-	for key, value := range stored {
+	for key, value := range app.stored {
 		if value == uid {
 			return &key
 		}
@@ -1759,17 +1767,17 @@ func (app *App) Callable(action Callable) **Callable {
 	}
 
 	// Check if already registered - update the callable if found
-	mu.Lock()
-	for key, value := range stored {
+	app.storedMu.Lock()
+	for key, value := range app.stored {
 		if value == uid {
 			// Update the callable to the new instance's method
 			// This ensures stateful handlers (like collate methods) use the latest instance
 			*key = action
-			mu.Unlock()
+			app.storedMu.Unlock()
 			return &key
 		}
 	}
-	mu.Unlock()
+	app.storedMu.Unlock()
 
 	found := &action
 	app.Register("POST", uid, found)
@@ -1883,7 +1891,7 @@ func (app *App) Favicon(assets embed.FS, path string, maxAge time.Duration) {
 		path = "favicon.ico"
 	}
 
-	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+	app.mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		file, err := assets.ReadFile(path)
 		if err != nil {
 			http.Error(w, "File not found", http.StatusNotFound)
@@ -2020,19 +2028,34 @@ func (w *wsResponseWriter) Header() http.Header {
 func (w *wsResponseWriter) Write([]byte) (int, error) { return 0, nil }
 func (w *wsResponseWriter) WriteHeader(int)           {}
 
+// setup registers the WebSocket and main handler on app.mux. It is
+// idempotent — subsequent calls are no-ops thanks to sync.Once.
+// Routes are always registered at "/" on the internal mux; when mounted
+// on an external mux via Mount(), StripPrefix removes the BasePath.
+func (app *App) setup() {
+	app.muxOnce.Do(func() {
+		// If BasePath is set, regenerate the WS script tag in HTMLHead
+		if app.BasePath != "" {
+			newScript := Script(__stringify, __loader, __offline, __error, __notify, __e, __engine, __post, __submit, __load, __router, __theme, wsScript(app.BasePath))
+			// Replace the last entry in HTMLHead (which is the script tag)
+			if len(app.HTMLHead) > 0 {
+				app.HTMLHead[len(app.HTMLHead)-1] = newScript
+			}
+		}
+		app.initWS()
+		app.mux.Handle("/", app.buildHandler())
+	})
+}
+
 func (app *App) Listen(port string) {
 	log.Println("Listening on http://0.0.0.0" + port)
 
 	// Start session sweeper in background
 	app.StartSweeper()
 
-	// Init WebSocket endpoint for patches
-	app.initWS()
+	app.setup()
 
-	// Build and register the main handler
-	http.Handle("/", app.buildHandler())
-
-	if err := http.ListenAndServe(port, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := http.ListenAndServe(port, app.mux); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Println("Error:", err)
 	}
 }
@@ -2041,26 +2064,43 @@ func (app *App) Listen(port string) {
 // This allows wrapping the g-sui handler with custom middleware or integrating
 // with existing HTTP server setups.
 //
-// Note: When using Handler(), you must manually call app.StartSweeper() and
-// set up the WebSocket endpoint at "/__ws" if you want those features.
-//
 // Example:
 //
 //	app := ui.MakeApp("en")
 //	app.Page("/", "Home", homeHandler)
 //	app.StartSweeper()
 //
-//	// Wrap with custom middleware
-//	handler := myLoggingMiddleware(app.Handler())
-//
 //	// Use with custom server
 //	server := &http.Server{
 //	    Addr:    ":8080",
-//	    Handler: handler,
+//	    Handler: app.Handler(),
 //	}
 //	server.ListenAndServe()
 func (app *App) Handler() http.Handler {
-	return app.buildHandler()
+	app.setup()
+	return app.mux
+}
+
+// Mount registers the app's routes on an external mux under the given prefix.
+// This enables running multiple g-sui apps on a single HTTP server.
+//
+// Example:
+//
+//	mux := http.NewServeMux()
+//	adminApp := ui.MakeApp("en")
+//	adminApp.Page("/", "Admin", adminHandler)
+//	adminApp.Mount("/admin", mux)
+//
+//	portalApp := ui.MakeApp("en")
+//	portalApp.Page("/", "Portal", portalHandler)
+//	portalApp.Mount("/portal", mux)
+//
+//	http.ListenAndServe(":8080", mux)
+func (app *App) Mount(prefix string, mux *http.ServeMux) {
+	app.BasePath = prefix
+	app.StartSweeper()
+	app.setup()
+	mux.Handle(prefix+"/", http.StripPrefix(prefix, app.mux))
 }
 
 // buildHandler creates the main HTTP handler for the app.
@@ -2146,16 +2186,16 @@ func (app *App) buildHandler() http.Handler {
 
 			if route == nil {
 				// Not a page route, check for special routes (manifest, service worker)
-				mu.Lock()
-				for found, path := range stored {
+				app.storedMu.Lock()
+				for found, path := range app.stored {
 					if path == value {
-						mu.Unlock()
+						app.storedMu.Unlock()
 						ctx := makeContext(app, r, w)
 						defer func() {
 							if rec := recover(); rec != nil {
 								log.Println("handler panic recovered:", rec)
 								w.WriteHeader(http.StatusInternalServerError)
-								w.Write([]byte(devErrorPage()))
+								w.Write([]byte(app.devErrorPage()))
 							}
 						}()
 						html := (*found)(ctx)
@@ -2165,7 +2205,7 @@ func (app *App) buildHandler() http.Handler {
 						return
 					}
 				}
-				mu.Unlock()
+				app.storedMu.Unlock()
 
 				http.Error(w, "Page not found", http.StatusNotFound)
 				return
@@ -2185,7 +2225,7 @@ func (app *App) buildHandler() http.Handler {
 				if rec := recover(); rec != nil {
 					log.Println("handler panic recovered:", rec)
 					w.WriteHeader(http.StatusInternalServerError)
-					errorHTML := devErrorPage()
+					errorHTML := app.devErrorPage()
 					jsElement, err := htmlToJSElement(errorHTML)
 					if err != nil {
 						jsElement = &JSElement{T: "span", C: []interface{}{"Error"}}
@@ -2245,7 +2285,7 @@ func (app *App) buildHandler() http.Handler {
 					if rec := recover(); rec != nil {
 						log.Println("handler panic recovered:", rec)
 						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte(devErrorPage()))
+						w.Write([]byte(app.devErrorPage()))
 					}
 				}()
 
@@ -2258,7 +2298,7 @@ func (app *App) buildHandler() http.Handler {
 				} else {
 					// No layout - render page content directly in a content div
 					pageHTML := (*route.Handler)(ctx)
-					bodyHTML = fmt.Sprintf(`<div id="%s">%s</div>%s`, ContentID.ID, pageHTML, manifestScript)
+					bodyHTML = fmt.Sprintf(`<div id="%s">%s</div>%s`, app.ContentID.ID, pageHTML, manifestScript)
 				}
 
 				// Build full HTML page
@@ -2284,16 +2324,16 @@ func (app *App) buildHandler() http.Handler {
 
 		// Serve static handlers (manifest, service worker) via GET
 		if r.Method == "GET" && (value == "/manifest.webmanifest" || value == "/sw.js") {
-			mu.Lock()
-			for found, path := range stored {
+			app.storedMu.Lock()
+			for found, path := range app.stored {
 				if path == value {
-					mu.Unlock()
+					app.storedMu.Unlock()
 					ctx := makeContext(app, r, w)
 					defer func() {
 						if rec := recover(); rec != nil {
 							log.Println("handler panic recovered:", rec)
 							w.WriteHeader(http.StatusInternalServerError)
-							w.Write([]byte(devErrorPage()))
+							w.Write([]byte(app.devErrorPage()))
 						}
 					}()
 					html := (*found)(ctx)
@@ -2303,7 +2343,7 @@ func (app *App) buildHandler() http.Handler {
 					return
 				}
 			}
-			mu.Unlock()
+			app.storedMu.Unlock()
 		}
 
 		http.Error(w, "Not found", http.StatusNotFound)
@@ -2330,15 +2370,17 @@ func (app *App) TestHandler() http.Handler {
 		// Callable actions are now handled via WebSocket, not HTTP POST.
 		// TestHandler only serves static handlers (manifest, service worker).
 		if r.Method == "GET" && (r.URL.Path == "/manifest.webmanifest" || r.URL.Path == "/sw.js") {
-			for found, routePath := range stored {
+			app.storedMu.Lock()
+			for found, routePath := range app.stored {
 				if routePath == r.URL.Path {
+					app.storedMu.Unlock()
 					ctx := makeContext(app, r, w)
 
 					defer func() {
 						if rec := recover(); rec != nil {
 							log.Println("handler panic recovered:", rec)
 							w.WriteHeader(http.StatusInternalServerError)
-							w.Write([]byte(devErrorPage()))
+							w.Write([]byte(app.devErrorPage()))
 						}
 					}()
 
@@ -2350,6 +2392,7 @@ func (app *App) TestHandler() http.Handler {
 					return
 				}
 			}
+			app.storedMu.Unlock()
 		}
 
 		http.Error(w, "Not found", http.StatusNotFound)
@@ -2401,9 +2444,9 @@ func (app *App) PWA(config PWAConfig) {
 		ctx.Response.Write(app.pwaManifest)
 		return ""
 	}
-	mu.Lock()
-	stored[&manifestHandler] = "/manifest.webmanifest"
-	mu.Unlock()
+	app.storedMu.Lock()
+	app.stored[&manifestHandler] = "/manifest.webmanifest"
+	app.storedMu.Unlock()
 
 	// Register service worker route if requested
 	if config.GenerateServiceWorker {
@@ -2490,9 +2533,9 @@ self.addEventListener('fetch', event => {
 			ctx.Response.Write([]byte(sw))
 			return ""
 		}
-		mu.Lock()
-		stored[&swHandler] = "/sw.js"
-		mu.Unlock()
+		app.storedMu.Lock()
+		app.stored[&swHandler] = "/sw.js"
+		app.storedMu.Unlock()
 	}
 }
 
@@ -2504,7 +2547,7 @@ func (app *App) initWS() {
 	}
 	app.wsMu.Unlock()
 
-	http.Handle("/__ws", websocket.Handler(func(ws *websocket.Conn) {
+	app.mux.Handle("/__ws", websocket.Handler(func(ws *websocket.Conn) {
 		// Allow large payloads for file uploads (10MB)
 		ws.MaxPayloadBytes = 10 * 1024 * 1024
 
@@ -2674,15 +2717,15 @@ func (app *App) initWS() {
 					}
 
 					// Look up callable from stored map
-					mu.Lock()
+					app.storedMu.Lock()
 					var found *Callable
-					for storedCallable, path := range stored {
+					for storedCallable, path := range app.stored {
 						if path == callMsg.Path {
 							found = storedCallable
 							break
 						}
 					}
-					mu.Unlock()
+					app.storedMu.Unlock()
 
 					if found == nil {
 						log.Printf("Callable not found for path: %s", callMsg.Path)
@@ -3191,15 +3234,16 @@ func (app *App) HTML(title string, class string, body ...string) string {
 
 // devErrorPage returns a minimal standalone HTML page displayed on handler panics in dev.
 // It tries to reconnect to the app WS at /__ws and reloads the page when the socket opens.
-func devErrorPage() string {
-	return Trim(`<!DOCTYPE html>
+func (app *App) devErrorPage() string {
+	wsPath := app.BasePath + "/__ws"
+	return Trim(fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Something went wrong…</title>
   <style>
-    html,body{height:100%}
+    html,body{height:100%%}
     body{margin:0;display:flex;align-items:center;justify-content:center;background:#f3f4f6;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827}
     .card{background:#fff;box-shadow:0 10px 25px rgba(0,0,0,.08);border-radius:14px;padding:28px 32px;border:1px solid rgba(0,0,0,.06);text-align:center}
     .title{font-size:20px;font-weight:600;margin-bottom:6px}
@@ -3216,7 +3260,7 @@ func devErrorPage() string {
         try {
           function connect(){
             var p=(location.protocol==='https:')?'wss://':'ws://';
-            var ws=new WebSocket(p+location.host+'/__ws');
+            var ws=new WebSocket(p+location.host+'%s');
             ws.onopen=function(){ try{ location.reload(); } catch(_){} };
             ws.onclose=function(){ setTimeout(connect, 1000); };
             ws.onerror=function(){ try{ ws.close(); } catch(_){} };
@@ -3226,7 +3270,7 @@ func devErrorPage() string {
       })();
     </script>
   </body>
-</html>`)
+</html>`, wsPath))
 }
 
 var __post = Trim(` 
@@ -3820,8 +3864,9 @@ var __theme = Trim(`
         } catch(_){ }    })();
 `)
 
-// __ws: minimal WebSocket client for receiving server-initiated patches
-var __ws = Trim(`
+// wsScript generates the WebSocket client JS with the given base path prefix.
+func wsScript(basePath string) string {
+	return Trim(fmt.Sprintf(`
     (function(){
         try {
             if (window.__gsuiWSInit) { return; }
@@ -3843,7 +3888,7 @@ var __ws = Trim(`
             }
             function connect(){
                 var p=(location.protocol==='https:')?'wss://':'ws://';
-                var ws = new WebSocket(p+location.host+'/__ws');
+                var ws = new WebSocket(p+location.host+'%s/__ws');
                 try { (window).__gsuiWS = ws; } catch(_){ }
                 ws.onopen = function(){
                     try { if (typeof __offline !== 'undefined') { __offline.hide(); } } catch(_){ }
@@ -3889,7 +3934,11 @@ var __ws = Trim(`
             connect();
         } catch(_){ }
     })();
-`)
+`, basePath))
+}
+
+// __ws: default WebSocket client script (no base path prefix)
+var __ws = wsScript("")
 
 // __loader: shared loading overlay with delayed show and fade-out
 var __loader = Trim(`
@@ -4240,8 +4289,6 @@ var __engine = Trim(`
     })();
 `)
 
-var ContentID = Target()
-
 // __notify: creates styled notification toasts
 var __notify = Trim(`
     function __notify(msg, variant) {
@@ -4353,8 +4400,10 @@ var __error = Trim(`
 `)
 
 func MakeApp(defaultLanguage string) *App {
+	contentID := Target()
 	return &App{
-		Lanugage: defaultLanguage,
+		Lanugage:  defaultLanguage,
+		ContentID: contentID,
 		HTMLHead: []string{
 			`<meta charset="UTF-8">`,
 			`<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
@@ -4426,11 +4475,14 @@ func MakeApp(defaultLanguage string) *App {
 					<head>__head__</head>
 					<body id="%s" class="relative">__body__</body>
 				</html>
-			`, class, ContentID.ID)
+			`, class, contentID.ID)
 		},
-		DebugEnabled: false,
-		sessions:     make(map[string]*sessRec),
-		routes:       make(map[string]*Route),
+		DebugEnabled:    false,
+		mux:             http.NewServeMux(),
+		stored:          make(map[*Callable]string),
+		sessions:        make(map[string]*sessRec),
+		captchaSessions: make(map[string]*CaptchaSession),
+		routes:          make(map[string]*Route),
 	}
 }
 
