@@ -86,6 +86,41 @@ func TestMultipleSubmitButtons(t *testing.T) {
 }
 ```
 
+### Multitenant App Testing
+
+Test multiple isolated apps mounted on different paths:
+
+```go
+func TestMultiInstanceSharedMux(t *testing.T) {
+    mux := http.NewServeMux()
+
+    adminApp := ui.MakeApp("en")
+    adminApp.Page("/", "Admin", func(ctx *ui.Context) string {
+        return ui.Div("")("admin-content")
+    })
+    adminApp.Mount("/admin", mux)
+
+    publicApp := ui.MakeApp("en")
+    publicApp.Page("/", "Portal", func(ctx *ui.Context) string {
+        return ui.Div("")("portal-content")
+    })
+    publicApp.Mount("/portal", mux)
+
+    srv := httptest.NewServer(mux)
+    defer srv.Close()
+
+    // Verify /admin/ returns admin content
+    resp1, _ := http.Get(srv.URL + "/admin/")
+    body1, _ := io.ReadAll(resp1.Body)
+    assert.Contains(t, string(body1), "admin-content")
+
+    // Verify /portal/ returns portal content
+    resp2, _ := http.Get(srv.URL + "/portal/")
+    body2, _ := io.ReadAll(resp2.Body)
+    assert.Contains(t, string(body2), "portal-content")
+}
+```
+
 ## Validation
 
 ### go-playground/validator

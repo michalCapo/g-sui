@@ -46,6 +46,30 @@ func main() {
 2. **String-Based Components** - Components are Go functions returning HTML strings
 3. **Action-Based Interactivity** - User interactions trigger server handlers returning HTML
 4. **WebSocket-Enhanced** - Real-time updates via `/__ws` endpoint
+5. **Multitenant Support** - Multiple app instances with different URL prefixes
+6. **Automatic Compression** - Gzip compression for supported clients
+
+## Multitenant Apps (New in v0.111.17+)
+
+Mount multiple isolated apps on different URL prefixes:
+
+```go
+adminApp := ui.MakeApp("en")
+publicApp := ui.MakeApp("en")
+
+mainMux := http.NewServeMux()
+adminApp.Mount("/admin", mainMux)   // Routes at /admin/*
+publicApp.Mount("", mainMux)        // Routes at /*
+
+http.ListenAndServe(":8080", mainMux)
+```
+
+Each app has isolated sessions, routes, and WebSocket connections (`/admin/__ws`, `/__ws`).
+
+## Performance Features (New in v0.111.16+)
+
+- **Gzip Compression** - Automatic for clients with `Accept-Encoding: gzip`
+- **Route Manifest Caching** - Cached on first access, invalidated on route changes
 
 ## Key Types
 

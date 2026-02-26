@@ -318,7 +318,6 @@ You can retrieve the `http.Handler` and use it with a custom server setup or wra
 ```go
 app := ui.MakeApp("en")
 app.Page("/", "Home", homeHandler)
-app.StartSweeper()  // Manually start session sweeper when using Handler()
 
 // Get the handler
 handler := app.Handler()
@@ -339,9 +338,67 @@ log.Fatal(server.ListenAndServe())
 ```
 
 **Note:** When using `app.Handler()`:
-- You must manually call `app.StartSweeper()` to enable session cleanup
-- WebSocket endpoint at `/__ws` is automatically registered
-- Call `app.initWS()` is **not** needed (handled internally)
+- Session sweeper and WebSocket are automatically initialized
+- No need to manually call `app.StartSweeper()` or `app.initWS()`
+
+## Multitenant Support (Mounting Multiple Apps)
+
+g-sui supports running multiple app instances with different URL prefixes (multitenant). Use `app.Mount()` to mount an app on an external `http.ServeMux`:
+
+```go
+func main() {
+    // Create admin app
+    adminApp := ui.MakeApp("en")
+    adminApp.Page("/", "Admin Dashboard", adminDashboard)
+    adminApp.Page("/users", "User Management", adminUsers)
+
+    // Create public app
+    publicApp := ui.MakeApp("en")
+    publicApp.Page("/", "Home", homeHandler)
+    publicApp.Page("/about", "About", aboutHandler)
+
+    // Create main mux and mount apps
+    mainMux := http.NewServeMux()
+    
+    // Mount admin app at /admin prefix
+    adminApp.Mount("/admin", mainMux)
+    
+    // Mount public app at root
+    publicApp.Mount("", mainMux)
+
+    // Start server
+    log.Println("Listening on http://0.0.0.0:8080")
+    log.Fatal(http.ListenAndServe(":8080", mainMux))
+}
+```
+
+**Mount Behavior:**
+- `app.BasePath` is automatically set to the mount prefix
+- WebSocket connections use the correct path (e.g., `/admin/__ws`)
+- All routes are prefixed automatically
+- Each app has isolated sessions, state, and stored handlers
+
+**Manual BasePath Configuration:**
+```go
+app := ui.MakeApp("en")
+app.BasePath = "/api/v1"  // Set before registering routes
+app.Page("/", "Home", homeHandler)  // Will be served at /api/v1/
+```
+
+## Performance Features
+
+### Automatic Gzip Compression
+
+All responses are automatically gzip-compressed when the client supports it:
+- Checks `Accept-Encoding` header for `gzip`
+- Applies to all HTTP responses (not WebSocket)
+- No configuration required
+
+### Route Manifest Caching
+
+Route manifests are cached on first access for improved performance:
+- Automatically invalidated when new routes are registered
+- Thread-safe with mutex protection
 
 ## Testing Handler
 

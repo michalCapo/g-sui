@@ -42,11 +42,14 @@ The project uses semantic versioning starting at `v0.100`:
 ## High-Level Architecture
 
 ### Core Philosophy
+### Key Concepts
 
-- **Server-Centric Rendering**: All HTML is generated server-side as strings
-- **String-Based Components**: Components are Go functions returning HTML strings
-- **Action-Based Interactivity**: User interactions trigger server handlers that return partial HTML updates
-- **WebSocket-Enhanced**: Real-time updates via `/__ws` endpoint for server-initiated DOM patches
+1. **Server-Centric Rendering**: All HTML is generated server-side as strings
+2. **String-Based Components**: Components are Go functions returning HTML strings
+3. **Action-Based Interactivity**: User interactions trigger server handlers that return partial HTML updates
+4. **WebSocket-Enhanced**: Real-time updates via `/__ws` endpoint for server-initiated DOM patches
+5. **Multitenant Support**: Multiple app instances can run with different URL prefixes
+6. **Automatic Compression**: Gzip compression enabled by default for supported clients
 
 ### Key Concepts
 
@@ -94,7 +97,7 @@ app.Page("/path", "Title", handler)   // Register page route
 app.Layout(func(ctx *ui.Context) string {
     return ui.Div("layout", ui.Attr{})(
         ui.Div("header", ui.Attr{})("Header"),
-        ui.Div("", ui.Attr{ID: "__content__"})(),  // Content slot
+        ui.Div("", ui.Attr{ID: "__content__"})(),  // Content slot - uses app.ContentID
         ui.Div("footer", ui.Attr{})("Footer"),
     )
 })
@@ -109,11 +112,17 @@ app.Custom("GET", "/api/health", healthHandler)  // Register custom handler
 app.GET("/api/users", getUsersHandler)           // Shorthand for GET
 app.POST("/api/users", createUserHandler)        // Shorthand for POST
 
-app.Listen(":8080")                   // Start server (also starts WebSocket)
+app.Listen(":8080")                   // Start server (also starts WebSocket, enables gzip)
 
 // OR use custom server configuration
-handler := app.Handler()              // Get http.Handler for custom setups
+handler := app.Handler()              // Get http.Handler for custom setups (auto-starts sweeper and WS)
 server := &http.Server{Addr: ":8080", Handler: handler}
+
+// OR mount multiple apps with different prefixes (multitenant)
+mainMux := http.NewServeMux()
+adminApp.Mount("/admin", mainMux)     // Admin app at /admin/*
+publicApp.Mount("", mainMux)          // Public app at root
+http.ListenAndServe(":8080", mainMux)
 ```
 
 ### Action System
@@ -134,6 +143,29 @@ ctx.Submit(handler).Replace(target)
 // Direct element click
 ui.Button().Click(ctx.Call(handler).Render(target)).Render("Click me")
 ```
+
+### Multitenant / Path-Prefix Mounting
+
+Run multiple isolated g-sui apps with different URL prefixes:
+
+```go
+// Create apps
+adminApp := ui.MakeApp("en")
+publicApp := ui.MakeApp("en")
+
+// Register routes (relative to mount point)
+adminApp.Page("/", "Dashboard", adminDashboard)      // Will be at /admin/
+publicApp.Page("/", "Home", homeHandler)             // Will be at /
+
+// Mount on shared mux
+mainMux := http.NewServeMux()
+adminApp.Mount("/admin", mainMux)
+publicApp.Mount("", mainMux)
+
+http.ListenAndServe(":8080", mainMux)
+```
+
+Each app has isolated sessions, routes, and state. WebSocket paths are automatically adjusted.
 
 ### State Management
 

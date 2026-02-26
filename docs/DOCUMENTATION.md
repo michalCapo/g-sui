@@ -109,8 +109,12 @@ app.Page("/path", "Page Title", handler)          // Register page route
 app.Favicon(embedFS, "assets/favicon.svg", 24*time.Hour)
 app.Assets(embedFS, "assets/", 24*time.Hour)      // Serve static files
 app.AutoRestart(true)                             // Dev: rebuild on file changes
-app.Listen(":8080")                               // Start server (also starts WS at /__ws)
+app.Listen(":8080")                               // Start server (gzip + WS auto-enabled)
 ```
+
+**Performance Features (Automatic):**
+- **Gzip Compression**: All HTTP responses are automatically gzip-compressed when the client supports it (`Accept-Encoding: gzip`)
+- **Route Manifest Caching**: Route manifests are cached and invalidated automatically when routes change
 
 ### Custom HTTP Handlers (REST APIs)
 ```go
@@ -135,9 +139,8 @@ app.PATCH("/api/data/patch", patchDataHandler)
 // Get http.Handler for custom server setups
 app := ui.MakeApp("en")
 app.Page("/", "Home", homeHandler)
-app.StartSweeper()  // Manually start session sweeper
 
-// Wrap with custom middleware
+// Handler() auto-initializes WebSocket, session sweeper, and gzip compression
 handler := myLoggingMiddleware(app.Handler())
 
 // Use with custom server
@@ -148,11 +151,47 @@ server := &http.Server{
 server.ListenAndServe()
 ```
 
+**Note:** `app.Handler()` automatically initializes WebSocket and session sweeper. No manual `StartSweeper()` or `initWS()` needed.
+
 ### Testing Handler
 ```go
 handler := app.TestHandler()                      // Get http.Handler for testing
 server := httptest.NewServer(handler)             // Create test server
 resp, _ := http.Get(server.URL + "/path")         // Make test requests
+```
+
+### Multitenant / Path-Prefix Mounting
+
+Mount multiple g-sui apps on different URL prefixes:
+
+```go
+// Create apps
+adminApp := ui.MakeApp("en")
+publicApp := ui.MakeApp("en")
+
+// Register routes (relative to mount point)
+adminApp.Page("/", "Dashboard", adminDashboard)      // Served at /admin/
+publicApp.Page("/", "Home", homeHandler)             // Served at /
+
+// Mount on shared mux
+mainMux := http.NewServeMux()
+adminApp.Mount("/admin", mainMux)   // Mount at /admin prefix
+publicApp.Mount("", mainMux)        // Mount at root
+
+http.ListenAndServe(":8080", mainMux)
+```
+
+**Features:**
+- `app.BasePath` is automatically set to the mount prefix
+- WebSocket endpoints use correct paths (e.g., `/admin/__ws`)
+- Each app has isolated sessions, routes, and state
+- The `app.ContentID` target is unique per app instance
+
+**Manual BasePath:**
+```go
+app := ui.MakeApp("en")
+app.BasePath = "/api/v1"  // Set before registering routes
+app.Page("/", "Home", handler)  // Will be served at /api/v1/
 ```
 
 ### HTML Wrapper
@@ -2927,6 +2966,8 @@ The `App` struct is the central container for the entire application:
 ```go
 type App struct {
     Lanugage  string                       // Default locale
+    BasePath  string                       // URL prefix for path-prefix mounting (e.g., "/admin")
+    ContentID Attr                          // Unique content target ID per app instance
     HTMLBody  func(string, string) string   // Custom body wrapper
     HTMLHead  []string                     // Additional head elements
     sessions  *sync.Map                    // Session storage
@@ -2947,6 +2988,12 @@ type App struct {
 - `StartSweeper(interval time.Duration)` - Start session cleanup goroutine
 - `TestHandler() http.Handler` - Get HTTP handler for testing (returns handler without starting server)
 - `PWA(config PWAConfig)` - Enable Progressive Web App support
+- `Mount(prefix string, mux *http.ServeMux)` - Mount app on external ServeMux with URL prefix
+- `Handler() http.Handler` - Get HTTP handler (auto-initializes WebSocket and sweeper, includes gzip)
+
+**Performance Features:**
+- **Gzip Compression**: All HTTP responses are automatically gzip-compressed when the client supports it
+- **Route Manifest Caching**: Route manifests are cached on first access and invalidated when routes change
 
 **HTML Generation:**
 - `HTML(title, bodyClass, content) string` - Full HTML document with head, scripts, styles
