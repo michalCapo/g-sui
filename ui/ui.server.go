@@ -4444,23 +4444,23 @@ func MakeApp(defaultLanguage string) *App {
                 html.bg-gray-200 { background-color: rgba(235, 235, 235, 1); }
                 /* Disabled buttons - ensure text is visible */
                 .pointer-events-none.bg-gray-50 { color: #6b7280 !important; }
-                /* Dark mode overrides */
+                /* Dark mode overrides — no !important so explicit dark: Tailwind variants can win */
                 html.dark{ color-scheme: dark; }
                 /* Global text color fallback */
                 .dark body { color:#e5e7eb; }
                 /* Backgrounds */
-                html.dark.bg-white, html.dark.bg-gray-100, html.dark.bg-gray-200 { background-color:#111827 !important; }
-                .dark .bg-white, .dark .bg-gray-50, .dark .bg-gray-100, .dark .bg-gray-200 { background-color:#111827 !important; }
+                html.dark.bg-white, html.dark.bg-gray-100, html.dark.bg-gray-200 { background-color:#111827; }
+                .dark .bg-white, .dark .bg-gray-50, .dark .bg-gray-100, .dark .bg-gray-200 { background-color:#111827; }
                 /* Text color overrides for common grays */
-                .dark .text-black, .dark .text-gray-900, .dark .text-gray-800, .dark .text-gray-700, .dark .text-gray-600, .dark .text-gray-500 { color:#e5e7eb !important; }
-                .dark .text-gray-400, .dark .text-gray-300 { color:#d1d5db !important; }
+                .dark .text-black, .dark .text-gray-900, .dark .text-gray-800, .dark .text-gray-700, .dark .text-gray-600, .dark .text-gray-500 { color:#e5e7eb; }
+                .dark .text-gray-400, .dark .text-gray-300 { color:#d1d5db; }
                 /* Borders */
-                .dark .border-gray-100, .dark .border-gray-200, .dark .border-gray-300 { border-color:#374151 !important; }
-                /* Inputs */
+                .dark .border-gray-100, .dark .border-gray-200, .dark .border-gray-300 { border-color:#374151; }
+                /* Inputs — keep !important since form elements have UA styles that are hard to override */
                 .dark input, .dark select, .dark textarea { color:#e5e7eb !important; background-color:#1f2937 !important; }
                 .dark input::placeholder, .dark textarea::placeholder { color:#9ca3af !important; }
                 /* Hover helpers used in nav/examples */
-                .dark .hover\:bg-gray-200:hover { background-color:#374151 !important; }
+                .dark .hover\:bg-gray-200:hover { background-color:#374151; }
             </style>`,
 			Script(__stringify, __loader, __offline, __error, __notify, __e, __engine, __post, __submit, __load, __router, __theme, __ws),
 		},
