@@ -45,6 +45,11 @@ var routes = []route{
 	{Path: "/reload-redirect", Title: "Reload & Redirect"},
 	{Path: "/routes", Title: "Route Params"},
 	{Path: "/proxy", Title: "Proxy"},
+	{Path: "/client-table", Title: "Client Table"},
+	{Path: "/client-charts", Title: "Client Charts"},
+	{Path: "/client-dashboard", Title: "Client Dashboard"},
+	{Path: "/client-polling", Title: "Client Polling"},
+	{Path: "/client-states", Title: "Client States"},
 }
 
 func main() {
@@ -123,6 +128,16 @@ func main() {
 	app.Page("/routes/user/{userId}/post/{postId}", "User Post Detail", pages.UserPostDetail)
 	app.Page("/routes/category/{category}/product/{product}", "Category Product Detail", pages.CategoryProductDetail)
 	app.Page("/proxy", "Proxy", pages.Proxy)
+
+	// Client-side rendering examples
+	app.Page("/client-table", "Client Table", pages.ClientTable)
+	app.Page("/client-charts", "Client Charts", pages.ClientCharts)
+	app.Page("/client-dashboard", "Client Dashboard", pages.ClientDashboard)
+	app.Page("/client-polling", "Client Polling", pages.ClientPolling)
+	app.Page("/client-states", "Client States", pages.ClientEmpty)
+
+	// Register API endpoints for client-side rendering demos
+	pages.RegisterClientDemoAPIs(app)
 
 	app.Listen(":1422")
 }

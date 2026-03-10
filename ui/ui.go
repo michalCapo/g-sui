@@ -412,6 +412,10 @@ func (a Attr) Skeleton(kind ...Skeleton) string {
 		return a.SkeletonPage()
 	case SkeletonForm:
 		return a.SkeletonForm()
+	case SkeletonTable:
+		return a.SkeletonTable()
+	case SkeletonCards:
+		return a.SkeletonCards()
 	default:
 		return a.SkeletonDefault()
 	}
