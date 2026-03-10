@@ -43,7 +43,7 @@ func ClientCharts(ctx *ui.Context) string {
 				js.Client(ctx).
 					Source("/api/client-demo/revenue-monthly").
 					Chart(js.BarChart).
-					ChartOptions(js.Opts{"height": 250, "valueFormat": "amount"}).
+					ChartOptions(js.Opts{"height": 400, "valueFormat": "amount"}).
 					Render(),
 			),
 			// Donut chart
@@ -104,7 +104,7 @@ func ClientDashboard(ctx *ui.Context) string {
 			js.Client(ctx).
 				Source("/api/client-demo/revenue-monthly").
 				Chart(js.BarChart).
-				ChartOptions(js.Opts{"height": 280, "valueFormat": "amount"}).
+				ChartOptions(js.Opts{"height": 300, "valueFormat": "amount"}).
 				Render(),
 		),
 

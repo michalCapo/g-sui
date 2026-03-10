@@ -114,7 +114,8 @@ type Builder struct {
 	emptyMsg  string
 	showError bool
 	autoLoad  bool
-	poll      int // milliseconds
+	poll      int    // milliseconds
+	pollWhile string // JS condition expression
 }
 
 // Client creates a new Builder bound to the given request context.
@@ -143,6 +144,13 @@ func (b *Builder) Empty(icon, message string) *Builder {
 // Poll sets the automatic refresh interval.
 func (b *Builder) Poll(d time.Duration) *Builder {
 	b.poll = int(d.Milliseconds())
+	return b
+}
+
+// PollWhile sets a JS condition expression that must be true for polling to continue.
+// Example: "data.status !== 'completed'"
+func (b *Builder) PollWhile(condition string) *Builder {
+	b.pollWhile = condition
 	return b
 }
 
@@ -215,6 +223,33 @@ func (b *Builder) ChartOptions(opts Opts) *Builder {
 	return b
 }
 
+// Upload is sugar for .Component("file-upload", …) with upload options.
+// Auto-load is disabled since the upload component does not fetch data on mount.
+func (b *Builder) Upload(maxSize int64, accept string) *Builder {
+	if b.opts == nil {
+		b.opts = Opts{}
+	}
+	if maxSize > 0 {
+		b.opts["maxSize"] = maxSize
+	}
+	if accept != "" {
+		b.opts["accept"] = accept
+	}
+	b.opts["uploadUrl"] = b.source
+	b.component = "file-upload"
+	b.autoLoad = false
+	return b
+}
+
+// MaxFiles sets the maximum number of files for the upload component.
+func (b *Builder) MaxFiles(n int) *Builder {
+	if b.opts == nil {
+		b.opts = Opts{}
+	}
+	b.opts["maxFiles"] = n
+	return b
+}
+
 // Render outputs the HTML: a target div + a script tag that boots __client().
 func (b *Builder) Render() string {
 	config := map[string]any{
@@ -251,6 +286,9 @@ func (b *Builder) Render() string {
 	}
 	if b.poll > 0 {
 		config["poll"] = b.poll
+	}
+	if b.pollWhile != "" {
+		config["pollWhile"] = b.pollWhile
 	}
 
 	jsonBytes, err := json.Marshal(config)

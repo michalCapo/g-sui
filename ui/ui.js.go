@@ -186,6 +186,9 @@ var (
 	List     = func(class string, attr ...Attr) func(elements ...string) string { return El("ul", class, attr...) }
 	ListItem = func(class string, attr ...Attr) func(elements ...string) string { return El("li", class, attr...) }
 	Canvas   = func(class string, attr ...Attr) func(elements ...string) string { return El("canvas", class, attr...) }
+	Pre      = func(class string, attr ...Attr) func(elements ...string) string { return El("pre", class, attr...) }
+	Code     = func(class string, attr ...Attr) func(elements ...string) string { return El("code", class, attr...) }
+	Nav      = func(class string, attr ...Attr) func(elements ...string) string { return El("nav", class, attr...) }
 
 	Img   = func(class string, attr ...Attr) string { return ElClosed("img", class, attr...) }
 	Input = func(class string, attr ...Attr) string { return ElClosed("input", class, attr...) }

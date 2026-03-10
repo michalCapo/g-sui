@@ -50,6 +50,15 @@ var routes = []route{
 	{Path: "/client-dashboard", Title: "Client Dashboard"},
 	{Path: "/client-polling", Title: "Client Polling"},
 	{Path: "/client-states", Title: "Client States"},
+	// --- New Features ---
+	{Path: "/new-utilities", Title: "Utilities"},
+	{Path: "/new-filters", Title: "Adv. Filters"},
+	{Path: "/new-async-detail", Title: "Async Detail"},
+	{Path: "/new-charts", Title: "Charts v2"},
+	{Path: "/new-components", Title: "Components"},
+	{Path: "/new-search", Title: "Search"},
+	{Path: "/new-forms", Title: "Forms & Nav"},
+	{Path: "/new-polling", Title: "Cond. Polling"},
 }
 
 func main() {
@@ -136,8 +145,19 @@ func main() {
 	app.Page("/client-polling", "Client Polling", pages.ClientPolling)
 	app.Page("/client-states", "Client States", pages.ClientEmpty)
 
+	// New feature example pages
+	app.Page("/new-utilities", "JS Utilities", pages.NewUtilities)
+	app.Page("/new-filters", "Advanced Filters", pages.NewFilters)
+	app.Page("/new-async-detail", "Async Detail", pages.NewAsyncDetail)
+	app.Page("/new-charts", "Chart Enhancements", pages.NewCharts)
+	app.Page("/new-components", "New Components", pages.NewComponents)
+	app.Page("/new-search", "Search Components", pages.NewSearch)
+	app.Page("/new-forms", "Forms & Navigation", pages.NewForms)
+	app.Page("/new-polling", "Conditional Polling", pages.NewConditionalPolling)
+
 	// Register API endpoints for client-side rendering demos
 	pages.RegisterClientDemoAPIs(app)
+	pages.RegisterNewFeatureAPIs(app)
 
 	app.Listen(":1422")
 }
