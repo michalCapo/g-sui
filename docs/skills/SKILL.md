@@ -39,6 +39,7 @@ func main() {
 | Data Management | [DATA.md](DATA.md) | Data collation, search, sort, filter, pagination, Excel export |
 | Server Setup | [SERVER.md](SERVER.md) | App initialization, routes, WebSocket, PWA, assets |
 | Best Practices | [PATTERNS.md](PATTERNS.md) | Testing, validation, security, state management |
+| Client Rendering | [CLIENT.md](CLIENT.md) | Hybrid client-side rendering (`js` package), tables, charts, custom components |
 
 ## Core Philosophy
 
@@ -81,7 +82,8 @@ type Attr struct { ID, Class, Value, OnClick, OnSubmit, ... }  // HTML attribute
 ## Common Imports
 
 ```go
-import "github.com/michalCapo/g-sui/ui"
+import "github.com/michalCapo/g-sui/ui"   // Server-rendered components
+import "github.com/michalCapo/g-sui/js"   // Client-side rendered zones (tables, charts)
 ```
 
 ## Development Commands

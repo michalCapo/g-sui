@@ -9,3 +9,4 @@ tmp/
 node_modules/
 __debug*
 examples/uploads/
+todo.md

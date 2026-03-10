@@ -34,7 +34,8 @@ This document combines the LLM Reference Guide and Architecture Documentation fo
 27. [Validation Tags (go-playground/validator)](#validation-tags-go-playgroundvalidator)
 28. [Project Structure](#project-structure)
 29. [Dependencies](#dependencies)
-30. [Quick Reference](#quick-reference)
+30. [Client-Side Rendering (`js` package)](#client-side-rendering-js-package)
+31. [Quick Reference](#quick-reference)
 
 ### Part II: Architecture Documentation
 31. [Architecture Overview](#architecture-overview)
@@ -1855,6 +1856,86 @@ import (
     "gorm.io/driver/sqlite"                   // SQLite driver (or postgres/mysql)
 )
 ```
+
+---
+
+## Client-Side Rendering (`js` package)
+
+The `js` package (`github.com/michalCapo/g-sui/js`) provides hybrid client-side rendering. The server renders the page shell, then a JS runtime fetches data from APIs and renders content entirely on the client. This is useful for data-heavy tables, charts, and dashboards where sorting/filtering/pagination should happen without server round-trips.
+
+**Import:** `import "github.com/michalCapo/g-sui/js"`
+
+### Builder API
+
+```go
+// Client-side rendered table
+js.Client(ctx).
+    Source("/api/invoices").
+    Loading(ui.SkeletonTable).
+    Empty("inbox", "No invoices found").
+    Table(
+        js.Col("Company").Label("Company").Sortable(true),
+        js.Col("Amount").Label("Amount").Type("number").Format("amount"),
+        js.Col("Date").Label("Date").Type("date").Sortable(true),
+    ).
+    Search(true).
+    Pagination(25).
+    Render()
+
+// Client-side chart
+js.Client(ctx).
+    Source("/api/revenue").
+    Chart(js.BarChart).
+    ChartOptions(js.Opts{"height": 280, "valueFormat": "amount"}).
+    Render()
+
+// Custom component with polling
+js.Client(ctx).
+    Source("/api/stats").
+    Component("kpi-bar", js.Opts{"items": items}).
+    Poll(30 * time.Second).
+    Render()
+```
+
+### Key Types
+
+| Type | Description |
+|------|-------------|
+| `js.Builder` | Fluent builder for client-side zones |
+| `js.Column` | Column definition for tables |
+| `js.Opts` | `map[string]any` options passed as JSON |
+| `js.Option` | Value/label pair for enum columns |
+| `js.ChartType` | Chart type enum (`js.BarChart`, `js.AreaChart`, `js.HBarChart`, `js.DonutChart`) |
+
+### Builder Methods
+
+| Method | Description |
+|--------|-------------|
+| `js.Client(ctx)` | Create a new client-side zone |
+| `.Source(url)` | API endpoint returning JSON |
+| `.Table(cols...)` | Sugar for table component with column definitions |
+| `.Chart(type)` | Sugar for chart component |
+| `.ChartOptions(opts)` | Merge additional chart options |
+| `.Component(name, opts)` | Custom registered JS component |
+| `.Search(bool)` | Enable search input |
+| `.Filter(bool)` | Enable filter bar |
+| `.Pagination(size)` | Set page size |
+| `.Loading(skeleton)` | Skeleton while loading (`ui.SkeletonTable`, `ui.SkeletonCards`) |
+| `.Empty(icon, msg)` | Empty state display |
+| `.Poll(duration)` | Auto-refresh interval |
+| `.Error(bool)` | Show/hide error state |
+| `.AutoLoad(bool)` | Auto-fetch on mount |
+| `.Params(map)` | Extra query params |
+| `.Render()` | Output HTML |
+
+### Column Builder
+
+```go
+js.Col("key").Label("Header").Type("number").Format("amount").Sortable(true).Filterable(true)
+js.Col("status").Type("enum").EnumOptions(js.Option{Value: "active", Label: "Active"})
+```
+
+For full documentation including custom JS components, the `__cel` element builder, formatters, and the complete JS module reference, see `docs/skills/CLIENT.md`.
 
 ---
 

@@ -48,8 +48,9 @@ The project uses semantic versioning starting at `v0.100`:
 2. **String-Based Components**: Components are Go functions returning HTML strings
 3. **Action-Based Interactivity**: User interactions trigger server handlers that return partial HTML updates
 4. **WebSocket-Enhanced**: Real-time updates via `/__ws` endpoint for server-initiated DOM patches
-5. **Multitenant Support**: Multiple app instances can run with different URL prefixes
-6. **Automatic Compression**: Gzip compression enabled by default for supported clients
+5. **Hybrid Client Rendering**: The `js` package builds client-side rendered zones (tables, charts, custom components) that fetch JSON from APIs
+6. **Multitenant Support**: Multiple app instances can run with different URL prefixes
+7. **Automatic Compression**: Gzip compression enabled by default for supported clients
 
 ### Key Concepts
 
@@ -64,6 +65,7 @@ The project uses semantic versioning starting at `v0.100`:
 ui/
 ├── ui.go              # Core types, HTML DSL, utility functions
 ├── ui.server.go       # HTTP server, WebSocket handler, app initialization
+├── ui.client.go       # Skeleton types for client zones (SkeletonTable, SkeletonCards)
 ├── ui.button.go       # Button component
 ├── ui.form.go         # Form handling and validation
 ├── ui.input.go        # Input components (text, email, password, etc.)
@@ -80,6 +82,10 @@ ui/
 ├── ui.progress.go     # Progress bar component
 ├── ui.step.go         # Step/wizard component
 └── *_test.go          # Comprehensive test coverage
+
+js/
+├── js.go              # Client-side rendered zones: Builder, Column, Opts, ChartType
+└── js_test.go         # Tests for the js package
 
 proxy/
 ├── proxy.go           # Reverse proxy with HTTP/WebSocket forwarding and URL rewriting
@@ -288,12 +294,12 @@ Project-specific **Claude Code skills** are available in `docs/skills/` to help 
 
 **Personal (recommended):** Available across all your projects
 ```bash
-mkdir -p ~/.claude/skills/g-sui && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SKILL.md -o ~/.claude/skills/g-sui/SKILL.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CORE.md -o ~/.claude/skills/g-sui/CORE.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/COMPONENTS.md -o ~/.claude/skills/g-sui/COMPONENTS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/DATA.md -o ~/.claude/skills/g-sui/DATA.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SERVER.md -o ~/.claude/skills/g-sui/SERVER.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/PATTERNS.md -o ~/.claude/skills/g-sui/PATTERNS.md
+mkdir -p ~/.claude/skills/g-sui && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SKILL.md -o ~/.claude/skills/g-sui/SKILL.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CORE.md -o ~/.claude/skills/g-sui/CORE.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/COMPONENTS.md -o ~/.claude/skills/g-sui/COMPONENTS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/DATA.md -o ~/.claude/skills/g-sui/DATA.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SERVER.md -o ~/.claude/skills/g-sui/SERVER.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/PATTERNS.md -o ~/.claude/skills/g-sui/PATTERNS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CLIENT.md -o ~/.claude/skills/g-sui/CLIENT.md
 ```
 
 **Project-local:** Shared with your team via git
 ```bash
-mkdir -p .claude/skills/g-sui && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SKILL.md -o .claude/skills/g-sui/SKILL.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CORE.md -o .claude/skills/g-sui/CORE.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/COMPONENTS.md -o .claude/skills/g-sui/COMPONENTS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/DATA.md -o .claude/skills/g-sui/DATA.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SERVER.md -o .claude/skills/g-sui/SERVER.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/PATTERNS.md -o .claude/skills/g-sui/PATTERNS.md
+mkdir -p .claude/skills/g-sui && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SKILL.md -o .claude/skills/g-sui/SKILL.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CORE.md -o .claude/skills/g-sui/CORE.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/COMPONENTS.md -o .claude/skills/g-sui/COMPONENTS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/DATA.md -o .claude/skills/g-sui/DATA.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SERVER.md -o .claude/skills/g-sui/SERVER.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/PATTERNS.md -o .claude/skills/g-sui/PATTERNS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CLIENT.md -o .claude/skills/g-sui/CLIENT.md
 ```
 
 Then restart Claude Code to load the skills.
@@ -308,6 +314,7 @@ Then restart Claude Code to load the skills.
 | `DATA.md` | Data collation, search, sort, filter, pagination, Excel export |
 | `SERVER.md` | App setup, routes, WebSocket, PWA, assets |
 | `PATTERNS.md` | Testing, validation, security, state management |
+| `CLIENT.md` | Client-side rendering (`js` package), tables, charts, custom components |
 
 ### Using Skills
 

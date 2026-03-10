@@ -26,6 +26,7 @@ g-sui renders HTML on the server, sends actions over WebSocket, and updates spec
 - Toast messages: `Success`, `Error`, `Info`, and an error toast with a Reload button
 - Built-in live status via WebSocket (`/__ws`) with an offline banner, automatic reconnect, and auto-reload on reconnect
 - Built-in dark mode with a tiny theme switcher (`ui.ThemeSwitcher`) cycling System → Light → Dark with proper icon alignment
+- **Hybrid client-side rendering** via the `js` package: build client-rendered zones (tables, charts, custom components) that fetch JSON from APIs, with fluent Go builders (`js.Client(ctx).Source(...).Table(js.Col("key")...).Render()`)
 - Reverse proxy package (`proxy`) for HTTP and WebSocket forwarding with automatic URL rewriting
 - Optional dev autorestart (`app.AutoRestart(true)`) to rebuild and restart on changes
 
@@ -83,6 +84,7 @@ The examples include:
 - Core UI components (alerts, badges, cards, tabs, accordion, dropdowns, tooltips)
 - Forms and inputs with validation
 - Tables, icons, and markdown rendering
+- Client-side rendered tables, charts, polling, and dashboard demos (`js` package)
 - Route params and navigation examples
 - WebSocket patches, deferred loading, and reverse proxy demo
 
@@ -208,7 +210,7 @@ func handler(ctx *ui.Context) string {
 
 Available across all your projects
 ```bash
-mkdir -p ~/.claude/skills/g-sui && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SKILL.md -o ~/.claude/skills/g-sui/SKILL.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CORE.md -o ~/.claude/skills/g-sui/CORE.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/COMPONENTS.md -o ~/.claude/skills/g-sui/COMPONENTS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/DATA.md -o ~/.claude/skills/g-sui/DATA.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SERVER.md -o ~/.claude/skills/g-sui/SERVER.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/PATTERNS.md -o ~/.claude/skills/g-sui/PATTERNS.md
+mkdir -p ~/.claude/skills/g-sui && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SKILL.md -o ~/.claude/skills/g-sui/SKILL.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CORE.md -o ~/.claude/skills/g-sui/CORE.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/COMPONENTS.md -o ~/.claude/skills/g-sui/COMPONENTS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/DATA.md -o ~/.claude/skills/g-sui/DATA.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/SERVER.md -o ~/.claude/skills/g-sui/SERVER.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/PATTERNS.md -o ~/.claude/skills/g-sui/PATTERNS.md && curl -sL https://raw.githubusercontent.com/michalCapo/g-sui/main/docs/skills/CLIENT.md -o ~/.claude/skills/g-sui/CLIENT.md
 ```
 
 Then restart Claude Code to load the skills.
@@ -223,6 +225,7 @@ Then restart Claude Code to load the skills.
 | **DATA.md** | Data collation (TQuery/TCollate), search, sort, filter, pagination, Excel |
 | **SERVER.md** | App initialization, routes, WebSocket, PWA, assets |
 | **PATTERNS.md** | Testing, validation, security, state management patterns |
+| **CLIENT.md** | Client-side rendering (`js` package), tables, charts, custom components |
 
 ## License
 

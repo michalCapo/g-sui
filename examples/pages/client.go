@@ -3,6 +3,7 @@ package pages
 import (
 	"time"
 
+	"github.com/michalCapo/g-sui/js"
 	"github.com/michalCapo/g-sui/ui"
 )
 
@@ -12,16 +13,16 @@ func ClientTable(ctx *ui.Context) string {
 	return ui.Div("max-w-5xl mx-auto flex flex-col gap-4")(
 		ui.Div("text-3xl font-bold")("Client Table"),
 		ui.Div("text-gray-600")("Data fetched from API, sorted/filtered/paginated entirely on the client."),
-		ui.Client(ctx).
+		js.Client(ctx).
 			Source("/api/client-demo/invoices").
 			Loading(ui.SkeletonTable).
 			Empty("receipt_long", "No invoices found").
 			Table(
-				ui.ClientCol("Number").Label("#").Sortable(true),
-				ui.ClientCol("Company").Label("Company").Sortable(true),
-				ui.ClientCol("Amount").Label("Amount").Type("number").Format("amount").Sortable(true),
-				ui.ClientCol("Date").Label("Date").Type("date").Sortable(true),
-				ui.ClientCol("Status").Label("Status"),
+				js.Col("Number").Label("#").Sortable(true),
+				js.Col("Company").Label("Company").Sortable(true),
+				js.Col("Amount").Label("Amount").Type("number").Format("amount").Sortable(true),
+				js.Col("Date").Label("Date").Type("date").Sortable(true),
+				js.Col("Status").Label("Status"),
 			).
 			Search(true).
 			Pagination(8).
@@ -39,37 +40,37 @@ func ClientCharts(ctx *ui.Context) string {
 			// Bar chart
 			ui.Div("bg-white dark:bg-gray-900 rounded-lg shadow p-4")(
 				ui.Div("text-lg font-semibold mb-2")("Monthly Revenue"),
-				ui.Client(ctx).
+				js.Client(ctx).
 					Source("/api/client-demo/revenue-monthly").
-					Chart(ui.BarChart).
-					ChartOptions(ui.ClientOpts{"height": 250, "valueFormat": "amount"}).
+					Chart(js.BarChart).
+					ChartOptions(js.Opts{"height": 250, "valueFormat": "amount"}).
 					Render(),
 			),
 			// Donut chart
 			ui.Div("bg-white dark:bg-gray-900 rounded-lg shadow p-4")(
 				ui.Div("text-lg font-semibold mb-2")("Revenue by Category"),
-				ui.Client(ctx).
+				js.Client(ctx).
 					Source("/api/client-demo/revenue-category").
-					Chart(ui.DonutChart).
-					ChartOptions(ui.ClientOpts{"height": 250}).
+					Chart(js.DonutChart).
+					ChartOptions(js.Opts{"height": 250}).
 					Render(),
 			),
 			// Area chart
 			ui.Div("bg-white dark:bg-gray-900 rounded-lg shadow p-4")(
 				ui.Div("text-lg font-semibold mb-2")("Trend"),
-				ui.Client(ctx).
+				js.Client(ctx).
 					Source("/api/client-demo/trend").
-					Chart(ui.AreaChart).
-					ChartOptions(ui.ClientOpts{"height": 250}).
+					Chart(js.AreaChart).
+					ChartOptions(js.Opts{"height": 250}).
 					Render(),
 			),
 			// Horizontal bar chart
 			ui.Div("bg-white dark:bg-gray-900 rounded-lg shadow p-4")(
 				ui.Div("text-lg font-semibold mb-2")("Top Customers"),
-				ui.Client(ctx).
+				js.Client(ctx).
 					Source("/api/client-demo/top-customers").
-					Chart(ui.HBarChart).
-					ChartOptions(ui.ClientOpts{"height": 250, "valueFormat": "amount"}).
+					Chart(js.HBarChart).
+					ChartOptions(js.Opts{"height": 250, "valueFormat": "amount"}).
 					Render(),
 			),
 		),
@@ -84,11 +85,11 @@ func ClientDashboard(ctx *ui.Context) string {
 		ui.Div("text-gray-600")("Multiple independent client zones on one page: stats, chart, and table."),
 
 		// KPI stats row - using generic component
-		ui.Client(ctx).
+		js.Client(ctx).
 			Source("/api/client-demo/stats").
 			Loading(ui.SkeletonCards).
-			Component("kpi-bar", ui.ClientOpts{
-				"items": []ui.ClientOpts{
+			Component("kpi-bar", js.Opts{
+				"items": []js.Opts{
 					{"key": "total", "label": "Total Revenue", "format": "amount", "icon": "payments"},
 					{"key": "count", "label": "Invoices", "icon": "receipt_long"},
 					{"key": "avg", "label": "Average", "format": "amount", "icon": "trending_up"},
@@ -100,23 +101,23 @@ func ClientDashboard(ctx *ui.Context) string {
 		// Revenue chart
 		ui.Div("bg-white dark:bg-gray-900 rounded-lg shadow p-4")(
 			ui.Div("text-lg font-semibold mb-2")("Revenue Over Time"),
-			ui.Client(ctx).
+			js.Client(ctx).
 				Source("/api/client-demo/revenue-monthly").
-				Chart(ui.BarChart).
-				ChartOptions(ui.ClientOpts{"height": 280, "valueFormat": "amount"}).
+				Chart(js.BarChart).
+				ChartOptions(js.Opts{"height": 280, "valueFormat": "amount"}).
 				Render(),
 		),
 
 		// Recent invoices table
-		ui.Client(ctx).
+		js.Client(ctx).
 			Source("/api/client-demo/invoices").
 			Loading(ui.SkeletonTable).
 			Table(
-				ui.ClientCol("Number").Label("#").Sortable(true),
-				ui.ClientCol("Company").Label("Company").Sortable(true),
-				ui.ClientCol("Amount").Label("Amount").Type("number").Format("amount").Sortable(true),
-				ui.ClientCol("Date").Label("Date").Type("date").Sortable(true),
-				ui.ClientCol("Status").Label("Status"),
+				js.Col("Number").Label("#").Sortable(true),
+				js.Col("Company").Label("Company").Sortable(true),
+				js.Col("Amount").Label("Amount").Type("number").Format("amount").Sortable(true),
+				js.Col("Date").Label("Date").Type("date").Sortable(true),
+				js.Col("Status").Label("Status"),
 			).
 			Pagination(5).
 			Render(),
@@ -129,16 +130,16 @@ func ClientPolling(ctx *ui.Context) string {
 	return ui.Div("max-w-5xl mx-auto flex flex-col gap-4")(
 		ui.Div("text-3xl font-bold")("Client Polling"),
 		ui.Div("text-gray-600")("Table auto-refreshes every 3 seconds. Watch the timestamps update."),
-		ui.Client(ctx).
+		js.Client(ctx).
 			Source("/api/client-demo/live").
 			Loading(ui.SkeletonTable).
 			Poll(3*time.Second).
 			Table(
-				ui.ClientCol("Name").Label("Process").Sortable(true),
-				ui.ClientCol("Status").Label("Status"),
-				ui.ClientCol("CPU").Label("CPU %").Type("number"),
-				ui.ClientCol("Memory").Label("Memory").Format("amount"),
-				ui.ClientCol("Updated").Label("Last Update").Type("date"),
+				js.Col("Name").Label("Process").Sortable(true),
+				js.Col("Status").Label("Status"),
+				js.Col("CPU").Label("CPU %").Type("number"),
+				js.Col("Memory").Label("Memory").Format("amount"),
+				js.Col("Updated").Label("Last Update").Type("date"),
 			).
 			Render(),
 	)
@@ -153,19 +154,19 @@ func ClientEmpty(ctx *ui.Context) string {
 		ui.Div("grid grid-cols-1 md:grid-cols-2 gap-6")(
 			ui.Div("")(
 				ui.Div("text-lg font-semibold mb-2")("Empty State"),
-				ui.Client(ctx).
+				js.Client(ctx).
 					Source("/api/client-demo/empty").
 					Loading(ui.SkeletonTable).
 					Empty("search_off", "No results match your criteria").
-					Table(ui.ClientCol("Name").Label("Name")).
+					Table(js.Col("Name").Label("Name")).
 					Render(),
 			),
 			ui.Div("")(
 				ui.Div("text-lg font-semibold mb-2")("Error State"),
-				ui.Client(ctx).
+				js.Client(ctx).
 					Source("/api/client-demo/error").
 					Loading(ui.SkeletonTable).
-					Table(ui.ClientCol("Name").Label("Name")).
+					Table(js.Col("Name").Label("Name")).
 					Render(),
 			),
 		),
