@@ -27,6 +27,8 @@ g-sui renders HTML on the server, sends actions over WebSocket, and updates spec
 - Built-in live status via WebSocket (`/__ws`) with an offline banner, automatic reconnect, and auto-reload on reconnect
 - Built-in dark mode with a tiny theme switcher (`ui.ThemeSwitcher`) cycling System → Light → Dark with proper icon alignment
 - **Hybrid client-side rendering** via the `js` package: build client-rendered zones (tables, charts, custom components) that fetch JSON from APIs, with fluent Go builders (`js.Client(ctx).Source(...).Table(js.Col("key")...).Render()`)
+- **Client-side JS helpers** via the `js` package: `LiveSearch`, `ContentSearch`, `Autocomplete`, `AsyncButton`, `AutoFill`, `AjaxForm`, `SPA`/`SPALink` navigation, keyboard `Shortcuts`, `Toast`, `ExternalLink`, and `Script` wrapper
+- Server-rendered `ConfirmDialog` component for delete/action confirmations
 - Reverse proxy package (`proxy`) for HTTP and WebSocket forwarding with automatic URL rewriting
 - Optional dev autorestart (`app.AutoRestart(true)`) to rebuild and restart on changes
 
@@ -84,7 +86,7 @@ The examples include:
 - Core UI components (alerts, badges, cards, tabs, accordion, dropdowns, tooltips)
 - Forms and inputs with validation
 - Tables, icons, and markdown rendering
-- Client-side rendered tables, charts, polling, and dashboard demos (`js` package)
+- Client-side rendered tables, charts, polling, dashboard demos, and new feature showcases (`js` package)
 - Route params and navigation examples
 - WebSocket patches, deferred loading, and reverse proxy demo
 

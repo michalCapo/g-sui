@@ -597,3 +597,88 @@ ui.Hidden("UserID", "uint", 123)
 ui.Hidden("Mode", "string", "edit")
 ui.Hidden("Filter[0].Field", "string", "name")
 ```
+
+## Confirm Dialog (Server-Rendered)
+
+Server-rendered modal overlay with confirm/cancel buttons. Uses a `<form>` POST for the confirm action.
+
+```go
+ui.ConfirmDialog(
+    "Delete Invoice",
+    "Are you sure you want to delete invoice #1234?",
+    "/api/invoices/1234/delete",  // POST URL for confirm
+    "/invoices",                   // Cancel navigates here (empty = JS close)
+    "",                            // Default CSS classes
+)
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `title` | `string` | Dialog title |
+| `message` | `string` | Dialog body text |
+| `confirmAction` | `string` | POST URL for confirm button |
+| `cancelURL` | `string` | Navigation URL for cancel (empty = close overlay via JS) |
+| `class` | `string` | CSS classes for dialog panel (uses default if empty) |
+
+## Skeleton Loading States
+
+```go
+target.Skeleton()                     // Default (3 lines)
+target.Skeleton(ui.SkeletonList)      // List items
+target.Skeleton(ui.SkeletonComponent) // Component block
+target.Skeleton(ui.SkeletonPage)      // Full page
+target.Skeleton(ui.SkeletonForm)      // Form layout
+target.Skeleton(ui.SkeletonTable)     // Table with header and rows
+target.Skeleton(ui.SkeletonCards)     // Card grid (2x3)
+```
+
+### Standalone Skeleton Blocks
+
+```go
+ui.SkeletonTableBlock()   // Table skeleton without a target
+ui.SkeletonCardsBlock()   // Card grid skeleton without a target
+```
+
+### Additional HTML Elements
+
+```go
+// Generic element constructors
+ui.El("section", "my-class", attr...)(children...)    // Any tag
+ui.ElClosed("hr", "my-class", attr...)                // Self-closing tag
+ui.Text("plain text")                                  // Pass-through text
+
+// Additional element constructors
+ui.I("class", attr...)(children...)        // <i>
+ui.Textarea("class", attr...)(children...) // <textarea>
+ui.Select("class", attr...)(children...)   // <select>
+ui.Option("class", attr...)(children...)   // <option>
+ui.List("class", attr...)(children...)     // <ul>
+ui.ListItem("class", attr...)(children...) // <li>
+ui.Canvas("class", attr...)(children...)   // <canvas>
+ui.Pre("class", attr...)(children...)      // <pre>
+ui.Code("class", attr...)(children...)     // <code>
+ui.Nav("class", attr...)(children...)      // <nav>
+```
+
+## Typed Table Additional Methods
+
+```go
+// NewTable is an alias for Table
+table := ui.NewTable[Person]("w-full")
+
+// HeadHTML renders raw HTML in header (use for icons, etc.)
+table.HeadHTML("<span class='material-icons'>person</span> Name", "font-bold")
+
+// FieldText renders escaped text (safe for user data)
+table.FieldText(func(p *Person) string { return p.Name }, "font-bold")
+```
+
+### SimpleTable Additional Methods
+
+```go
+table := ui.SimpleTable(3, "w-full")
+table.Empty("No data")           // Empty state message
+table.Class("custom-class")      // Additional CSS classes
+table.FieldText("User content")  // Escaped text field
+table.Attr(`colspan="2"`)        // Returns self for chaining
+```

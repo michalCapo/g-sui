@@ -81,11 +81,29 @@ ui/
 ├── ui.tooltip.go      # Tooltip component
 ├── ui.progress.go     # Progress bar component
 ├── ui.step.go         # Step/wizard component
+├── ui.confirm.go      # Server-rendered ConfirmDialog component
+├── ui.js.go           # HTML element constructors (El, ElClosed, Text, Div, Span, etc.)
+├── ui.icon.go         # Icon helper (IconBasic)
+├── ui.label.go        # Label component
+├── ui.select.go       # Select/dropdown input
+├── ui.radio.go        # Radio buttons and radio cards
+├── ui.check.go        # Checkbox component
 └── *_test.go          # Comprehensive test coverage
 
 js/
 ├── js.go              # Client-side rendered zones: Builder, Column, Opts, ChartType
-└── js_test.go         # Tests for the js package
+├── js_test.go         # Tests for the js package
+├── ajaxform.go        # AjaxForm: intercept form submit, use fetch
+├── asyncbutton.go     # AsyncButton: POST + loading state + result display
+├── autocomplete.go    # Autocomplete: input with API-backed datalist
+├── autofill.go        # AutoFill: populate fields on select change
+├── contentsearch.go   # ContentSearch: in-page text search with highlights
+├── externallink.go    # ExternalLink: link bypassing SPA interception
+├── livesearch.go      # LiveSearch: real-time filtering of rendered elements
+├── script.go          # Script: wrap JS in self-executing IIFE
+├── shortcuts.go       # Shortcuts + RegisterShortcut: keyboard shortcut framework
+├── spa.go             # SPA + SPALink: client-side navigation
+└── toast.go           # Toast: trigger toast notification on page load
 
 proxy/
 ├── proxy.go           # Reverse proxy with HTTP/WebSocket forwarding and URL rewriting

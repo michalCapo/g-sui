@@ -512,6 +512,8 @@ ui.ImagePreview(id).MaxSize("320px").Render()
 
 ### Captcha2 (Image-based)
 
+Generates a distorted text image that the user must type to verify.
+
 ```go
 func validated(ctx *ui.Context) string {
     return ui.Div("text-green-600")("CAPTCHA validated!")
@@ -524,7 +526,51 @@ func formWithCaptcha(ctx *ui.Context) string {
 }
 ```
 
+**Configuration methods (all return `*Captcha2Component` for chaining):**
+
+```go
+captcha := ui.Captcha2(onValidated).
+    Length(6).                          // Character count (default: 6)
+    Lifetime(5 * time.Minute).          // Session lifetime (default: 5 min)
+    Attempts(3).                        // Max attempts before expiry (default: 3)
+    AnswerField("captcha_answer").      // Form field name for answer
+    SessionField("captcha_session").    // Form field name for session ID
+    ClientVerifiedField("captcha_ok").  // Form field for client verification flag
+    Render(ctx)
+```
+
+**Server-side validation:**
+
+```go
+func handler(ctx *ui.Context) string {
+    captcha := ui.Captcha2(onValidated)
+
+    // Option 1: Validate from request directly
+    ok, err := captcha.ValidateRequest(ctx.Request)
+
+    // Option 2: Validate with explicit values
+    ok, err := captcha.ValidateValues(sessionID, answer)
+
+    // Option 3: Validate (alias for ValidateValues)
+    ok, err := captcha.Validate(sessionID, answer)
+
+    if !ok || err != nil {
+        return "CAPTCHA failed"
+    }
+    return "Success"
+}
+```
+
+**Field name accessors:**
+```go
+captcha.AnswerFieldName()          // Returns configured answer field name
+captcha.SessionFieldName()         // Returns configured session field name
+captcha.ClientVerifiedFieldName()  // Returns configured client verified field name
+```
+
 ### Captcha3 (Draggable tile)
+
+Generates scrambled character tiles that the user must drag into correct order.
 
 ```go
 func formWithCaptcha3(ctx *ui.Context) string {
@@ -534,8 +580,44 @@ func formWithCaptcha3(ctx *ui.Context) string {
     }
 
     return ui.Captcha3(onSuccess).
-        Count(4).  // Number of tiles
+        Count(4).  // Number of tiles (default: 4)
         Render(ctx)
+}
+```
+
+**Configuration methods (all return `*Captcha3Component` for chaining):**
+
+```go
+captcha := ui.Captcha3(onValidated).
+    Count(4).                                // Tile count (default: 4)
+    Lifetime(5 * time.Minute).               // Session lifetime (default: 5 min)
+    Attempts(3).                             // Max attempts (default: 3)
+    ArrangementField("captcha_arrangement"). // Form field for tile arrangement
+    SessionField("captcha_session").         // Form field for session ID
+    ClientVerifiedField("captcha_ok").       // Form field for client verification
+    Render(ctx)
+```
+
+**Server-side validation:**
+
+```go
+ok, err := captcha.ValidateRequest(ctx.Request)
+ok, err := captcha.ValidateValues(sessionID, arrangement)
+ok, err := captcha.Validate(sessionID, arrangement)
+```
+
+### CaptchaSession Type
+
+Both CAPTCHA types use the same session struct:
+
+```go
+type CaptchaSession struct {
+    Text        string
+    CreatedAt   time.Time
+    Attempts    int
+    Solved      bool
+    ExpiresAt   time.Time
+    MaxAttempts int
 }
 ```
 

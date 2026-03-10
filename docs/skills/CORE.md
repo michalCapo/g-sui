@@ -335,8 +335,26 @@ ui.Form(class, attr...)(children...)   // <form>
 ui.H1(class, attr...)(children...)     // <h1>
 ui.H2(class, attr...)(children...)     // <h2>
 ui.H3(class, attr...)(children...)     // <h3>
-ui.Input(class, attr...)               // <input />
-ui.Img(class, attr...)                 // <img />
+ui.I(class, attr...)(children...)      // <i>
+ui.Nav(class, attr...)(children...)    // <nav>
+ui.Pre(class, attr...)(children...)    // <pre>
+ui.Code(class, attr...)(children...)   // <code>
+ui.List(class, attr...)(children...)   // <ul>
+ui.ListItem(class, attr...)(children...)  // <li>
+ui.Textarea(class, attr...)(children...)  // <textarea>
+ui.Select(class, attr...)(children...)    // <select>
+ui.Option(class, attr...)(children...)    // <option>
+ui.Canvas(class, attr...)(children...)    // <canvas>
+ui.Input(class, attr...)               // <input /> (self-closing)
+ui.Img(class, attr...)                 // <img /> (self-closing)
+```
+
+### Generic Element Constructors
+
+```go
+ui.El(tag, class, attr...)(children...)    // Any HTML tag
+ui.ElClosed(tag, class, attr...)           // Any self-closing tag
+ui.Text("content")                         // Plain text pass-through
 ```
 
 ### Attributes
@@ -371,11 +389,13 @@ ui.Or(condition, trueFn, falseFn)
 ## Skeleton Loading States
 
 ```go
-target.Skeleton()                    // Default (3 lines)
-target.Skeleton(ui.SkeletonList)     // List items
+target.Skeleton()                     // Default (3 lines)
+target.Skeleton(ui.SkeletonList)      // List items
 target.Skeleton(ui.SkeletonComponent) // Component block
-target.Skeleton(ui.SkeletonPage)     // Full page
-target.Skeleton(ui.SkeletonForm)     // Form layout
+target.Skeleton(ui.SkeletonPage)      // Full page
+target.Skeleton(ui.SkeletonForm)      // Form layout
+target.Skeleton(ui.SkeletonTable)     // Table with header and rows
+target.Skeleton(ui.SkeletonCards)     // Card grid (2x3)
 ```
 
 ### Deferred Loading Pattern

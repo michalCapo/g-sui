@@ -1038,11 +1038,19 @@ return target.Skeleton(ui.SkeletonComponent)  // Or SkeletonList, SkeletonPage, 
 
 ### Skeleton Types
 ```go
-target.Skeleton()                    // Default (3 text lines)
-target.Skeleton(ui.SkeletonList)     // List items
-target.Skeleton(ui.SkeletonComponent)// Component block
-target.Skeleton(ui.SkeletonPage)     // Full page
-target.Skeleton(ui.SkeletonForm)     // Form layout
+target.Skeleton()                     // Default (3 text lines)
+target.Skeleton(ui.SkeletonList)      // List items
+target.Skeleton(ui.SkeletonComponent) // Component block
+target.Skeleton(ui.SkeletonPage)      // Full page
+target.Skeleton(ui.SkeletonForm)      // Form layout
+target.Skeleton(ui.SkeletonTable)     // Table with header and rows
+target.Skeleton(ui.SkeletonCards)     // Card grid (2x3)
+```
+
+### Standalone Skeleton Blocks
+```go
+ui.SkeletonTableBlock()   // Table skeleton without a target
+ui.SkeletonCardsBlock()   // Card grid skeleton without a target
 ```
 
 ---
@@ -1935,6 +1943,32 @@ js.Col("key").Label("Header").Type("number").Format("amount").Sortable(true).Fil
 js.Col("status").Type("enum").EnumOptions(js.Option{Value: "active", Label: "Active"})
 ```
 
+### Go Helper Components
+
+The `js` package also provides standalone Go functions that emit self-contained HTML + `<script>` blocks (no `Builder` needed):
+
+| Helper | Description |
+|--------|-------------|
+| `js.LiveSearch(selector, inputID, class)` | Real-time filtering of server-rendered elements |
+| `js.ContentSearch(container, triggerKey)` | In-page text search with mark highlights (like Ctrl+F) |
+| `js.Autocomplete(inputID, sourceURL, class)` | Input with API-backed `<datalist>` |
+| `js.AsyncButton(label, url, resultID, class)` | Button that POSTs, shows loading, displays result |
+| `js.AutoFill(selectID, mappings)` | Auto-populate fields on `<select>` change |
+| `js.AjaxForm(formID, opts)` | Intercept form submit, serialize as JSON, use fetch |
+| `js.SPA(id, class)` + `js.SPALink(target, url, class, content)` | Client-side SPA navigation |
+| `js.ExternalLink(url, class, content)` | Link bypassing SPA interception |
+| `js.Shortcuts()` + `js.RegisterShortcut(key, handler, desc)` | Keyboard shortcut framework with `?` help overlay |
+| `js.Toast(message, variant)` | Trigger toast notification on page load |
+| `js.Script(body)` | Wrap arbitrary JS in a self-executing IIFE `<script>` block |
+
+### Server-Rendered Confirm Dialog
+
+```go
+ui.ConfirmDialog(title, message, confirmAction, cancelURL, class)
+```
+
+Renders a modal overlay with confirm (POST form) and cancel buttons. See `docs/skills/COMPONENTS.md` for details.
+
 For full documentation including custom JS components, the `__cel` element builder, formatters, and the complete JS module reference, see `docs/skills/CLIENT.md`.
 
 ---
@@ -1985,6 +2019,8 @@ For full documentation including custom JS components, the `__cel` element build
 | `ui.SkeletonComponent` | Card/component block |
 | `ui.SkeletonPage` | Full page with header |
 | `ui.SkeletonForm` | Form with inputs |
+| `ui.SkeletonTable` | Table with header and rows |
+| `ui.SkeletonCards` | Card grid (2x3) |
 | (default) | 3 text lines |
 # Part II: Architecture Documentation
 
@@ -2062,7 +2098,10 @@ The framework generates unique IDs and handles the patching logic transparently.
 ```
 ui/
 ├── ui.go           # Core HTML DSL, colors, utilities
-├── ui.server.go    # App, Context, HTTP server, WebSocket
+├── ui.server.go    # App, Context, HTTP server, WebSocket, embedded JS runtime
+├── ui.js.go        # HTML element constructors (El, ElClosed, Text, Div, Span, etc.)
+├── ui.client.go    # Skeleton types for client zones (SkeletonTable, SkeletonCards)
+├── ui.confirm.go   # Server-rendered ConfirmDialog component
 ├── ui.input.go     # Input components and validation
 ├── ui.form.go      # Form instance with automatic form association
 ├── ui.data.go      # Data collation (search/sort/filter/paging)
@@ -2080,39 +2119,64 @@ ui/
 ├── ui.badge.go     # Badge status indicators
 ├── ui.card.go      # Card content containers
 ├── ui.progress.go  # Progress bar indicators
+├── ui.step.go      # Step progress indicator
 ├── ui.tooltip.go   # Hover tooltips
 ├── ui.tabs.go      # Tabbed content panels
 ├── ui.accordion.go # Collapsible sections
 └── ui.dropdown.go  # Dropdown menus
+
+js/
+├── js.go           # Client-side rendered zones: Builder, Column, Opts, ChartType
+├── ajaxform.go     # AjaxForm: intercept form submit, use fetch
+├── asyncbutton.go  # AsyncButton: POST + loading state + result display
+├── autocomplete.go # Autocomplete: input with API-backed datalist
+├── autofill.go     # AutoFill: populate fields on select change
+├── contentsearch.go# ContentSearch: in-page text search with highlights
+├── externallink.go # ExternalLink: link bypassing SPA interception
+├── livesearch.go   # LiveSearch: real-time filtering of rendered elements
+├── script.go       # Script: wrap JS in self-executing IIFE
+├── shortcuts.go    # Shortcuts + RegisterShortcut: keyboard shortcut framework
+├── spa.go          # SPA + SPALink: client-side navigation
+└── toast.go        # Toast: trigger toast notification on page load
+
+proxy/
+└── proxy.go        # HTTP + WebSocket reverse proxy with URL rewriting
 ```
 
 ### File Responsibilities
 
 | File | Lines | Responsibility |
 |------|-------|----------------|
-| `ui.go` | ~927 | HTML element helpers, color constants, utility functions |
-| `ui.server.go` | ~2,188 | App setup, routing, WebSocket, request handling |
-| `ui.input.go` | ~877 | All input types with validation binding |
-| `ui.form.go` | ~72 | Form instance for automatic form attribute association |
-| `ui.data.go` | ~824 | Data table with search, sort, filter, pagination, Excel export |
-| `ui.button.go` | ~130 | Button component with fluent API |
-| `ui.table.go` | ~251 | Simple table with column definitions |
-| `ui.label.go` | ~54 | Form label component |
+| `ui.go` | ~1,093 | Core types, HTML DSL, colors, utility functions |
+| `ui.server.go` | ~6,572 | App setup, routing, WebSocket, embedded JS runtime, actions, PWA |
+| `ui.js.go` | ~206 | HTML element constructors (El, ElClosed, Text, Div, Span, etc.) |
+| `ui.client.go` | ~61 | Skeleton types for client zones (SkeletonTable, SkeletonCards) |
+| `ui.confirm.go` | ~32 | Server-rendered ConfirmDialog modal |
+| `ui.input.go` | ~1,584 | All input types with validation binding |
+| `ui.form.go` | ~92 | Form instance for automatic form attribute association |
+| `ui.data.go` | ~1,164 | Data table with search, sort, filter, pagination, Excel export |
+| `ui.button.go` | ~134 | Button component with fluent API |
+| `ui.table.go` | ~251 | Simple and typed table components |
+| `ui.label.go` | ~58 | Form label component |
 | `ui.check.go` | ~95 | Checkbox component |
-| `ui.radio.go` | ~330 | Radio button and radio button group |
-| `ui.select.go` | ~163 | Select dropdown component |
-| `ui.icon.go` | ~47 | Icon helpers (Material Icons) |
+| `ui.radio.go` | ~377 | Radio button, radio group, and radio cards |
+| `ui.select.go` | ~158 | Select dropdown component |
+| `ui.icon.go` | ~10 | Icon helper (Material Icons) |
 | `ui.captcha.go` | ~108 | Google reCAPTCHA integration |
-| `ui.captcha2.go` | ~487 | Image CAPTCHA generation and validation |
-| `ui.captcha3.go` | ~455 | Tile puzzle CAPTCHA |
-| `ui.alert.go` | ~190 | Dismissible alert banners with dark mode |
-| `ui.badge.go` | ~90 | Status indicators and notification counts |
-| `ui.card.go` | ~120 | Card containers with header/body/footer |
-| `ui.progress.go` | ~100 | Progress bars with striped animation |
-| `ui.tooltip.go` | ~190 | Hover tooltips with positioning |
-| `ui.tabs.go` | ~250 | Tabbed navigation with client-side state |
-| `ui.accordion.go` | ~200 | Collapsible sections with toggle |
-| `ui.dropdown.go` | ~200 | Context menus with click-outside-to-close |
+| `ui.captcha2.go` | ~499 | Image CAPTCHA generation and validation |
+| `ui.captcha3.go` | ~473 | Tile puzzle CAPTCHA |
+| `ui.alert.go` | ~233 | Dismissible alert banners with dark mode |
+| `ui.badge.go` | ~180 | Status indicators and notification counts |
+| `ui.card.go` | ~212 | Card containers with header/body/footer |
+| `ui.progress.go` | ~224 | Progress bars with gradients, stripes, indeterminate mode |
+| `ui.step.go` | ~162 | Step progress indicator |
+| `ui.tooltip.go` | ~223 | Hover tooltips with positioning |
+| `ui.tabs.go` | ~368 | Tabbed navigation with client-side state |
+| `ui.accordion.go` | ~270 | Collapsible sections with toggle |
+| `ui.dropdown.go` | ~292 | Context menus with click-outside-to-close |
+| `js/js.go` | ~300 | Client-side zone builder, Column, Opts, ChartType |
+| `js/*.go` | ~643 | 11 helper files (AjaxForm, AsyncButton, etc.) |
+| `proxy/proxy.go` | ~368 | HTTP + WebSocket reverse proxy |
 
 ---
 
@@ -2127,8 +2191,9 @@ All HTML elements follow the pattern: `ElementName(class string, attr ...Attr) f
 | `Div` | `<div>` container |
 | `Span` | `<span>` inline container |
 | `P` | `<p>` paragraph |
-| `H1`, `H2`, `H3`, `H4`, `H5`, `H6` | Headings |
+| `H1`, `H2`, `H3` | Headings |
 | `A` | `<a>` link |
+| `I` | `<i>` italic/icon element |
 | `Form` | `<form>` with method/action |
 | `Textarea` | `<textarea>` for multi-line input |
 | `Select` | `<select>` dropdown |
@@ -2136,11 +2201,14 @@ All HTML elements follow the pattern: `ElementName(class string, attr ...Attr) f
 | `List` | `<ul>` unordered list |
 | `ListItem` | `<li>` list item |
 | `Canvas` | `<canvas>` element |
+| `Pre` | `<pre>` preformatted text |
+| `Code` | `<code>` inline code |
+| `Nav` | `<nav>` navigation |
 | `Img` | `<img>` self-closing image |
 | `Input` | `<input>` self-closing input |
-| `Script` | `<script>` inline JavaScript |
-| `ButtonRaw` | Raw `<button>` element |
-| `Nav`, `Main`, `Header`, `Footer`, `Section`, `Article` | Semantic HTML5 elements |
+| `El(tag, class, attr...)` | Generic element constructor for any tag |
+| `ElClosed(tag, class, attr...)` | Generic self-closing element constructor |
+| `Text(s)` | Plain text pass-through |
 
 ### Attribute Helpers
 

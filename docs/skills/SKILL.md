@@ -82,9 +82,28 @@ type Attr struct { ID, Class, Value, OnClick, OnSubmit, ... }  // HTML attribute
 ## Common Imports
 
 ```go
-import "github.com/michalCapo/g-sui/ui"   // Server-rendered components
-import "github.com/michalCapo/g-sui/js"   // Client-side rendered zones (tables, charts)
+import "github.com/michalCapo/g-sui/ui"      // Server-rendered components
+import "github.com/michalCapo/g-sui/js"      // Client-side rendered zones (tables, charts)
+import "github.com/michalCapo/g-sui/proxy"   // Reverse proxy (HTTP + WebSocket)
 ```
+
+## `js` Package Helpers
+
+Beyond the `js.Client` builder, the `js` package provides standalone Go helper components that emit self-contained `<script>` blocks:
+
+| Helper | Description |
+|--------|-------------|
+| `js.LiveSearch(selector, inputID, class)` | Real-time filtering of server-rendered elements |
+| `js.ContentSearch(container, triggerKey)` | In-page text search with highlights (like Ctrl+F) |
+| `js.Autocomplete(inputID, sourceURL, class)` | Input with API-backed datalist |
+| `js.AsyncButton(label, url, resultID, class)` | Button that POSTs and shows result |
+| `js.AutoFill(selectID, mappings)` | Auto-populate fields on select change |
+| `js.AjaxForm(formID, opts)` | Intercept form submit, use fetch |
+| `js.SPA(id, class)` + `js.SPALink(...)` | Client-side SPA navigation |
+| `js.ExternalLink(url, class, content)` | Link bypassing SPA interception |
+| `js.Shortcuts()` + `js.RegisterShortcut(...)` | Keyboard shortcut framework |
+| `js.Toast(message, variant)` | Trigger toast on page load |
+| `js.Script(body)` | Wrap JS in self-executing IIFE |
 
 ## Development Commands
 

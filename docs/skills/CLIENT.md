@@ -591,7 +591,7 @@ Shared data processing utilities. Used by the table component internally, availa
 ```js
 __cfilter.applyToData(data, filterState, columns)  // Apply search/filter/sort to array
 __cfilter.paginate(data, page, pageSize)            // Returns {items, totalPages, page, total}
-__cfilter.toQueryString(filterState)                // Convert filter state to URL params
+__cfilter.toQueryString(filterState)                // Convert filter state to params object {_search, _sort, _dir, _page}
 __cfilter.cycleSort(currentSort, colKey)            // Cycle: none → asc → desc → none
 ```
 
@@ -612,12 +612,14 @@ Renders pagination controls with prev/next, page numbers with ellipsis, and reco
 2. Framework components (embedded, auto-registered)
    __cregister("table", ...)
    __cregister("chart", ...)
+   __cregister("file-upload", ...)
+   __cregister("kpi-bar", ...)
+   __cregister("badge", ...)
 
 3. __client() boot function (embedded)
 
 4. Project JS (static assets, <script src="...">)
    components/card-grid.js  → __cregister("card-grid", ...)
-   components/kpi-bar.js    → __cregister("kpi-bar", ...)
 
 5. Boot scripts (inline in HTML, per js.Client(...).Render() call)
    <script>__client({id:"cl_1", source:"/api/...", component:"table", ...})</script>
@@ -625,6 +627,52 @@ Renders pagination controls with prev/next, page numbers with ellipsis, and reco
 ```
 
 Framework JS and components are always available. Project component files must load before boot scripts. Boot scripts execute inline where `.Render()` is called.
+
+## KPI Bar Component (Built-in)
+
+Registered as `"kpi-bar"`. Renders a horizontal row of KPI cards with labels, values, and optional icons.
+
+```go
+js.Client(ctx).
+    Source("/api/dashboard/kpis").
+    Component("kpi-bar", js.Opts{
+        "items": []map[string]any{
+            {"key": "revenue", "label": "Revenue", "format": "amount", "icon": "payments", "color": "text-blue-600"},
+            {"key": "expenses", "label": "Expenses", "format": "amount", "icon": "receipt", "color": "text-red-600"},
+            {"key": "profit", "label": "Profit", "format": "amount", "icon": "trending_up", "color": "text-green-600"},
+        },
+    }).
+    Render()
+```
+
+**API data format:** Return an object with keys matching `item.key`:
+```json
+{"revenue": 150000, "expenses": 82000, "profit": 68000}
+```
+
+**Item options:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `key` | `string` | Data key matching JSON response field |
+| `label` | `string` | Display label |
+| `format` | `string` | `"amount"`, `"number"`, or raw |
+| `icon` | `string` | Material Icons name |
+| `color` | `string` | CSS class for the value (e.g., `"text-blue-600"`) |
+
+## `js.Script(body string) string`
+
+Wraps arbitrary JavaScript in a self-executing IIFE `<script>` block. Useful for embedding one-off JS snippets.
+
+```go
+js.Script(`
+    console.log("page loaded");
+    document.getElementById("myBtn").addEventListener("click", function() {
+        alert("clicked");
+    });
+`)
+// Output: <script>\n(function(){\n...\n})();\n</script>
+```
 
 ## Examples
 

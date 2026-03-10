@@ -233,6 +233,83 @@ db, _ := gorm.Open(sqlite.Open("database.db"), &gorm.Config{})
 ui.RegisterSQLiteNormalize(db)  // Search "cafe" finds "café"
 ```
 
+## Collate Color Themes
+
+```go
+collate := ui.Collate[Person](&ui.TQuery{Limit: 10})
+collate.SetColor(ui.CollateGreen)  // Change color scheme
+```
+
+**Predefined color presets:**
+
+| Preset | Button Color | Active Background |
+|--------|-------------|-------------------|
+| `ui.CollateBlue` (default) | Blue | `bg-blue-800` |
+| `ui.CollateGreen` | Green | `bg-green-600` |
+| `ui.CollatePurple` | Purple | `bg-purple-500` |
+| `ui.CollateRed` | Red | `bg-red-600` |
+| `ui.CollateYellow` | Yellow | `bg-yellow-400` |
+| `ui.CollateGray` | Gray | `bg-gray-600` |
+
+**Custom colors:**
+```go
+collate.SetColor(ui.CollateColors{
+    Button:        ui.Blue,
+    ButtonOutline: ui.BlueOutline,
+    ActiveBg:      "bg-blue-800",
+    ActiveBorder:  "border-blue-600",
+    ActiveHover:   "hover:bg-blue-700",
+})
+```
+
+## Empty State Customization
+
+```go
+// Custom icon (default: "inbox")
+collate.EmptyIcon("search_off")
+
+// Custom text (defaults: "No records found" or "No records found for the selected filter")
+collate.EmptyText("No invoices match your criteria")
+
+// Action button in empty state
+collate.EmptyAction("Create First Invoice", func(ctx *ui.Context, target ui.Attr) string {
+    return createInvoiceForm(ctx)
+})
+
+// Fully custom empty state renderer (overrides icon/text/action)
+collate.Empty(func(ctx *ui.Context) string {
+    return ui.Div("text-center py-12")(
+        ui.Icon("inbox"),
+        ui.P("text-gray-500")("Custom empty state"),
+    )
+})
+```
+
+## Loading Data Programmatically
+
+```go
+collate := ui.Collate[Person](&ui.TQuery{Limit: 20, Order: "name asc"})
+collate.Search(nameField)
+
+// Load returns results without rendering UI
+result := collate.Load(&ui.TQuery{Limit: 20, Search: "Smith"})
+// result.Total    - total unfiltered count
+// result.Filtered - count after filters/search
+// result.Data     - []Person slice
+// result.Query    - the TQuery used
+```
+
+## Helper Functions
+
+```go
+// Generate hidden fields for query state preservation
+ui.QueryHiddenFields(query)    // All query state (limit, offset, order, search, filters)
+ui.FilterHiddenFields(query)   // Filter state only
+
+// Accent-insensitive search normalization
+ui.NormalizeForSearch("café")  // Returns "cafe"
+```
+
 ## Accessing Query State
 
 ```go
