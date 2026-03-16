@@ -64,6 +64,29 @@ func (c *Column) EnumOptions(opts ...Option) *Column {
 	return c
 }
 
+// HTMLMap generates a JS render expression that maps a column's value to
+// pre-rendered HTML strings. The key is the data field name, and the map
+// entries are value→HTML pairs. Any value not in the map is escaped and
+// displayed as plain text.
+//
+// Usage with any ui component:
+//
+//	js.Col("status").Render(js.HTMLMap("status", map[string]string{
+//	    "paid":  ui.Badge().Color("green-soft").Text("Paid").Render(),
+//	    "draft": ui.Badge().Color("gray-soft").Text("Draft").Render(),
+//	}))
+func HTMLMap(key string, m map[string]string) string {
+	entries := make(map[string]string, len(m))
+	for k, v := range m {
+		entries[k] = v
+	}
+	jsonBytes, _ := json.Marshal(entries)
+	return fmt.Sprintf(
+		`var m=%s;var v=item[%q]||'';if(m[v])return m[v];var d=document.createElement('span');d.textContent=v;return d.innerHTML;`,
+		string(jsonBytes), key,
+	)
+}
+
 // ToMap converts the column definition to a JSON-friendly map.
 func (c *Column) ToMap() map[string]any {
 	m := map[string]any{"key": c.key}

@@ -45,7 +45,12 @@ func InvoiceList(ctx *ui.Context) string {
 					js.Option{Value: "sent", Label: "Sent"},
 					js.Option{Value: "paid", Label: "Paid"},
 					js.Option{Value: "overdue", Label: "Overdue"},
-				),
+				).Render(js.HTMLMap("status", map[string]string{
+					"draft":   ui.Badge().Color("gray-soft").Text("Draft").Render(),
+					"sent":    ui.Badge().Color("blue-soft").Text("Sent").Render(),
+					"paid":    ui.Badge().Color("green-soft").Text("Paid").Render(),
+					"overdue": ui.Badge().Color("red-soft").Text("Overdue").Render(),
+				})),
 				js.Col("dueDate").Label("Due Date").Type("date").Sortable(true).Filterable(true),
 				js.Col("createdAt").Label("Created").Type("date").Sortable(true).Filterable(true),
 			).

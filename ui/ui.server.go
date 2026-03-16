@@ -4098,6 +4098,11 @@ var __engine = Trim(`
                 return document.createTextNode(json);
             }
             if (!json.t) return null;
+            if (json.t === '__html') {
+                var wrap = document.createElement('span');
+                wrap.innerHTML = json.v || '';
+                return wrap;
+            }
 
             var isSvg = parentSvg || json.t === 'svg' || svgTags.hasOwnProperty(json.t);
             var el = isSvg ? document.createElementNS(svgNS, json.t) : document.createElement(json.t);
@@ -4760,6 +4765,9 @@ var __cel = Trim(`
 		}
 		return result;
 	};
+	__cel.html = function(str) {
+		return { t: "__html", v: str || "" };
+	};
 	__cel.icon = function(name, cls) {
 		return __cel("span", { class: "material-icons" + (cls ? " " + cls : "") }, [name]);
 	};
@@ -5286,8 +5294,8 @@ var __ctable = Trim(`
 			// --- Format cell ---
 			function formatCell(item, col, idx) {
 				var val = item[col.key];
-				if (col.type === "custom" && col.render) {
-					try { return (new Function("item", "i", col.render))(item, idx); } catch(e) { return __cfmt.escape(String(val || "")); }
+				if (col.render) {
+					try { var r = (new Function("item", "i", col.render))(item, idx); return __cel.html(r); } catch(e) { return __cfmt.escape(String(val || "")); }
 				}
 				if (col.type === "date") return __cfmt.date(val);
 				if (col.format === "amount") return __cfmt.amount(val);

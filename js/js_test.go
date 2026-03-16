@@ -400,6 +400,35 @@ func TestCol_ToMap(t *testing.T) {
 }
 
 // ============================================================================
+// HTMLMap helper
+// ============================================================================
+
+func TestHTMLMap(t *testing.T) {
+	expr := HTMLMap("status", map[string]string{
+		"paid":  `<span class="badge-green">Paid</span>`,
+		"draft": `<span class="badge-gray">Draft</span>`,
+	})
+
+	// Must reference the correct key
+	if !strings.Contains(expr, `item["status"]`) {
+		t.Errorf("expected item[\"status\"] reference, got: %s", expr)
+	}
+
+	// Must contain the HTML for each value
+	if !strings.Contains(expr, "badge-green") {
+		t.Error("expected badge-green HTML in output")
+	}
+	if !strings.Contains(expr, "badge-gray") {
+		t.Error("expected badge-gray HTML in output")
+	}
+
+	// Must be valid JS body (contains return statement)
+	if !strings.Contains(expr, "return") {
+		t.Error("expected return statement in JS expression")
+	}
+}
+
+// ============================================================================
 // Table sugar
 // ============================================================================
 
