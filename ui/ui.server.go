@@ -5103,29 +5103,41 @@ var __ctable = Trim(`
 					}, null));
 				}
 			} else if (colType === "date") {
-				children.push(__cel("label", { class: "text-xs text-gray-500 dark:text-gray-400" }, [__cel.text("From")]));
-				children.push(__cel("input", {
-					type: "date",
-					class: "w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800 mb-2",
-					value: f.from || "",
-					"data-role": "filter-from"
-				}, null));
-				children.push(__cel("label", { class: "text-xs text-gray-500 dark:text-gray-400" }, [__cel.text("To")]));
-				children.push(__cel("input", {
-					type: "date",
-					class: "w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800 mb-2",
-					value: f.to || "",
-					"data-role": "filter-to"
-				}, null));
+				children.push(__cel.div("flex items-center gap-2 mb-2", [
+					__cel("span", { class: "text-xs text-gray-500 dark:text-gray-400 w-8 shrink-0" }, [__cel.text("From")]),
+					__cel("input", {
+						type: "date",
+						class: "flex-1 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800",
+						value: f.from || "",
+						"data-role": "filter-from"
+					}, null)
+				]));
+				children.push(__cel.div("flex items-center gap-2 mb-3", [
+					__cel("span", { class: "text-xs text-gray-500 dark:text-gray-400 w-8 shrink-0" }, [__cel.text("To")]),
+					__cel("input", {
+						type: "date",
+						class: "flex-1 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800",
+						value: f.to || "",
+						"data-role": "filter-to"
+					}, null)
+				]));
 				// Date presets
-				var presets = ["today", "thisWeek", "thisMonth", "thisYear"];
+				var presets = [
+					{ key: "today", label: "Today" },
+					{ key: "thisWeek", label: "This week" },
+					{ key: "thisMonth", label: "This month" },
+					{ key: "thisQuarter", label: "This quarter" },
+					{ key: "thisYear", label: "This year" },
+					{ key: "lastMonth", label: "Last month" },
+					{ key: "lastYear", label: "Last year" }
+				];
 				var presetRow = presets.map(function(p) {
 					return __cel("button", {
 						type: "button",
 						class: "text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300",
-						"data-preset": p
-					}, [__cel.text(p)], {
-						click: { act: "raw", js: "(function(){ var pr='" + p + "'; var now=new Date(); var from,to; if(pr==='today'){from=to=now.toISOString().slice(0,10);} else if(pr==='thisWeek'){var d=now.getDay()||7; from=new Date(now.getFullYear(),now.getMonth(),now.getDate()-d+1).toISOString().slice(0,10); to=now.toISOString().slice(0,10);} else if(pr==='thisMonth'){from=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10); to=now.toISOString().slice(0,10);} else if(pr==='thisYear'){from=new Date(now.getFullYear(),0,1).toISOString().slice(0,10); to=now.toISOString().slice(0,10);} var s=__clients['" + zoneId + "'].getState(); var ff=Object.assign({},s.filters); ff['" + col.key + "']={op:'dateRange',from:from,to:to}; __clients['" + zoneId + "'].setState({filters:ff,page:0,_filterOpen:null}); })()" }
+						"data-preset": p.key
+					}, [__cel.text(p.label)], {
+						click: { act: "raw", js: "(function(){ var pr='" + p.key + "'; var now=new Date(); var from,to; if(pr==='today'){from=to=now.toISOString().slice(0,10);} else if(pr==='thisWeek'){var d=now.getDay()||7; from=new Date(now.getFullYear(),now.getMonth(),now.getDate()-d+1).toISOString().slice(0,10); to=now.toISOString().slice(0,10);} else if(pr==='thisMonth'){from=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10); to=now.toISOString().slice(0,10);} else if(pr==='thisQuarter'){var qm=Math.floor(now.getMonth()/3)*3; from=new Date(now.getFullYear(),qm,1).toISOString().slice(0,10); to=now.toISOString().slice(0,10);} else if(pr==='thisYear'){from=new Date(now.getFullYear(),0,1).toISOString().slice(0,10); to=now.toISOString().slice(0,10);} else if(pr==='lastMonth'){from=new Date(now.getFullYear(),now.getMonth()-1,1).toISOString().slice(0,10); to=new Date(now.getFullYear(),now.getMonth(),0).toISOString().slice(0,10);} else if(pr==='lastYear'){from=new Date(now.getFullYear()-1,0,1).toISOString().slice(0,10); to=new Date(now.getFullYear()-1,11,31).toISOString().slice(0,10);} var dd=event.target.closest('[data-filter-dropdown]'); var fromEl=dd.querySelector('[data-role=filter-from]'); var toEl=dd.querySelector('[data-role=filter-to]'); if(fromEl)fromEl.value=from; if(toEl)toEl.value=to; })()" }
 					});
 				});
 				children.push(__cel.div("flex flex-wrap gap-1 mb-2", presetRow));
@@ -5175,8 +5187,10 @@ var __ctable = Trim(`
 			]);
 			children.push(btnRow);
 
+			var ddWidth = "w-[220px]";
+			if (colType === "date") ddWidth = "w-[260px]";
 			return __cel("div", {
-				class: "fixed bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[220px] z-[9999]",
+				class: "fixed bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 " + ddWidth + " z-[9999]",
 				"data-filter-dropdown": col.key,
 				"data-filter-position": col.key
 			}, children);
@@ -5311,7 +5325,7 @@ var __ctable = Trim(`
 					headerChildren.push(__cel("button", {
 						type: "button",
 						class: "ml-1 align-middle inline-flex items-center " + filterIconCls
-					}, [__cel.icon("filter_list", "text-sm")], {
+					}, [__cel.icon("tune", "text-sm")], {
 						click: { act: "raw", js: "(function(e){ e.stopPropagation(); var st=__clients['" + fZone + "'].getState(); var open=st._filterOpen==='" + fKey + "'?null:'" + fKey + "'; __clients['" + fZone + "'].setState({_filterOpen:open}); })(event)" }
 					}));
 					// Render dropdown outside the table to avoid overflow clipping
@@ -5319,8 +5333,14 @@ var __ctable = Trim(`
 						activeFilterDropdown = renderFilterDropdown(col, state, fZone, data);
 					}
 				}
-				var thCls = "p-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" + (col.sortable ? " cursor-pointer select-none" : "") + (col.class ? " " + col.class : "");
-				return __cel("th", { class: thCls, "data-col-key": col.key }, headerChildren, headerEvents);
+				var thJustify = "justify-start";
+				if (col.cellClass) {
+					if (col.cellClass.indexOf("text-right") >= 0) thJustify = "justify-end";
+					else if (col.cellClass.indexOf("text-center") >= 0) thJustify = "justify-center";
+				}
+				var thCls = "p-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" + (col.sortable ? " cursor-pointer select-none" : "") + (col.class ? " " + col.class : "");
+				var innerWrap = __cel("span", { class: "inline-flex items-center whitespace-nowrap " + thJustify + " w-full" }, headerChildren);
+				return __cel("th", { class: thCls, "data-col-key": col.key }, [innerWrap], headerEvents);
 			});
 
 			// --- Body rows ---
