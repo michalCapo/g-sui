@@ -1,0 +1,9 @@
+#!/bin/bash
+TMPBIN="${TMPDIR:-/tmp}/gsui-$(head -c6 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c8)"
+trap "rm -f '$TMPBIN'" EXIT
+air \
+  -build.cmd "go build -o '$TMPBIN' ./example" \
+  -build.bin "$TMPBIN" \
+  -build.include_ext "go" \
+  -build.include_dir "ui,example,example/pages" \
+  -build.exclude_dir "tmp,.git"
