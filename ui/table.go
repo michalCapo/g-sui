@@ -842,8 +842,10 @@ func (dt *DataTable[T]) renderFooter() *Node {
 	// Reset paging button (when user has loaded more than first page)
 	if dt.page > 1 && action != "" {
 		resetBtn := Button(
-			"inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer "+
-				"text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors",
+			"inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-md cursor-pointer "+
+				"border border-gray-300 dark:border-gray-600 "+
+				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 "+
+				"hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors",
 		).Text("×").OnClick(JS(dt.resetPagingJS()))
 		footerItems = append(footerItems, resetBtn)
 	}
@@ -1098,23 +1100,40 @@ func renderNumberFilter(colIdx int, currentValue *FilterValue) *Node {
 		opSelect.Render(opt)
 	}
 
-	// From/To inputs
-	inputs := Div("flex gap-1.5").Render(
-		INumber(
-			"flex-1 min-w-0 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded "+
-				"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 "+
-				"focus:outline-none focus:ring-1 focus:ring-blue-500",
-		).ID(fmt.Sprintf("filter-%d-from", colIdx)).
-			Attr("placeholder", "Od").
-			Attr("value", from),
-		INumber(
-			"flex-1 min-w-0 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded "+
-				"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 "+
-				"focus:outline-none focus:ring-1 focus:ring-blue-500",
-		).ID(fmt.Sprintf("filter-%d-to", colIdx)).
-			Attr("placeholder", "Do").
-			Attr("value", to),
-	)
+	inputCls := "flex-1 min-w-0 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded " +
+		"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 " +
+		"focus:outline-none focus:ring-1 focus:ring-blue-500"
+
+	fromID := fmt.Sprintf("filter-%d-from", colIdx)
+	toID := fmt.Sprintf("filter-%d-to", colIdx)
+	isRange := operator == OpRange
+
+	fromPlaceholder := "Hodnota"
+	if isRange {
+		fromPlaceholder = "Od"
+	}
+
+	fromInput := INumber(inputCls).ID(fromID).
+		Attr("placeholder", fromPlaceholder).
+		Attr("value", from)
+
+	toDisplay := "none"
+	if isRange {
+		toDisplay = "flex"
+	}
+	toWrap := Div("flex gap-1.5").ID(fmt.Sprintf("filter-%d-to-wrap", colIdx)).
+		Style("display", toDisplay).
+		Render(INumber(inputCls).ID(toID).Attr("placeholder", "Do").Attr("value", to))
+
+	// Toggle "to" field visibility and "from" placeholder based on operator
+	opSelect.On("change", JS(fmt.Sprintf(
+		"var isRange=this.value==='range';"+
+			"document.getElementById('%s').style.display=isRange?'flex':'none';"+
+			"document.getElementById('%s').placeholder=isRange?'Od':'Hodnota';",
+		escJS(fmt.Sprintf("filter-%d-to-wrap", colIdx)), escJS(fromID),
+	)))
+
+	inputs := Div("flex flex-col gap-1.5").Render(fromInput, toWrap)
 
 	return Div().Render(opSelect, inputs)
 }
