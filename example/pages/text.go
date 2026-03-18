@@ -62,3 +62,8 @@ func Text(ctx *r.Context) *r.Node {
 		card("Behavior & attributes", behavior),
 	)
 }
+
+func RegisterText(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/text", func(ctx *r.Context) *r.Node { return layout(Text(ctx)) })
+	app.Action("nav.text", NavTo("/text", func() *r.Node { return Text(nil) }))
+}

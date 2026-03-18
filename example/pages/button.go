@@ -2,7 +2,7 @@ package pages
 
 import r "github.com/michalCapo/g-sui/ui"
 
-func Button(ctx *r.Context) *r.Node {
+func Button() *r.Node {
 	row := func(title string, content *r.Node) *r.Node {
 		return r.Div("bg-white p-4 rounded-lg shadow flex flex-col gap-3").Render(
 			r.Div("text-sm font-bold text-gray-700").Text(title),
@@ -87,4 +87,9 @@ func Button(ctx *r.Context) *r.Node {
 		row("Colors (solid and outline)", colorsGrid),
 		row("Sizes", sizesGrid),
 	)
+}
+
+func RegisterButton(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/button", func(ctx *r.Context) *r.Node { return layout(Button()) })
+	app.Action("nav.button", NavTo("/button", func() *r.Node { return Button() }))
 }

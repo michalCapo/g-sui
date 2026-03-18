@@ -77,3 +77,10 @@ func HandleSharedReset(ctx *r.Context) string {
 	formID, _ := data["formID"].(string)
 	return sharedForm(formID, "", "").ToJSReplace(formID)
 }
+
+func RegisterShared(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/shared", func(ctx *r.Context) *r.Node { return layout(Shared(ctx)) })
+	app.Action("nav.shared", NavTo("/shared", func() *r.Node { return Shared(nil) }))
+	app.Action("shared.submit", HandleSharedSubmit)
+	app.Action("shared.reset", HandleSharedReset)
+}

@@ -94,3 +94,9 @@ func HandleLoginSubmit(ctx *r.Context) string {
 		Toast("success", "Login successful").
 		Build()
 }
+
+func RegisterLogin(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/login", func(ctx *r.Context) *r.Node { return layout(LoginPage(ctx)) })
+	app.Action("nav.login", NavTo("/login", func() *r.Node { return LoginPage(nil) }))
+	app.Action("login.submit", HandleLoginSubmit)
+}

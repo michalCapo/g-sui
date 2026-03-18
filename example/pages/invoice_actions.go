@@ -142,3 +142,25 @@ func HandleInvoiceCreate(ctx *r.Context) string {
 		Toast("success", fmt.Sprintf("Invoice %s created", inv.Number)).
 		Build()
 }
+
+// NavTo creates a navigation action handler that replaces the content area
+// and updates the browser URL.
+func NavTo(url string, content func() *r.Node) r.ActionHandler {
+	return func(ctx *r.Context) string {
+		return r.NewResponse().
+			Inner(ContentID, content()).
+			Navigate(url).
+			Build()
+	}
+}
+
+func RegisterInvoices(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/invoices", InvoiceListPage(layout))
+	app.Page("/invoices/new", InvoiceCreatePage(layout))
+	app.Action("nav.list", NavTo("/invoices", InvoiceListNav))
+	app.Action("nav.create", NavTo("/invoices/new", InvoiceCreateNav))
+	app.Action("invoice.view", HandleInvoiceView)
+	app.Action("invoice.delete", HandleInvoiceDelete)
+	app.Action("invoice.create", HandleInvoiceCreate)
+	app.Action("invoice.addRow", HandleInvoiceAddRow)
+}

@@ -44,3 +44,9 @@ func pad2(n int) string {
 	}
 	return fmt.Sprintf("%d", n)
 }
+
+func RegisterClock(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/clock", func(ctx *r.Context) *r.Node { return layout(Clock(ctx)) })
+	app.Action("nav.clock", NavTo("/clock", func() *r.Node { return Clock(nil) }))
+	app.Action("clock.start", HandleClockStart)
+}

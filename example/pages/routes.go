@@ -384,3 +384,12 @@ func paramBadge(key, value, cls string) *r.Node {
 	return r.Div("text-sm font-mono px-3 py-2 rounded " + cls).
 		Text(fmt.Sprintf("%s: %s", key, value))
 }
+
+func RegisterRoutes(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/routes", func(ctx *r.Context) *r.Node { return layout(RoutesExample(ctx)) })
+	app.Action("nav.routes", NavTo("/routes", func() *r.Node { return RoutesExample(nil) }))
+	app.Action("routes.user", HandleRoutesUser)
+	app.Action("routes.userpost", HandleRoutesUserPost)
+	app.Action("routes.product", HandleRoutesProduct)
+	app.Action("routes.search", HandleRoutesSearch)
+}

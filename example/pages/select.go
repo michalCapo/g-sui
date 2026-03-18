@@ -121,3 +121,9 @@ func HandleSelectChange(ctx *r.Context) string {
 
 	return r.SetText("select-display", "Selected: "+val)
 }
+
+func RegisterSelect(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/select", func(ctx *r.Context) *r.Node { return layout(SelectPage(ctx)) })
+	app.Action("nav.select", NavTo("/select", func() *r.Node { return SelectPage(nil) }))
+	app.Action("select.change", HandleSelectChange)
+}

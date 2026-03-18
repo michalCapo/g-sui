@@ -52,3 +52,8 @@ func Number(ctx *r.Context) *r.Node {
 		card("Styling", styling),
 	)
 }
+
+func RegisterNumber(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/number", func(ctx *r.Context) *r.Node { return layout(Number(ctx)) })
+	app.Action("nav.number", NavTo("/number", func() *r.Node { return Number(nil) }))
+}

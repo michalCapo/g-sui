@@ -155,3 +155,8 @@ func Radio(ctx *r.Context) *r.Node {
 		card("Disabled", disabled),
 	)
 }
+
+func RegisterRadio(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/radio", func(ctx *r.Context) *r.Node { return layout(Radio(ctx)) })
+	app.Action("nav.radio", NavTo("/radio", func() *r.Node { return Radio(nil) }))
+}

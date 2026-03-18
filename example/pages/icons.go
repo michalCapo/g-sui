@@ -67,3 +67,8 @@ func Icons(ctx *r.Context) *r.Node {
 		),
 	)
 }
+
+func RegisterIcons(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/icons", func(ctx *r.Context) *r.Node { return layout(Icons(ctx)) })
+	app.Action("nav.icons", NavTo("/icons", func() *r.Node { return Icons(nil) }))
+}

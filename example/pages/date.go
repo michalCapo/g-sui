@@ -51,3 +51,8 @@ func Date(ctx *r.Context) *r.Node {
 		card("Styling", styling),
 	)
 }
+
+func RegisterDate(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/date", func(ctx *r.Context) *r.Node { return layout(Date(ctx)) })
+	app.Action("nav.date", NavTo("/date", func() *r.Node { return Date(nil) }))
+}

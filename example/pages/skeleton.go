@@ -22,3 +22,8 @@ func section(title string, content *r.Node) *r.Node {
 		content,
 	)
 }
+
+func RegisterSkeleton(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/skeleton", func(ctx *r.Context) *r.Node { return layout(Skeleton(ctx)) })
+	app.Action("nav.skeleton", NavTo("/skeleton", func() *r.Node { return Skeleton(nil) }))
+}

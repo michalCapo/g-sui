@@ -87,3 +87,8 @@ func TablePage(ctx *r.Context) *r.Node {
 		wrapCard("DataTable (Generic)", dataTable),
 	)
 }
+
+func RegisterTable(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/table", func(ctx *r.Context) *r.Node { return layout(TablePage(ctx)) })
+	app.Action("nav.table", NavTo("/table", func() *r.Node { return TablePage(nil) }))
+}

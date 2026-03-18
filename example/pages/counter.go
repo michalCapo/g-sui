@@ -32,7 +32,7 @@ func Counter(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleCounterInc(ctx *r.Context) string {
+func handleCounterInc(ctx *r.Context) string {
 	var data struct {
 		ID    string  `json:"id"`
 		Count float64 `json:"count"`
@@ -42,7 +42,7 @@ func HandleCounterInc(ctx *r.Context) string {
 	return counterWidget(data.ID, newCount).ToJSReplace(data.ID)
 }
 
-func HandleCounterDec(ctx *r.Context) string {
+func handleCounterDec(ctx *r.Context) string {
 	var data struct {
 		ID    string  `json:"id"`
 		Count float64 `json:"count"`
@@ -53,4 +53,11 @@ func HandleCounterDec(ctx *r.Context) string {
 		newCount = 0
 	}
 	return counterWidget(data.ID, newCount).ToJSReplace(data.ID)
+}
+
+func RegisterCounter(app *r.App, layout func(*r.Node) *r.Node) {
+	app.Page("/counter", func(ctx *r.Context) *r.Node { return layout(Counter(ctx)) })
+	app.Action("nav.counter", NavTo("/counter", func() *r.Node { return Counter(nil) }))
+	app.Action("counter.inc", handleCounterInc)
+	app.Action("counter.dec", handleCounterDec)
 }
