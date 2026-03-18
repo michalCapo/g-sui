@@ -16,6 +16,7 @@ type Product struct {
 	Stock     int
 	CreatedAt string // Date column for filter demo
 	Category  string // Select filter demo
+	Status    string // Status badge demo
 }
 
 func TablePage(ctx *r.Context) *r.Node {
@@ -82,30 +83,30 @@ func TablePage(ctx *r.Context) *r.Node {
 
 // allProducts is the full dataset for the DataTable demo
 var allProducts = []*Product{
-	{ID: 1, Name: "Laptop", Price: 999.99, Stock: 25, CreatedAt: "2026-01-15", Category: "Electronics"},
-	{ID: 2, Name: "Mouse", Price: 29.50, Stock: 150, CreatedAt: "2026-01-20", Category: "Accessories"},
-	{ID: 3, Name: "Keyboard", Price: 79.00, Stock: 80, CreatedAt: "2026-02-05", Category: "Accessories"},
-	{ID: 4, Name: "Monitor", Price: 449.99, Stock: 30, CreatedAt: "2026-02-10", Category: "Electronics"},
-	{ID: 5, Name: "Headphones", Price: 59.95, Stock: 200, CreatedAt: "2026-02-15", Category: "Accessories"},
-	{ID: 6, Name: "Webcam", Price: 89.99, Stock: 45, CreatedAt: "2026-03-01", Category: "Electronics"},
-	{ID: 7, Name: "USB Cable", Price: 12.99, Stock: 500, CreatedAt: "2026-03-05", Category: "Accessories"},
-	{ID: 8, Name: "Desk Lamp", Price: 34.50, Stock: 60, CreatedAt: "2026-03-10", Category: "Office"},
-	{ID: 9, Name: "Notebook", Price: 8.99, Stock: 300, CreatedAt: "2026-03-15", Category: "Office"},
-	{ID: 10, Name: "Pen Set", Price: 15.00, Stock: 120, CreatedAt: "2026-03-20", Category: "Office"},
-	{ID: 11, Name: "Monitor Stand", Price: 45.00, Stock: 40, CreatedAt: "2026-04-01", Category: "Accessories"},
-	{ID: 12, Name: "Laptop Bag", Price: 55.00, Stock: 75, CreatedAt: "2026-04-05", Category: "Accessories"},
-	{ID: 13, Name: "Tablet", Price: 599.99, Stock: 35, CreatedAt: "2026-05-01", Category: "Electronics"},
-	{ID: 14, Name: "Mouse Pad", Price: 14.99, Stock: 220, CreatedAt: "2026-05-10", Category: "Accessories"},
-	{ID: 15, Name: "Printer", Price: 249.00, Stock: 15, CreatedAt: "2026-05-15", Category: "Electronics"},
-	{ID: 16, Name: "Stapler", Price: 9.50, Stock: 180, CreatedAt: "2026-06-01", Category: "Office"},
-	{ID: 17, Name: "Router", Price: 129.99, Stock: 55, CreatedAt: "2026-06-10", Category: "Electronics"},
-	{ID: 18, Name: "USB Hub", Price: 24.99, Stock: 140, CreatedAt: "2026-06-20", Category: "Accessories"},
-	{ID: 19, Name: "Desk Chair", Price: 349.00, Stock: 20, CreatedAt: "2026-07-05", Category: "Office"},
-	{ID: 20, Name: "Microphone", Price: 89.00, Stock: 65, CreatedAt: "2026-07-15", Category: "Electronics"},
-	{ID: 21, Name: "Whiteboard", Price: 42.00, Stock: 30, CreatedAt: "2026-08-01", Category: "Office"},
-	{ID: 22, Name: "HDMI Cable", Price: 11.99, Stock: 400, CreatedAt: "2026-08-10", Category: "Accessories"},
-	{ID: 23, Name: "Speaker", Price: 69.95, Stock: 90, CreatedAt: "2026-09-01", Category: "Electronics"},
-	{ID: 24, Name: "Paper Tray", Price: 18.50, Stock: 110, CreatedAt: "2026-09-15", Category: "Office"},
+	{ID: 1, Name: "Laptop", Price: 999.99, Stock: 25, CreatedAt: "2026-01-15", Category: "Electronics", Status: "Draft"},
+	{ID: 2, Name: "Mouse", Price: 29.50, Stock: 150, CreatedAt: "2026-01-20", Category: "Accessories", Status: "Sent"},
+	{ID: 3, Name: "Keyboard", Price: 79.00, Stock: 80, CreatedAt: "2026-02-05", Category: "Accessories", Status: "Paid"},
+	{ID: 4, Name: "Monitor", Price: 449.99, Stock: 30, CreatedAt: "2026-02-10", Category: "Electronics", Status: "Paid"},
+	{ID: 5, Name: "Headphones", Price: 59.95, Stock: 200, CreatedAt: "2026-02-15", Category: "Accessories", Status: "Overdue"},
+	{ID: 6, Name: "Webcam", Price: 89.99, Stock: 45, CreatedAt: "2026-03-01", Category: "Electronics", Status: "Sent"},
+	{ID: 7, Name: "USB Cable", Price: 12.99, Stock: 500, CreatedAt: "2026-03-05", Category: "Accessories", Status: "Paid"},
+	{ID: 8, Name: "Desk Lamp", Price: 34.50, Stock: 60, CreatedAt: "2026-03-10", Category: "Office", Status: "Draft"},
+	{ID: 9, Name: "Notebook", Price: 8.99, Stock: 300, CreatedAt: "2026-03-15", Category: "Office", Status: "Paid"},
+	{ID: 10, Name: "Pen Set", Price: 15.00, Stock: 120, CreatedAt: "2026-03-20", Category: "Office", Status: "Sent"},
+	{ID: 11, Name: "Monitor Stand", Price: 45.00, Stock: 40, CreatedAt: "2026-04-01", Category: "Accessories", Status: "Overdue"},
+	{ID: 12, Name: "Laptop Bag", Price: 55.00, Stock: 75, CreatedAt: "2026-04-05", Category: "Accessories", Status: "Paid"},
+	{ID: 13, Name: "Tablet", Price: 599.99, Stock: 35, CreatedAt: "2026-05-01", Category: "Electronics", Status: "Draft"},
+	{ID: 14, Name: "Mouse Pad", Price: 14.99, Stock: 220, CreatedAt: "2026-05-10", Category: "Accessories", Status: "Sent"},
+	{ID: 15, Name: "Printer", Price: 249.00, Stock: 15, CreatedAt: "2026-05-15", Category: "Electronics", Status: "Paid"},
+	{ID: 16, Name: "Stapler", Price: 9.50, Stock: 180, CreatedAt: "2026-06-01", Category: "Office", Status: "Overdue"},
+	{ID: 17, Name: "Router", Price: 129.99, Stock: 55, CreatedAt: "2026-06-10", Category: "Electronics", Status: "Sent"},
+	{ID: 18, Name: "USB Hub", Price: 24.99, Stock: 140, CreatedAt: "2026-06-20", Category: "Accessories", Status: "Paid"},
+	{ID: 19, Name: "Desk Chair", Price: 349.00, Stock: 20, CreatedAt: "2026-07-05", Category: "Office", Status: "Draft"},
+	{ID: 20, Name: "Microphone", Price: 89.00, Stock: 65, CreatedAt: "2026-07-15", Category: "Electronics", Status: "Paid"},
+	{ID: 21, Name: "Whiteboard", Price: 42.00, Stock: 30, CreatedAt: "2026-08-01", Category: "Office", Status: "Sent"},
+	{ID: 22, Name: "HDMI Cable", Price: 11.99, Stock: 400, CreatedAt: "2026-08-10", Category: "Accessories", Status: "Paid"},
+	{ID: 23, Name: "Speaker", Price: 69.95, Stock: 90, CreatedAt: "2026-09-01", Category: "Electronics", Status: "Overdue"},
+	{ID: 24, Name: "Paper Tray", Price: 18.50, Stock: 110, CreatedAt: "2026-09-15", Category: "Office", Status: "Paid"},
 }
 
 // TableDataRequest represents the incoming data from table operations
@@ -247,6 +248,8 @@ func applyColumnFilters(p *Product, filters map[int]*activeFilter) bool {
 			switch f.Col {
 			case 5:
 				val = p.Category
+			case 6:
+				val = p.Status
 			default:
 				continue
 			}
@@ -275,7 +278,7 @@ func parseFloat(s string) float64 {
 }
 
 func sortProducts(data []*Product, col int, dir string) {
-	if col < 0 || col > 5 {
+	if col < 0 || col > 6 {
 		return
 	}
 	sort.Slice(data, func(i, j int) bool {
@@ -297,6 +300,8 @@ func sortProducts(data []*Product, col int, dir string) {
 			cmp = strings.Compare(data[i].CreatedAt, data[j].CreatedAt)
 		case 5:
 			cmp = strings.Compare(data[i].Category, data[j].Category)
+		case 6:
+			cmp = strings.Compare(data[i].Status, data[j].Status)
 		}
 		if dir == "desc" {
 			return cmp > 0
@@ -396,7 +401,7 @@ func newDataWithFilters() *r.DataTable[Product] {
 
 	// Build filter badges and set filter values
 	var badges []r.FilterBadge
-	colLabels := map[int]string{0: "ID", 1: "Name", 2: "Price", 3: "Stock", 4: "Created", 5: "Category"}
+	colLabels := map[int]string{0: "ID", 1: "Name", 2: "Price", 3: "Stock", 4: "Created", 5: "Category", 6: "Status"}
 
 	for col, f := range activeFilters {
 		label := colLabels[col]
@@ -471,6 +476,25 @@ func NewData() *r.DataTable[Product] {
 			Filter:        r.SelectFilter,
 			FilterOptions: []string{"Electronics", "Accessories", "Office"},
 			Text:          func(p *Product) *r.Node { return r.Span().Text(p.Category) },
+		}).
+		Col("Status", r.ColOpt[Product]{
+			Sortable:      true,
+			Filter:        r.SelectFilter,
+			FilterOptions: []string{"Draft", "Sent", "Paid", "Overdue"},
+			Text: func(p *Product) *r.Node {
+				color := "gray-soft"
+				switch p.Status {
+				case "Draft":
+					color = "gray-soft"
+				case "Sent":
+					color = "blue-soft"
+				case "Paid":
+					color = "green-soft"
+				case "Overdue":
+					color = "red-soft"
+				}
+				return r.NewBadge(p.Status).Color(color).BadgeSize("sm").Build()
+			},
 		}).
 		Action("table.data")
 
