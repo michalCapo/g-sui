@@ -75,6 +75,10 @@ git push origin "$NEW_VERSION"
 echo "Ensuring current branch is pushed..."
 git push origin "$CURRENT_BRANCH" --follow-tags || true
 
+# Register version with Go module proxy so @latest resolves
+echo "Registering version with Go module proxy..."
+GOPROXY=proxy.golang.org go list -m "$MODULE_PATH@$NEW_VERSION" || echo "Warning: Failed to register with proxy (may take a few minutes to propagate)"
+
 echo ""
 echo "Successfully deployed version $NEW_VERSION"
 echo "  Tag created and pushed to origin"
