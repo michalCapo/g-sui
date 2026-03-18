@@ -11,9 +11,6 @@ import (
 var assets embed.FS
 
 func main() {
-	store := pages.NewInvoiceStore()
-	pages.InitInvoiceStore(store)
-
 	app := r.NewApp()
 
 	// Register all pages (each file owns its routes + actions)
@@ -40,7 +37,6 @@ func main() {
 	pages.RegisterSkeleton(app, layout)
 	pages.RegisterCounter(app, layout)
 	pages.RegisterHello(app, layout)
-	pages.RegisterInvoices(app, layout)
 	pages.RegisterCollate(app, layout)
 
 	// Serve embedded static assets (favicon, images, etc.)
@@ -57,7 +53,7 @@ func main() {
 // ---------------------------------------------------------------------------
 
 func layout(content *r.Node) *r.Node {
-	return r.Div("min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors").Render(
+	return r.Div("min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors overflow-y-scroll").Render(
 		r.Nav("bg-white dark:bg-gray-900 shadow dark:shadow-gray-800/50").Attr("aria-label", "Main navigation").Render(
 			r.Div("mx-auto px-4 py-3 flex items-start gap-2").Render(
 				r.Div("flex flex-wrap gap-1 flex-1").Render(
@@ -82,8 +78,7 @@ func layout(content *r.Node) *r.Node {
 					navLink("Reload", "nav.reload"),
 					navLink("Routes", "nav.routes"),
 					navLink("Skeleton", "nav.skeleton"),
-					navLink("Invoices", "nav.list"),
-				navLink("Collate", "nav.collate"),
+					navLink("Collate", "nav.collate"),
 				),
 				r.ThemeSwitcher(),
 			),

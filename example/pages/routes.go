@@ -7,6 +7,9 @@ import (
 	r "github.com/michalCapo/g-sui/ui"
 )
 
+// ContentID is the shared target ID for the main content area.
+var ContentID = r.Target()
+
 func RoutesExample(ctx *r.Context) *r.Node {
 	codeSnippet := func(text string) *r.Node {
 		return r.Code("bg-gray-100 px-1 rounded text-sm").Text(text)
@@ -383,6 +386,17 @@ func infoBox(label, value string) *r.Node {
 func paramBadge(key, value, cls string) *r.Node {
 	return r.Div("text-sm font-mono px-3 py-2 rounded " + cls).
 		Text(fmt.Sprintf("%s: %s", key, value))
+}
+
+// NavTo creates a navigation action handler that replaces the content area
+// and updates the browser URL.
+func NavTo(url string, content func() *r.Node) r.ActionHandler {
+	return func(ctx *r.Context) string {
+		return r.NewResponse().
+			Inner(ContentID, content()).
+			Navigate(url).
+			Build()
+	}
 }
 
 func RegisterRoutes(app *r.App, layout func(*r.Node) *r.Node) {
