@@ -496,9 +496,31 @@ func NewData() *r.DataTable[Product] {
 				return r.NewBadge(p.Status).Color(color).BadgeSize("sm").Build()
 			},
 		}).
+		Detail(productDetail).
 		Action("table.data")
 
 	return dataTable
+}
+
+// productDetail renders the expandable detail content for a product row.
+func productDetail(p *Product) *r.Node {
+	field := func(label, value string) *r.Node {
+		return r.Div("flex gap-2").Render(
+			r.Span("text-gray-500 dark:text-gray-400 font-medium min-w-[80px]").Text(label+":"),
+			r.Span("text-gray-800 dark:text-gray-200").Text(value),
+		)
+	}
+
+	return r.Div("grid grid-cols-2 gap-3 text-sm").Render(
+		field("ID", fmt.Sprintf("%d", p.ID)),
+		field("Name", p.Name),
+		field("Price", fmt.Sprintf("$%.2f", p.Price)),
+		field("Stock", fmt.Sprintf("%d units", p.Stock)),
+		field("Created", p.CreatedAt),
+		field("Category", p.Category),
+		field("Status", p.Status),
+		field("Value", fmt.Sprintf("$%.2f", p.Price*float64(p.Stock))),
+	)
 }
 
 func RegisterTable(app *r.App, layout func(*r.Node) *r.Node) {

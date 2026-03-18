@@ -73,6 +73,9 @@ type DataTable[T any] struct {
 	filters      map[int]*ColumnFilter // column index -> filter config
 	filterValues map[int]*FilterValue  // column index -> current filter value
 	filterLabels []FilterBadge         // active filter badges to display
+
+	// Row detail (accordion)
+	detail func(*T) *Node // renders expandable detail content below a row
 }
 
 // FilterBadge represents an active filter badge
@@ -339,6 +342,14 @@ func (dt *DataTable[T]) TableClass(cls string) *DataTable[T] {
 	return dt
 }
 
+// Detail sets a function that renders expandable detail content for each row.
+// When set, a chevron toggle column is automatically added as the last column
+// and clicking the row toggles an accordion-style detail panel below it.
+func (dt *DataTable[T]) Detail(fn func(*T) *Node) *DataTable[T] {
+	dt.detail = fn
+	return dt
+}
+
 // ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
@@ -501,7 +512,7 @@ func (dt *DataTable[T]) exportJS() string {
 // ---------------------------------------------------------------------------
 
 func (dt *DataTable[T]) renderTable(data []*T) *Node {
-	headerCells := make([]*Node, len(dt.heads))
+	headerCells := make([]*Node, 0, len(dt.heads)+1)
 	for i, h := range dt.heads {
 		baseCls := "text-left font-semibold p-2 border-b border-gray-200 dark:border-gray-700 " +
 			"text-gray-700 dark:text-gray-300 text-xs uppercase tracking-wider relative"
@@ -550,7 +561,14 @@ func (dt *DataTable[T]) renderTable(data []*T) *Node {
 			}
 		}
 
-		headerCells[i] = th
+		headerCells = append(headerCells, th)
+	}
+
+	// Add empty header for detail toggle column
+	if dt.detail != nil {
+		headerCells = append(headerCells, Th(
+			"w-10 p-2 border-b border-gray-200 dark:border-gray-700",
+		))
 	}
 
 	thead := Thead("bg-gray-50 dark:bg-gray-800/50").Render(
@@ -561,6 +579,9 @@ func (dt *DataTable[T]) renderTable(data []*T) *Node {
 	var tbody *Node
 	if len(data) == 0 {
 		colSpan := len(dt.heads)
+		if dt.detail != nil {
+			colSpan++
+		}
 		if colSpan == 0 {
 			colSpan = 1
 		}
@@ -580,10 +601,16 @@ func (dt *DataTable[T]) renderTable(data []*T) *Node {
 
 // buildRows creates row nodes from data, using rowOffset for stripe coloring.
 func (dt *DataTable[T]) buildRows(data []*T) []*Node {
-	rows := make([]*Node, len(data))
+	hasDetail := dt.detail != nil
+	capacity := len(data)
+	if hasDetail {
+		capacity *= 2 // data row + detail row
+	}
+	rows := make([]*Node, 0, capacity)
+
 	for i, item := range data {
-		cells := make([]*Node, len(dt.fields))
-		for j, f := range dt.fields {
+		cells := make([]*Node, 0, len(dt.fields)+1)
+		for _, f := range dt.fields {
 			cellCls := "p-2 border-b border-gray-100 dark:border-gray-700/50 text-gray-800 dark:text-gray-200"
 			if f.cls != "" {
 				cellCls = f.cls
@@ -599,7 +626,7 @@ func (dt *DataTable[T]) buildRows(data []*T) []*Node {
 				td.Text(f.text(item))
 			}
 
-			cells[j] = td
+			cells = append(cells, td)
 		}
 
 		absIdx := dt.rowOffset + i
@@ -607,7 +634,62 @@ func (dt *DataTable[T]) buildRows(data []*T) []*Node {
 		if absIdx%2 == 1 {
 			rowCls = "bg-gray-50/50 dark:bg-gray-800/20 hover:bg-gray-100/60 dark:hover:bg-gray-800/40 transition-colors"
 		}
-		rows[i] = Tr(rowCls).Render(cells...)
+
+		tr := Tr(rowCls)
+
+		if hasDetail {
+			detailID := fmt.Sprintf("%s-detail-%d", dt.id, dt.rowOffset+i)
+			toggleJS := fmt.Sprintf(
+				"(function(){"+
+					"var d=document.getElementById('%s');"+
+					"var inner=d.querySelector('.dt-detail-inner');"+
+					"if(d.style.display==='none'||!d.style.display){"+
+					"d.style.display='table-row';inner.style.maxHeight=inner.scrollHeight+'px';inner.style.opacity='1';"+
+					"d.previousElementSibling.classList.add('dt-row-expanded')"+
+					"}else{"+
+					"inner.style.maxHeight='0';inner.style.opacity='0';"+
+					"d.previousElementSibling.classList.remove('dt-row-expanded');"+
+					"setTimeout(function(){d.style.display='none'},200)"+
+					"}"+
+					"})()",
+				escJS(detailID),
+			)
+
+			// Row is clickable to toggle detail
+			tr.Class(" cursor-pointer")
+			tr.OnClick(JS(toggleJS))
+
+			// Add chevron indicator cell
+			chevron := Span("text-base leading-none text-gray-400 dark:text-gray-500 transition-transform duration-200").
+				Style("font-family", "Material Icons Round").
+				Text("expand_more")
+			btnCell := Td("p-2 border-b border-gray-100 dark:border-gray-700/50 text-center w-10").
+				Render(chevron)
+			cells = append(cells, btnCell)
+
+			tr.Render(cells...)
+			rows = append(rows, tr)
+
+			// Detail row (hidden by default)
+			colSpan := len(dt.fields) + 1
+			detailContent := dt.detail(item)
+			innerWrap := Div("dt-detail-inner overflow-hidden transition-all duration-200 ease-in-out").
+				Style("max-height", "0").
+				Style("opacity", "0").
+				Render(
+					Div("p-4").Render(detailContent),
+				)
+			detailTd := Td("p-0 border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/80 dark:bg-gray-800/40").
+				Attr("colspan", fmt.Sprintf("%d", colSpan)).
+				Render(innerWrap)
+			detailRow := Tr().ID(detailID).
+				Style("display", "none").
+				Render(detailTd)
+			rows = append(rows, detailRow)
+		} else {
+			tr.Render(cells...)
+			rows = append(rows, tr)
+		}
 	}
 	return rows
 }
