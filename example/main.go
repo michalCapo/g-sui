@@ -41,6 +41,7 @@ func main() {
 	pages.RegisterCounter(app, layout)
 	pages.RegisterHello(app, layout)
 	pages.RegisterInvoices(app, layout)
+	pages.RegisterCollate(app, layout)
 
 	// Serve embedded static assets (favicon, images, etc.)
 	app.Assets(assets, "assets", "/assets/")
@@ -82,6 +83,7 @@ func layout(content *r.Node) *r.Node {
 					navLink("Routes", "nav.routes"),
 					navLink("Skeleton", "nav.skeleton"),
 					navLink("Invoices", "nav.list"),
+				navLink("Collate", "nav.collate"),
 				),
 				r.ThemeSwitcher(),
 			),
