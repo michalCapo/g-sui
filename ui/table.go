@@ -10,23 +10,20 @@ import "fmt"
 // search, pagination, sorting indicators, and export support.
 // Data fetching is delegated to user-defined WS actions.
 type DataTable[T any] struct {
-	id           string
-	heads        []tableHead
-	fields       []tableField[T]
-	searchAction string // WS action name for search (sends {search, page, sort, dir})
-	sortAction   string // WS action name for sort (sends {search, page, sort, dir})
-	pageAction   string // WS action name for pagination (sends {search, page, sort, dir})
-	exportAction string // WS action name for export (sends {search, sort, dir})
-	page         int    // current page (1-based)
-	totalPages   int    // total pages
-	totalItems   int    // total item count (optional, for display)
-	sortCol      int    // currently sorted column index (-1 = none)
-	sortDir      string // "asc" or "desc"
-	searchValue  string // current search query
-	sortable     []int  // which column indices are sortable
-	cls          string // wrapper class
-	tableCls     string // <table> class
-	emptyText    string // text when no data
+	id          string
+	heads       []tableHead
+	fields      []tableField[T]
+	action      string // WS action name for all operations (search, sort, page, export)
+	page        int    // current page (1-based)
+	totalPages  int    // total pages
+	totalItems  int    // total item count (optional, for display)
+	sortCol     int    // currently sorted column index (-1 = none)
+	sortDir     string // "asc" or "desc"
+	searchValue string // current search query
+	sortable    []int  // which column indices are sortable
+	cls         string // wrapper class
+	tableCls    string // <table> class
+	emptyText   string // text when no data
 }
 
 type tableHead struct {
@@ -108,9 +105,11 @@ func (dt *DataTable[T]) FieldText(fn func(*T) string, cls ...string) *DataTable[
 // Feature configuration methods
 // ---------------------------------------------------------------------------
 
-// Searchable enables the search input and sets the WS action to call on input.
-func (dt *DataTable[T]) Searchable(actionName string) *DataTable[T] {
-	dt.searchAction = actionName
+// Action sets the single WS action name for all table operations (search, sort, page, export).
+// The action will receive: {operation, search, page, sort, dir}
+// where operation is one of: "search", "sort", "page", "export"
+func (dt *DataTable[T]) Action(actionName string) *DataTable[T] {
+	dt.action = actionName
 	return dt
 }
 
@@ -120,17 +119,15 @@ func (dt *DataTable[T]) Sortable(columns ...int) *DataTable[T] {
 	return dt
 }
 
-// SortAction sets the WS action name invoked when a sortable header is clicked.
-func (dt *DataTable[T]) SortAction(actionName string) *DataTable[T] {
-	dt.sortAction = actionName
+// Page sets the current page number (1-based).
+func (dt *DataTable[T]) Page(page int) *DataTable[T] {
+	dt.page = page
 	return dt
 }
 
-// Paginated enables pagination controls and sets the current page state.
-func (dt *DataTable[T]) Paginated(actionName string, page, totalPages int) *DataTable[T] {
-	dt.pageAction = actionName
-	dt.page = page
-	dt.totalPages = totalPages
+// TotalPages sets the total number of pages.
+func (dt *DataTable[T]) TotalPages(total int) *DataTable[T] {
+	dt.totalPages = total
 	return dt
 }
 
@@ -140,13 +137,10 @@ func (dt *DataTable[T]) TotalItems(count int) *DataTable[T] {
 	return dt
 }
 
-// Export enables the export button with the given WS action name.
-func (dt *DataTable[T]) Export(actionName string) *DataTable[T] {
-	dt.exportAction = actionName
-	return dt
+// getAction returns the action name for table operations.
+func (dt *DataTable[T]) getAction() string {
+	return dt.action
 }
-
-// Sort sets the current sort column and direction ("asc" or "desc").
 func (dt *DataTable[T]) Sort(col int, dir string) *DataTable[T] {
 	dt.sortCol = col
 	dt.sortDir = dir
@@ -195,7 +189,7 @@ func (dt *DataTable[T]) Render(data []*T) *Node {
 	children = append(children, tableWrap)
 
 	// 3. Pagination
-	if dt.pageAction != "" {
+	if dt.getAction() != "" {
 		children = append(children, dt.renderPagination())
 	}
 
@@ -212,30 +206,27 @@ func (dt *DataTable[T]) Render(data []*T) *Node {
 // ---------------------------------------------------------------------------
 
 func (dt *DataTable[T]) renderToolbar() *Node {
-	if dt.searchAction == "" && dt.exportAction == "" {
+	action := dt.getAction()
+	if action == "" {
 		return nil
 	}
 
 	items := make([]*Node, 0, 2)
 
-	if dt.searchAction != "" {
-		searchID := dt.id + "-search"
-		searchInput := ISearch(
-			"w-64 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm "+
-				"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 "+
-				"placeholder-gray-400 dark:placeholder-gray-500 "+
-				"focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400",
-		).ID(searchID).
-			Attr("placeholder", "Search...").
-			Attr("value", dt.searchValue).
-			On("input", JS(dt.searchDebounceJS(searchID)))
+	searchID := dt.id + "-search"
+	searchInput := ISearch(
+		"w-64 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 text-sm "+
+			"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 "+
+			"placeholder-gray-400 dark:placeholder-gray-500 "+
+			"focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400",
+	).ID(searchID).
+		Attr("placeholder", "Search...").
+		Attr("value", dt.searchValue).
+		On("input", JS(dt.searchDebounceJS(searchID)))
 
-		items = append(items, searchInput)
-	} else {
-		items = append(items, Div())
-	}
+	items = append(items, searchInput)
 
-	if dt.exportAction != "" {
+	if action != "" {
 		exportBtn := Button(
 			"inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md cursor-pointer "+
 				"border border-gray-300 dark:border-gray-600 "+
@@ -254,21 +245,29 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 }
 
 func (dt *DataTable[T]) searchDebounceJS(searchID string) string {
+	action := dt.getAction()
+	if action == "" {
+		return ""
+	}
 	return fmt.Sprintf(
 		"clearTimeout(window['__dt_search_%s']);"+
 			"window['__dt_search_%s']=setTimeout(function(){"+
-			"__ws.call('%s',{search:document.getElementById('%s').value,page:1,sort:%d,dir:'%s'})"+
+			"__ws.call('%s',{operation:'search',search:document.getElementById('%s').value,page:1,sort:%d,dir:'%s'})"+
 			"},300);",
 		escJS(dt.id), escJS(dt.id),
-		escJS(dt.searchAction), escJS(searchID),
+		escJS(action), escJS(searchID),
 		dt.sortCol, escJS(dt.sortDir),
 	)
 }
 
 func (dt *DataTable[T]) exportJS() string {
+	action := dt.getAction()
+	if action == "" {
+		return ""
+	}
 	return fmt.Sprintf(
-		"__ws.call('%s',{search:'%s',sort:%d,dir:'%s'})",
-		escJS(dt.exportAction), escJS(dt.searchValue),
+		"__ws.call('%s',{operation:'export',search:'%s',sort:%d,dir:'%s'})",
+		escJS(action), escJS(dt.searchValue),
 		dt.sortCol, escJS(dt.sortDir),
 	)
 }
@@ -354,7 +353,7 @@ func (dt *DataTable[T]) renderTable(data []*T) *Node {
 }
 
 func (dt *DataTable[T]) isSortable(colIdx int) bool {
-	if dt.sortAction == "" {
+	if dt.getAction() == "" {
 		return false
 	}
 	for _, s := range dt.sortable {
@@ -376,6 +375,10 @@ func (dt *DataTable[T]) sortIndicator(colIdx int) *Node {
 }
 
 func (dt *DataTable[T]) sortClickJS(colIdx int) string {
+	action := dt.getAction()
+	if action == "" {
+		return ""
+	}
 	newDir := "asc"
 	if colIdx == dt.sortCol {
 		if dt.sortDir == "asc" {
@@ -385,8 +388,8 @@ func (dt *DataTable[T]) sortClickJS(colIdx int) string {
 		}
 	}
 	return fmt.Sprintf(
-		"__ws.call('%s',{search:'%s',page:%d,sort:%d,dir:'%s'})",
-		escJS(dt.sortAction), escJS(dt.searchValue),
+		"__ws.call('%s',{operation:'sort',search:'%s',page:%d,sort:%d,dir:'%s'})",
+		escJS(action), escJS(dt.searchValue),
 		dt.page, colIdx, escJS(newDir),
 	)
 }
@@ -483,9 +486,13 @@ func (dt *DataTable[T]) renderPagination() *Node {
 }
 
 func (dt *DataTable[T]) pageJS(page int) string {
+	action := dt.getAction()
+	if action == "" {
+		return ""
+	}
 	return fmt.Sprintf(
-		"__ws.call('%s',{search:'%s',page:%d,sort:%d,dir:'%s'})",
-		escJS(dt.pageAction), escJS(dt.searchValue),
+		"__ws.call('%s',{operation:'page',search:'%s',page:%d,sort:%d,dir:'%s'})",
+		escJS(action), escJS(dt.searchValue),
 		page, dt.sortCol, escJS(dt.sortDir),
 	)
 }
