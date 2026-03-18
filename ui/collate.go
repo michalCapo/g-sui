@@ -70,6 +70,9 @@ type Collate[T any] struct {
 	// Filter state
 	filterValues map[string]*CollateFilterValue
 
+	// Row detail (accordion)
+	detail func(*T) *Node // renders expandable detail content below a row
+
 	// UI options
 	cls       string // wrapper class
 	emptyText string
@@ -189,6 +192,14 @@ func (c *Collate[T]) RowOffset(offset int) *Collate[T] {
 	return c
 }
 
+// Detail sets a function that renders expandable detail content for each row.
+// When set, clicking a row toggles an accordion-style detail panel below it
+// with a smooth expand/collapse animation.
+func (c *Collate[T]) Detail(fn func(*T) *Node) *Collate[T] {
+	c.detail = fn
+	return c
+}
+
 // ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
@@ -252,11 +263,72 @@ func (c *Collate[T]) FooterID() string {
 // ---------------------------------------------------------------------------
 
 func (c *Collate[T]) buildRows(data []*T) []*Node {
-	rows := make([]*Node, 0, len(data))
+	hasDetail := c.detail != nil
+	capacity := len(data)
+	if hasDetail {
+		capacity *= 2 // data row + detail row
+	}
+	rows := make([]*Node, 0, capacity)
+
 	for i, item := range data {
-		if c.rowFn != nil {
-			if node := c.rowFn(item, c.rowOffset+i); node != nil {
-				rows = append(rows, node)
+		idx := c.rowOffset + i
+
+		if hasDetail {
+			detailID := fmt.Sprintf("%s-detail-%d", c.id, idx)
+
+			// Build toggle JS for detail row
+			toggleJS := fmt.Sprintf(
+				"(function(){"+
+					"var d=document.getElementById('%s');"+
+					"var inner=d.querySelector('.collate-detail-inner');"+
+					"var chevron=d.previousElementSibling.querySelector('[data-detail-chevron]');"+
+					"if(d.style.display==='none'||!d.style.display){"+
+					"d.style.display='block';inner.style.maxHeight=inner.scrollHeight+'px';inner.style.opacity='1';"+
+					"if(chevron)chevron.classList.add('rotate-180');"+
+					"d.previousElementSibling.classList.add('bg-gray-50','dark:bg-gray-800/30')"+
+					"}else{"+
+					"inner.style.maxHeight='0';inner.style.opacity='0';"+
+					"if(chevron)chevron.classList.remove('rotate-180');"+
+					"setTimeout(function(){d.style.display='none';"+
+					"d.previousElementSibling.classList.remove('bg-gray-50','dark:bg-gray-800/30')"+
+					"},200)"+
+					"}"+
+					"})()",
+				escJS(detailID),
+			)
+
+			// Create the data row
+			var rowNode *Node
+			if c.rowFn != nil {
+				rowNode = c.rowFn(item, idx)
+			}
+			if rowNode != nil {
+				// Add click handler to the row
+				rowNode.Class(" cursor-pointer group transition-colors")
+				rowNode.OnClick(JS(toggleJS))
+
+				rows = append(rows, rowNode)
+
+				// Detail row (hidden by default)
+				detailContent := c.detail(item)
+				innerWrap := Div("collate-detail-inner overflow-hidden transition-all duration-200 ease-in-out").
+					Style("max-height", "0").
+					Style("opacity", "0").
+					Render(
+						Div("px-6 py-4 border-t border-gray-200 dark:border-gray-700/50").Render(detailContent),
+					)
+				detailRow := Div().ID(detailID).
+					Style("display", "none").
+					Class("border-b border-gray-200 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/30").
+					Render(innerWrap)
+				rows = append(rows, detailRow)
+			}
+		} else {
+			// No detail, just render the row
+			if c.rowFn != nil {
+				if node := c.rowFn(item, idx); node != nil {
+					rows = append(rows, node)
+				}
 			}
 		}
 	}
@@ -321,16 +393,16 @@ func (c *Collate[T]) renderHeader() *Node {
 
 		if activeCount > 0 {
 			badge := Span(
-				"inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold "+
+				"inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold " +
 					"bg-lime-400 text-gray-900",
 			).Text(fmt.Sprintf("%d", activeCount))
 			btnParts = append(btnParts, badge)
 		}
 
 		filterBtn := Button(
-			"inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md cursor-pointer "+
-				"border border-gray-300 dark:border-gray-600 "+
-				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
+			"inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md cursor-pointer " +
+				"border border-gray-300 dark:border-gray-600 " +
+				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
 		).OnClick(JS(fmt.Sprintf(
 			"var p=document.getElementById('%s');p.classList.toggle('hidden')",
@@ -393,8 +465,8 @@ func (c *Collate[T]) renderFilterPanel() *Node {
 	parts = append(parts, c.renderPanelFooter())
 
 	return Div(
-		"hidden absolute right-0 top-full mt-2 z-50 "+
-			"bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 "+
+		"hidden absolute right-0 top-full mt-2 z-50 " +
+			"bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 " +
 			"shadow-2xl p-4 w-96",
 	).ID(panelID).
 		OnClick(JS("event.stopPropagation()")).
@@ -648,8 +720,8 @@ func (c *Collate[T]) renderCollateSelectFilter(ff CollateFilterField, current *C
 	}
 
 	sel := Select(
-		"w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded " +
-			"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 " +
+		"w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded "+
+			"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 "+
 			"focus:outline-none focus:ring-1 focus:ring-blue-500",
 	).ID(selID).
 		Attr("data-filter-field", ff.Field).
@@ -764,9 +836,9 @@ func (c *Collate[T]) renderFooter() *Node {
 	// Reset paging button
 	if c.page > 1 {
 		resetBtn := Button(
-			"inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-md cursor-pointer "+
-				"border border-gray-300 dark:border-gray-600 "+
-				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 "+
+			"inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-md cursor-pointer " +
+				"border border-gray-300 dark:border-gray-600 " +
+				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 " +
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
 		).Text("×").OnClick(JS(c.resetPagingJS()))
 		items = append(items, resetBtn)
@@ -775,9 +847,9 @@ func (c *Collate[T]) renderFooter() *Node {
 	// Load more button
 	if c.hasMore {
 		loadMoreBtn := Button(
-			"inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer "+
-				"border border-gray-300 dark:border-gray-600 "+
-				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
+			"inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer " +
+				"border border-gray-300 dark:border-gray-600 " +
+				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
 		).Text("Načítať ďalšie...").OnClick(JS(c.loadMoreJS()))
 		items = append(items, loadMoreBtn)

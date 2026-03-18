@@ -94,6 +94,7 @@ func newCollate() *r.Collate[Employee] {
 			},
 		).
 		Row(renderEmployeeRow).
+		Detail(renderEmployeeDetail).
 		Empty("Žiadni zamestnanci").
 		EmptyIcon("group_off")
 }
@@ -111,7 +112,12 @@ func renderEmployeeRow(emp *Employee, idx int) *r.Node {
 		statusText = "Neaktívny"
 	}
 
-	return r.Div(stripeCls).Render(
+	return r.Div(stripeCls+" pr-10 relative").Render(
+		// Chevron indicator
+		r.Span("absolute right-3 top-1/2 -translate-y-1/2 text-xl text-gray-400 dark:text-gray-500 transition-transform duration-200").
+			Attr("data-detail-chevron", "1").
+			Style("font-family", "Material Icons Round").
+			Text("expand_more"),
 		r.Div("flex items-center justify-between").Render(
 			// Left: avatar + name + role
 			r.Div("flex items-center gap-3").Render(
@@ -137,6 +143,45 @@ func renderEmployeeRow(emp *Employee, idx int) *r.Node {
 	)
 }
 
+func renderEmployeeDetail(emp *Employee) *r.Node {
+	statusColor := "text-green-600 dark:text-green-400"
+	statusText := "Aktívny"
+	if !emp.Active {
+		statusColor = "text-red-500 dark:text-red-400"
+		statusText = "Neaktívny"
+	}
+
+	labelCls := "text-[11px] font-semibold text-blue-600/70 dark:text-blue-400/70 uppercase tracking-wider"
+	valueCls := "text-[15px] font-bold text-gray-900 dark:text-gray-100 mt-0.5"
+
+	return r.Div("grid grid-cols-3 gap-x-10 gap-y-5 py-1").Render(
+		r.Div("flex flex-col").Render(
+			r.Span(labelCls).Text("ID zamestnanca"),
+			r.Span(valueCls).Text(fmt.Sprintf("#%04d", emp.ID)),
+		),
+		r.Div("flex flex-col").Render(
+			r.Span(labelCls).Text("Mzda"),
+			r.Span(valueCls).Text(fmt.Sprintf("€%.2f", emp.Salary)),
+		),
+		r.Div("flex flex-col").Render(
+			r.Span(labelCls).Text("Oddelenie"),
+			r.Span(valueCls).Text(emp.Department),
+		),
+		r.Div("flex flex-col").Render(
+			r.Span(labelCls).Text("Pozícia"),
+			r.Span(valueCls).Text(emp.Role),
+		),
+		r.Div("flex flex-col").Render(
+			r.Span(labelCls).Text("Dátum nástupu"),
+			r.Span(valueCls).Text(emp.HireDate),
+		),
+		r.Div("flex flex-col").Render(
+			r.Span(labelCls).Text("Status"),
+			r.Span("text-[15px] font-bold mt-0.5 "+statusColor).Text(statusText),
+		),
+	)
+}
+
 func initials(name string) string {
 	parts := strings.Fields(name)
 	if len(parts) == 0 {
@@ -154,12 +199,12 @@ func initials(name string) string {
 // ---------------------------------------------------------------------------
 
 type CollateDataRequest struct {
-	Operation string                    `json:"operation"`
-	Search    string                    `json:"search"`
-	Page      int                       `json:"page"`
-	Limit     int                       `json:"limit"`
-	Order     string                    `json:"order"`
-	Filters   []r.CollateFilterValue    `json:"filters"`
+	Operation string                 `json:"operation"`
+	Search    string                 `json:"search"`
+	Page      int                    `json:"page"`
+	Limit     int                    `json:"limit"`
+	Order     string                 `json:"order"`
+	Filters   []r.CollateFilterValue `json:"filters"`
 }
 
 func handleCollateData(ctx *r.Context) string {
