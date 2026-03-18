@@ -441,7 +441,7 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string) strin
 		if action.rawJS != "" {
 			// Client-side only: raw JS, no WS call
 			fmt.Fprintf(b,
-				"%s.addEventListener('%s',function(){%s});",
+				"%s.addEventListener('%s',function(event){%s});",
 				varName, escJS(event), action.rawJS,
 			)
 		} else if len(action.Collect) > 0 {

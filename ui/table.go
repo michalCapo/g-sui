@@ -394,7 +394,8 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 	).ID(searchID).
 		Attr("placeholder", "Hľadať...").
 		Attr("value", dt.searchValue).
-		On("input", JS(dt.searchDebounceJS(searchID)))
+		On("keydown", JS(dt.searchEnterJS(searchID))).
+		On("search", JS(dt.searchImmediateJS(searchID)))
 
 	searchWrap := Div("relative inline-flex items-center").Render(searchIcon, searchInput)
 	filterBarItems = append(filterBarItems, searchWrap)
@@ -458,17 +459,26 @@ func (dt *DataTable[T]) resetFiltersJS() string {
 	)
 }
 
-func (dt *DataTable[T]) searchDebounceJS(searchID string) string {
+func (dt *DataTable[T]) searchEnterJS(searchID string) string {
 	action := dt.getAction()
 	if action == "" {
 		return ""
 	}
 	return fmt.Sprintf(
-		"clearTimeout(window['__dt_search_%s']);"+
-			"window['__dt_search_%s']=setTimeout(function(){"+
-			"__ws.call('%s',{operation:'search',search:document.getElementById('%s').value,page:1,pageSize:%d,sort:%d,dir:'%s'})"+
-			"},300);",
-		escJS(dt.id), escJS(dt.id),
+		"if(event.key==='Enter'){event.preventDefault();"+
+			"__ws.call('%s',{operation:'search',search:document.getElementById('%s').value,page:1,pageSize:%d,sort:%d,dir:'%s'})}",
+		escJS(action), escJS(searchID),
+		dt.pageSize, dt.sortCol, escJS(dt.sortDir),
+	)
+}
+
+func (dt *DataTable[T]) searchImmediateJS(searchID string) string {
+	action := dt.getAction()
+	if action == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		"__ws.call('%s',{operation:'search',search:document.getElementById('%s').value,page:1,pageSize:%d,sort:%d,dir:'%s'})",
 		escJS(action), escJS(searchID),
 		dt.pageSize, dt.sortCol, escJS(dt.sortDir),
 	)
