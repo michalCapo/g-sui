@@ -19,17 +19,13 @@ if [ -z "$LATEST_TAG" ]; then
 else
     echo "Latest version: $LATEST_TAG"
 
-    # Extract the numeric part after v1. (format: X.X.X)
-    CURRENT=$(echo "$LATEST_TAG" | sed 's/v1\.//')
-
-    # Split into major.minor.patch parts and increment the patch part
-    MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-    MINOR=$(echo "$CURRENT" | cut -d. -f2)
-    PATCH=$(echo "$CURRENT" | cut -d. -f3)
+    # Parse version: vMAJOR.MINOR.PATCH
+    MINOR=$(echo "$LATEST_TAG" | cut -d. -f2)
+    PATCH=$(echo "$LATEST_TAG" | cut -d. -f3)
 
     # Increment patch version
     NEW_PATCH=$((PATCH + 1))
-    NEW_VERSION="v1.$MAJOR.$NEW_PATCH"
+    NEW_VERSION="v1.$MINOR.$NEW_PATCH"
 
     echo "New version: $NEW_VERSION"
 fi
