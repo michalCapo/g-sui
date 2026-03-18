@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Deploy script for g-sui
-# Version format: v1.X.XX (e.g., v1.0.05, v1.0.06, v1.0.07)
-# Each deploy increments by 0.0.01
+# Version format: v1.X.X (e.g., v1.1.0, v1.1.1, v1.1.2)
+# Each deploy increments the patch version by 1
 
 set -e  # Exit on error
 
@@ -13,22 +13,23 @@ MODULE_PATH="github.com/michalCapo/g-sui"
 LATEST_TAG=$(git tag -l "v1.*" | sort -V | tail -1)
 
 if [ -z "$LATEST_TAG" ]; then
-    # No v1.* tags exist, start at v1.0.05
-    NEW_VERSION="v1.0.05"
+    # No v1.* tags exist, start at v1.1.0
+    NEW_VERSION="v1.1.0"
     echo "No v1.* tags found. Starting at version $NEW_VERSION"
 else
     echo "Latest version: $LATEST_TAG"
 
-    # Extract the numeric part after v1. (format: X.XX)
+    # Extract the numeric part after v1. (format: X.X.X)
     CURRENT=$(echo "$LATEST_TAG" | sed 's/v1\.//')
 
-    # Split into major.minor parts and increment the last part
+    # Split into major.minor.patch parts and increment the patch part
     MAJOR=$(echo "$CURRENT" | cut -d. -f1)
     MINOR=$(echo "$CURRENT" | cut -d. -f2)
+    PATCH=$(echo "$CURRENT" | cut -d. -f3)
 
-    # Increment minor version
-    NEW_MINOR=$(echo "$MINOR" | awk '{printf "%02d", $1 + 1}')
-    NEW_VERSION="v1.$MAJOR.$NEW_MINOR"
+    # Increment patch version
+    NEW_PATCH=$((PATCH + 1))
+    NEW_VERSION="v1.$MAJOR.$NEW_PATCH"
 
     echo "New version: $NEW_VERSION"
 fi
