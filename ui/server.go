@@ -380,7 +380,7 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <script>%s</script>
-<style>body{opacity:0}body.__gsui-ready{opacity:1;transition:opacity 80ms ease-out}html:not(.__gsui-done)::before{content:'Loading\2026';position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;font:500 1.6rem/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.03em;color:var(--gsui-loader-fg,#a0a0a0);background:var(--gsui-loader-bg,#fff);animation:_gsui-pulse 1.4s ease-in-out infinite}html.dark:not(.__gsui-done)::before{--gsui-loader-bg:#0a0a0a;--gsui-loader-fg:#555}@keyframes _gsui-pulse{0%%,100%%{opacity:.4}50%%{opacity:1}}</style>
+
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" async></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"></noscript>
@@ -395,13 +395,6 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 <body>
 <script>
 %s
-;(function(){function reveal(){document.body.classList.add('__gsui-ready');document.documentElement.classList.add('__gsui-done')}
-var tw=document.querySelector('style[data-tailwindcss]');
-if(tw){reveal();return;}
-var mo=new MutationObserver(function(muts){for(var i=0;i<muts.length;i++){for(var j=0;j<muts[i].addedNodes.length;j++){var n=muts[i].addedNodes[j];if(n.tagName==='STYLE'&&n.hasAttribute('data-tailwindcss')){mo.disconnect();reveal();return;}}}});
-mo.observe(document.head,{childList:true});
-setTimeout(function(){mo.disconnect();reveal()},1200);
-})();
 </script>
 </body>
 </html>`, faviconTag, titleTag, descTag, themeInitJS, darkOverrideCSS, customHead, jsBody)

@@ -1583,21 +1583,6 @@ ui.NewStepProgress(2, 5).
 
 ---
 
-## Page Loading Screen
-
-On a full page load (hard refresh or first visit), Tailwind CSS is loaded asynchronously from CDN. There is a brief window where the DOM is built but unstyled, which would cause a flash of unstyled content (FOUC).
-
-g-sui prevents this with a built-in loading screen:
-
-1. **Body hidden** -- `body` starts with `opacity: 0`, hiding all unstyled content immediately
-2. **Loading overlay** -- a fullscreen overlay on `<html>` displays a centered pulsing "Loading..." message (dark-mode aware)
-3. **Reveal** -- once Tailwind injects its processed `<style data-tailwindcss>` element, both the overlay is removed and the body fades in with an 80ms transition
-4. **Safety timeout** -- if Tailwind CDN is slow or fails, the page reveals after 1.2 seconds regardless
-
-This only affects full page loads. SPA-style WebSocket navigations are unaffected since they only swap inner content.
-
-The loading screen requires no configuration -- it is built into the HTML shell automatically.
-
 ---
 
 ## Security
