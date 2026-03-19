@@ -10,7 +10,7 @@ set -e  # Exit on error
 MODULE_PATH="github.com/michalCapo/g-sui"
 
 # Get the latest tag matching v1.* pattern (new versioning)
-LATEST_TAG=$(git tag -l "v1.*" | sort -V | tail -1)
+# LATEST_TAG=$(git tag -l "v1.*" | sort -V | tail -1)
 
 if [ -z "$LATEST_TAG" ]; then
     # No v1.* tags exist, start at v1.1.0
