@@ -353,7 +353,7 @@ func (c *Collate[T]) renderHeader() *Node {
 			"placeholder-gray-400 dark:placeholder-gray-500 "+
 			"focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400",
 	).ID(searchID).
-		Attr("placeholder", "Hľadať...").
+		Attr("placeholder", "Search...").
 		Attr("value", c.search).
 		On("keydown", JS(c.searchEnterJS(searchID))).
 		On("search", JS(c.searchImmediateJS(searchID)))
@@ -437,7 +437,7 @@ func (c *Collate[T]) renderFilterPanel() *Node {
 	// Header
 	parts = append(parts,
 		Div("flex items-center justify-between mb-3").Render(
-			Span("text-sm font-semibold text-gray-700 dark:text-gray-300").Text("Filtre & Zoradenie"),
+			Span("text-sm font-semibold text-gray-700 dark:text-gray-300").Text("Filters & Sorting"),
 			Button(
 				"w-8 h-8 rounded-full flex items-center justify-center "+
 					"hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors",
@@ -481,7 +481,7 @@ func (c *Collate[T]) renderSortSection() *Node {
 	}
 
 	return Div("flex flex-col gap-2 mb-3").Render(
-		Div("text-xs font-bold text-gray-600 dark:text-gray-400 mb-1").Text("Zoradiť podľa"),
+		Div("text-xs font-bold text-gray-600 dark:text-gray-400 mb-1").Text("Sort by"),
 		Div("flex flex-wrap gap-1").Render(buttons...),
 	)
 }
@@ -605,7 +605,7 @@ func (c *Collate[T]) renderFiltersSection() *Node {
 
 	return Div("flex flex-col gap-2 mt-2 pt-3 border-t border-gray-200 dark:border-gray-700").Render(
 		append([]*Node{
-			Div("text-xs font-bold text-gray-600 dark:text-gray-400 mb-1").Text("Filtre"),
+			Div("text-xs font-bold text-gray-600 dark:text-gray-400 mb-1").Text("Filters"),
 		}, items...)...,
 	)
 }
@@ -661,27 +661,27 @@ func (c *Collate[T]) renderCollateDateFilter(ff CollateFilterField, current *Col
 	return Div("flex flex-col gap-1").Render(
 		Label("text-xs font-medium text-gray-600 dark:text-gray-400").Text(ff.Label),
 		Div("flex items-center gap-2").Render(
-			Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("Od"),
+			Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("From"),
 			IDate(inputCls).ID(fromID).
 				Attr("value", fromVal).
 				Attr("data-filter-field", ff.Field).
 				Attr("data-filter-type", "date-from"),
 		),
 		Div("flex items-center gap-2").Render(
-			Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("Do"),
+			Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("To"),
 			IDate(inputCls).ID(toID).
 				Attr("value", toVal).
 				Attr("data-filter-type", "date-to"),
 		),
 		// Quick date buttons
 		Div("flex flex-wrap gap-1 mt-1").Render(
-			c.collateQuickDateBtn(fromID, toID, "Dnes", "today"),
-			c.collateQuickDateBtn(fromID, toID, "Tento týždeň", "thisweek"),
-			c.collateQuickDateBtn(fromID, toID, "Tento mesiac", "thismonth"),
-			c.collateQuickDateBtn(fromID, toID, "Tento kvartál", "thisquarter"),
-			c.collateQuickDateBtn(fromID, toID, "Tento rok", "thisyear"),
-			c.collateQuickDateBtn(fromID, toID, "Minulý mesiac", "lastmonth"),
-			c.collateQuickDateBtn(fromID, toID, "Minulý rok", "lastyear"),
+			c.collateQuickDateBtn(fromID, toID, "Today", "today"),
+			c.collateQuickDateBtn(fromID, toID, "This week", "thisweek"),
+			c.collateQuickDateBtn(fromID, toID, "This month", "thismonth"),
+			c.collateQuickDateBtn(fromID, toID, "This quarter", "thisquarter"),
+			c.collateQuickDateBtn(fromID, toID, "This year", "thisyear"),
+			c.collateQuickDateBtn(fromID, toID, "Last month", "lastmonth"),
+			c.collateQuickDateBtn(fromID, toID, "Last year", "lastyear"),
 		),
 	)
 }
@@ -728,7 +728,7 @@ func (c *Collate[T]) renderCollateSelectFilter(ff CollateFilterField, current *C
 		Attr("data-filter-type", "select")
 
 	// Empty option
-	emptyOpt := Option().Attr("value", "").Text("— Všetky —")
+	emptyOpt := Option().Attr("value", "").Text("— All —")
 	if currentVal == "" {
 		emptyOpt.Attr("selected", "selected")
 	}
@@ -787,7 +787,7 @@ func (c *Collate[T]) renderPanelFooter() *Node {
 					Span("text-base leading-none").
 						Style("font-family", "Material Icons Round").
 						Text("check"),
-					Span().Text("Použiť"),
+					Span().Text("Apply"),
 				),
 		),
 	)
@@ -829,7 +829,7 @@ func (c *Collate[T]) renderFooter() *Node {
 			showing = c.totalItems
 		}
 		countText := Span("text-sm text-gray-500 dark:text-gray-400").
-			Text(fmt.Sprintf("%d z %d", showing, c.totalItems))
+			Text(fmt.Sprintf("%d of %d", showing, c.totalItems))
 		items = append(items, countText)
 	}
 
@@ -851,7 +851,7 @@ func (c *Collate[T]) renderFooter() *Node {
 				"border border-gray-300 dark:border-gray-600 " +
 				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Text("Načítať ďalšie...").OnClick(JS(c.loadMoreJS()))
+		).Text("Load more...").OnClick(JS(c.loadMoreJS()))
 		items = append(items, loadMoreBtn)
 	}
 

@@ -403,7 +403,7 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 			"placeholder-gray-400 dark:placeholder-gray-500 "+
 			"focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400",
 	).ID(searchID).
-		Attr("placeholder", "Hľadať...").
+		Attr("placeholder", "Search...").
 		Attr("value", dt.searchValue).
 		On("keydown", JS(dt.searchEnterJS(searchID))).
 		On("search", JS(dt.searchImmediateJS(searchID)))
@@ -435,7 +435,7 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 		resetBtn := Button(
 			"text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 " +
 				"cursor-pointer transition-colors",
-		).Text("Zrušiť").OnClick(JS(dt.resetFiltersJS()))
+		).Text("Reset").OnClick(JS(dt.resetFiltersJS()))
 		filterBarItems = append(filterBarItems, resetBtn)
 	}
 
@@ -779,16 +779,16 @@ func (dt *DataTable[T]) renderFilterPopupInline(colIdx int) *Node {
 		content = renderTextFilter(colIdx, currentValue)
 	}
 
-	// Action buttons: [Použiť]  Zrušiť
+	// Action buttons: [Apply]  Cancel
 	actions := Div("flex items-center gap-2 mt-2.5").Render(
 		Button(
 			"px-3 py-1.5 text-xs font-medium rounded-md cursor-pointer "+
 				"bg-gray-900 dark:bg-gray-700 text-white dark:text-gray-100 "+
 				"hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors",
-		).Text("Použiť").OnClick(JS(dt.applyFilterJS(colIdx))),
+		).Text("Apply").OnClick(JS(dt.applyFilterJS(colIdx))),
 		Button(
 			"text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text("Zrušiť").OnClick(JS(fmt.Sprintf(
+		).Text("Cancel").OnClick(JS(fmt.Sprintf(
 			"event.stopPropagation();document.getElementById('%s').style.display='none'",
 			escJS(popupID),
 		))),
@@ -927,7 +927,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 			showing = dt.totalItems
 		}
 		countText := Span("text-sm text-gray-500 dark:text-gray-400").
-			Text(fmt.Sprintf("%d z %d", showing, dt.totalItems))
+			Text(fmt.Sprintf("%d of %d", showing, dt.totalItems))
 		footerItems = append(footerItems, countText)
 	}
 
@@ -948,7 +948,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 				"border border-gray-300 dark:border-gray-600 "+
 				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Text("Načítať ďalšie...").OnClick(JS(dt.loadMoreJS()))
+		).Text("Load more...").OnClick(JS(dt.loadMoreJS()))
 		footerItems = append(footerItems, loadMoreBtn)
 	}
 
@@ -1033,16 +1033,16 @@ func FilterPopup(colIdx int, colLabel string, filterType FilterType, options []s
 		content = renderTextFilter(colIdx, currentValue)
 	}
 
-	// Action buttons: Použiť (black) left, Zrušiť (text) right, no border
+	// Action buttons: Apply (black) left, Cancel (text) right, no border
 	actions := Div("flex items-center gap-2 mt-2.5").Render(
 		Button(
 			"px-3 py-1.5 text-xs font-medium rounded-md cursor-pointer "+
 				"bg-gray-900 dark:bg-gray-700 text-white dark:text-gray-100 "+
 				"hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors",
-		).Text("Použiť").OnClick(JS(fmt.Sprintf("applyFilter(%d)", colIdx))),
+		).Text("Apply").OnClick(JS(fmt.Sprintf("applyFilter(%d)", colIdx))),
 		Button(
 			"text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text("Zrušiť").OnClick(JS(fmt.Sprintf(
+		).Text("Cancel").OnClick(JS(fmt.Sprintf(
 			"document.getElementById('filter-popup-%d').style.display='none'", colIdx,
 		))),
 	)
@@ -1068,9 +1068,9 @@ func renderTextFilter(colIdx int, currentValue *FilterValue) *Node {
 		val   string
 		label string
 	}{
-		{string(OpContains), "Obsahuje"},
-		{string(OpStartsWith), "Začína na"},
-		{string(OpEquals), "Rovná sa"},
+		{string(OpContains), "Contains"},
+		{string(OpStartsWith), "Starts with"},
+		{string(OpEquals), "Equals"},
 	}
 
 	for _, op := range opOptions {
@@ -1087,7 +1087,7 @@ func renderTextFilter(colIdx int, currentValue *FilterValue) *Node {
 			"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 "+
 			"focus:outline-none focus:ring-1 focus:ring-blue-500",
 	).ID(fmt.Sprintf("filter-%d-val", colIdx)).
-		Attr("placeholder", "Hľadaný text...").
+		Attr("placeholder", "Search text...").
 		Attr("value", value)
 
 	return Div().Render(opSelect, valInput)
@@ -1107,25 +1107,25 @@ func renderDateFilter(colIdx int, currentValue *FilterValue) *Node {
 
 	// Od (From) row
 	fromRow := Div("flex items-center gap-2 mb-1.5").Render(
-		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("Od"),
+		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("From"),
 		IDate(inputCls).ID(fmt.Sprintf("filter-%d-from", colIdx)).Attr("value", from),
 	)
 
-	// Do (To) row
+	// To row
 	toRow := Div("flex items-center gap-2 mb-2").Render(
-		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("Do"),
+		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("To"),
 		IDate(inputCls).ID(fmt.Sprintf("filter-%d-to", colIdx)).Attr("value", to),
 	)
 
 	// Quick select buttons
 	quickButtons := Div("flex flex-wrap gap-1").Render(
-		renderQuickDateBtn(colIdx, "Dnes", "today"),
-		renderQuickDateBtn(colIdx, "Tento týždeň", "thisweek"),
-		renderQuickDateBtn(colIdx, "Tento mesiac", "thismonth"),
-		renderQuickDateBtn(colIdx, "Tento kvartál", "thisquarter"),
-		renderQuickDateBtn(colIdx, "Tento rok", "thisyear"),
-		renderQuickDateBtn(colIdx, "Minulý mesiac", "lastmonth"),
-		renderQuickDateBtn(colIdx, "Minulý rok", "lastyear"),
+		renderQuickDateBtn(colIdx, "Today", "today"),
+		renderQuickDateBtn(colIdx, "This week", "thisweek"),
+		renderQuickDateBtn(colIdx, "This month", "thismonth"),
+		renderQuickDateBtn(colIdx, "This quarter", "thisquarter"),
+		renderQuickDateBtn(colIdx, "This year", "thisyear"),
+		renderQuickDateBtn(colIdx, "Last month", "lastmonth"),
+		renderQuickDateBtn(colIdx, "Last year", "lastyear"),
 	)
 
 	return Div().Render(fromRow, toRow, quickButtons)
@@ -1176,12 +1176,12 @@ func renderNumberFilter(colIdx int, currentValue *FilterValue) *Node {
 		val   string
 		label string
 	}{
-		{string(OpRange), "Rozsah"},
-		{string(OpGTE), "≥ Väčšie alebo rovné"},
-		{string(OpLTE), "≤ Menšie alebo rovné"},
-		{string(OpGT), "> Väčšie ako"},
-		{string(OpLT), "< Menšie ako"},
-		{string(OpEquals), "= Rovná sa"},
+		{string(OpRange), "Range"},
+		{string(OpGTE), "≥ Greater or equal"},
+		{string(OpLTE), "≤ Less or equal"},
+		{string(OpGT), "> Greater than"},
+		{string(OpLT), "< Less than"},
+		{string(OpEquals), "= Equals"},
 	}
 
 	for _, op := range opOptions {
@@ -1200,9 +1200,9 @@ func renderNumberFilter(colIdx int, currentValue *FilterValue) *Node {
 	toID := fmt.Sprintf("filter-%d-to", colIdx)
 	isRange := operator == OpRange
 
-	fromPlaceholder := "Hodnota"
+	fromPlaceholder := "Value"
 	if isRange {
-		fromPlaceholder = "Od"
+		fromPlaceholder = "From"
 	}
 
 	fromInput := INumber(inputCls).ID(fromID).
@@ -1215,13 +1215,13 @@ func renderNumberFilter(colIdx int, currentValue *FilterValue) *Node {
 	}
 	toWrap := Div("flex gap-1.5").ID(fmt.Sprintf("filter-%d-to-wrap", colIdx)).
 		Style("display", toDisplay).
-		Render(INumber(inputCls).ID(toID).Attr("placeholder", "Do").Attr("value", to))
+		Render(INumber(inputCls).ID(toID).Attr("placeholder", "To").Attr("value", to))
 
 	// Toggle "to" field visibility and "from" placeholder based on operator
 	opSelect.On("change", JS(fmt.Sprintf(
 		"var isRange=this.value==='range';"+
 			"document.getElementById('%s').style.display=isRange?'flex':'none';"+
-			"document.getElementById('%s').placeholder=isRange?'Od':'Hodnota';",
+			"document.getElementById('%s').placeholder=isRange?'From':'Value';",
 		escJS(fmt.Sprintf("filter-%d-to-wrap", colIdx)), escJS(fromID),
 	)))
 
@@ -1242,12 +1242,12 @@ func renderSelectFilter(colIdx int, options []string, currentValue *FilterValue)
 	header := Div("flex items-center justify-between mb-2").Render(
 		Button(
 			"text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text("Vybrať všetko").OnClick(JS(fmt.Sprintf(
+		).Text("Select all").OnClick(JS(fmt.Sprintf(
 			"document.querySelectorAll('[id^=\"filter-%d-opt-\"]').forEach(function(c){c.checked=true})", colIdx,
 		))),
 		Button(
 			"text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text("Zrušiť výber").OnClick(JS(fmt.Sprintf(
+		).Text("Clear selection").OnClick(JS(fmt.Sprintf(
 			"document.querySelectorAll('[id^=\"filter-%d-opt-\"]').forEach(function(c){c.checked=false})", colIdx,
 		))),
 	)
