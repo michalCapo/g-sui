@@ -158,18 +158,108 @@ app.DELETE("/api/items/:id", deleteHandler)
 
 Standard HTTP handlers for REST endpoints or webhooks. Path parameters use `:param` syntax.
 
-### Layout
+### Layout (Built-in)
 
 ```go
 app.Layout(func(ctx *ui.Context) *ui.Node {
     return ui.Div("min-h-screen").Render(
         ui.Nav("bg-white shadow").Render(/* nav content */),
-        ui.Main("max-w-5xl mx-auto").ID("content"),
+        ui.Main("max-w-5xl mx-auto").ID("__content__"),
     )
 })
 ```
 
-Sets a global layout handler. The layout wraps page content for all routes.
+Sets a global layout handler. The layout wraps page content for all routes. The layout tree **must** contain exactly one element with `ID("__content__")` — the framework injects the page handler's output there on initial render, and swaps only its innerHTML on browser back/forward navigation.
+
+> **Note:** The `"__content__"` ID is hardcoded in the framework. If you need a custom content ID, use the manual layout pattern below.
+
+### Layout (Manual — Custom Content ID)
+
+For full control over the content container ID and SPA navigation, bypass `app.Layout()` and use a manual layout wrapper with `ui.Target()`:
+
+```go
+// pages/pages.go — shared across all pages
+package pages
+
+import r "github.com/michalCapo/g-sui/ui"
+
+// ContentID is the shared target ID for the main content area.
+var ContentID = r.Target()
+```
+
+Define a layout function in your main package that wraps page content and assigns the `ContentID`:
+
+```go
+// main.go
+func layout(content *r.Node) *r.Node {
+    return r.Div("min-h-screen bg-gray-50").Render(
+        r.Nav("bg-white shadow").Render(
+            r.Div("mx-auto px-4 py-3 flex items-center gap-2").Render(
+                r.Button("px-3 py-1 rounded text-sm").
+                    Text("Home").
+                    OnClick(&r.Action{Name: "nav.home"}),
+                r.Button("px-3 py-1 rounded text-sm").
+                    Text("About").
+                    OnClick(&r.Action{Name: "nav.about"}),
+            ),
+        ),
+        r.Main("max-w-5xl mx-auto px-4 py-8").ID(pages.ContentID).Render(
+            content,
+        ),
+    )
+}
+```
+
+Register pages by wrapping their output with `layout()`, and register SPA navigation actions using a `NavTo` helper that targets `ContentID`:
+
+```go
+// pages/pages.go
+// NavTo creates a navigation action handler that replaces the content
+// area and updates the browser URL via pushState.
+func NavTo(url string, content func() *r.Node) r.ActionHandler {
+    return func(ctx *r.Context) string {
+        return r.NewResponse().
+            Inner(ContentID, content()).
+            Navigate(url).
+            Build()
+    }
+}
+```
+
+```go
+// main.go
+func main() {
+    app := r.NewApp()
+
+    // Full-page route — layout wraps the page content
+    app.Page("/", func(ctx *r.Context) *r.Node {
+        return layout(pages.Home(ctx))
+    })
+    // SPA navigation — only swaps the content area, layout stays
+    app.Action("nav.home", pages.NavTo("/", func() *r.Node {
+        return pages.Home(nil)
+    }))
+
+    app.Page("/about", func(ctx *r.Context) *r.Node {
+        return layout(pages.About(ctx))
+    })
+    app.Action("nav.about", pages.NavTo("/about", func() *r.Node {
+        return pages.About(nil)
+    }))
+
+    app.Listen(":8080")
+}
+```
+
+**How it works:**
+
+| Scenario | What happens |
+|----------|-------------|
+| Full page load (GET) | `app.Page` handler returns `layout(pageContent)` — the entire page including shell |
+| SPA navigation (button click) | `NavTo` swaps only the `ContentID` element's innerHTML via `Inner()` and updates the URL with `Navigate()` |
+| Browser back/forward | The built-in `__nav` action fires, but since no `app.Layout()` is registered, it clears `document.body` and re-renders the full page tree |
+
+This pattern is used by the `example/` application. See `example/main.go` and `example/pages/routes.go` for the complete implementation.
 
 ### Handler
 
@@ -199,6 +289,36 @@ app.Favicon = "/assets/favicon.svg"
 ```
 
 Serves static files from an embedded or on-disk filesystem. The `Favicon` field adds a `<link rel="icon">` tag to the HTML shell.
+
+### CSS (App-Level)
+
+```go
+app.CSS(
+    []string{"https://fonts.googleapis.com/css2?family=Oswald&display=swap"},
+    `body { font-family: 'Oswald', sans-serif; }`,
+)
+```
+
+Registers external stylesheets and/or inline CSS rules that apply to every page. Tags are injected into the HTML `<head>` server-side, so they load immediately without JavaScript. Pass `nil` for `urls` if you only need inline CSS, or `""` for `css` if you only need external links.
+
+### CSS (Per-Page / Per-Component)
+
+```go
+ui.CSS(
+    []string{"https://cdn.example.com/lib.css"},
+    `.hero { animation: fadeIn 0.3s ease-out; }
+     @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }`,
+)
+```
+
+Package-level function that returns a hidden `*Node`. Place it anywhere in your page or component tree -- it injects `<link>` and `<style>` elements into `<head>` at runtime via JS. External links are deduplicated by `href` to avoid double-loading on SPA navigations.
+
+**When to use which:**
+
+| Method | Scope | Injection | Deduplication |
+|--------|-------|-----------|---------------|
+| `app.CSS(urls, css)` | Global (all pages) | Server-side `<head>` | N/A (rendered once) |
+| `ui.CSS(urls, css)` | Per-page / per-component | Client-side JS | External links deduped by `href` |
 
 ### Listen
 
@@ -570,6 +690,7 @@ ui.NewBadge("Active").
     BadgeSize("md").          // sm, md, lg
     BadgeIcon("check_circle").
     Square().                 // rounded-md instead of pill
+    BadgeClass("ml-2").       // additional CSS classes
     Build()
 
 // Dot variant
@@ -585,6 +706,8 @@ ui.NewButton("Save").
     BtnIcon("save").
     Disabled(false).
     Submit("formID").          // makes type="submit"
+    Reset().                   // makes type="reset"
+    BtnClass("mt-4").          // additional CSS classes
     OnBtnClick(action).
     Build()
 
@@ -620,6 +743,7 @@ ui.NewAccordion().
     Item("Section 3", content3).
     Multiple(false).                     // one at a time
     Variant("bordered").                 // bordered, ghost, separated
+    AccordionClass("mb-4").              // additional CSS classes
     Build()
 ```
 
@@ -632,6 +756,7 @@ ui.NewTabs().
     Tab("Settings", settingsNode, "settings").
     Active(0).                                    // 0-based index
     TabStyle("underline").                        // underline, pills, boxed, vertical
+    TabsClass("mb-6").                            // additional CSS classes
     Build()
 ```
 
@@ -647,6 +772,7 @@ ui.NewDropdown(triggerButton).
     DropdownDivider().
     DropdownDanger("Delete", deleteAction, "delete").
     DropdownPosition("bottom-left").  // bottom-left, bottom-right, top-left, top-right
+    DropdownClass("ml-auto").         // additional CSS classes
     Build()
 ```
 
@@ -659,6 +785,7 @@ ui.NewTooltip("Helpful hint").
     TooltipPosition("top").     // top, bottom, left, right
     TooltipVariant("dark").     // dark, light, blue, green, red, yellow
     Delay(200).                 // ms, 0 = instant (CSS only)
+    TooltipClass("z-50").       // additional CSS classes
     Wrap(targetElement)
 ```
 
@@ -675,6 +802,7 @@ ui.NewProgress().
     Indeterminate(false).
     ProgressLabel("Loading...").
     LabelPosition("outside").                 // inside (lg/xl only), outside
+    ProgressClass("mb-4").                    // additional CSS classes
     Build()
 ```
 
@@ -684,6 +812,7 @@ ui.NewProgress().
 ui.NewStepProgress(2, 5).     // current step, total steps
     StepColor("bg-blue-500").
     StepSize("md").
+    StepClass("mb-6").        // additional CSS classes
     Build()
 ```
 
@@ -798,6 +927,7 @@ form.Text("Name", "name").
     Value("John").
     PatternValidation(`[A-Za-z ]+`).
     Err("Name must contain only letters").
+    IsChecked(true).          // checkbox checked state
     Class("custom-input-class").
     WrapClass("custom-wrapper-class").
     Render()
@@ -866,6 +996,7 @@ type Invoice struct {
 }
 
 table := ui.NewDataTable[Invoice]("invoice-table").
+    Action("invoice.data").
     Head("Number").
     Head("Amount", "text-right").
     Head("Status").
@@ -879,13 +1010,11 @@ table := ui.NewDataTable[Invoice]("invoice-table").
         return ui.Button("text-sm text-blue-600").Text("View").
             OnClick(&ui.Action{Name: "invoice.view", Data: map[string]any{"id": inv.ID}})
     }).
-    Searchable("invoice.search").
     Sortable(0, 1, 2).
-    SortAction("invoice.sort").
-    Paginated("invoice.page", 1, 10).
-    TotalItems(42).
-    Export("invoice.export").
     Sort(0, "asc").
+    Page(1).
+    PageSize(10).
+    TotalItems(42).
     Search("").
     Empty("No invoices found").
     Render(invoices)
@@ -994,11 +1123,13 @@ ui.NewSimpleTable(3, "w-full").
     CellText("John Doe").
     CellText("john@example.com").
     CellText("Admin").
-    CellText("Jane Smith").
+    Cell(ui.NewBadge("Active").Color("green").Build()).  // *Node cell
     CellText("jane@example.com").
     CellText("User").
     Build()
 ```
+
+`CellText(text)` adds a plain text cell. `Cell(node)` adds a `*Node` cell for custom content (badges, buttons, etc.). Rows auto-flush when `numCols` is reached.
 
 ---
 
@@ -1312,6 +1443,22 @@ go get github.com/michalCapo/g-sui@v1.001
 
 **Collate Filter Types:** `CollateBool`, `CollateDateRange`, `CollateSelect`, `CollateMultiCheck`
 
+#### App Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `Page` | `(path string, handler PageHandler)` | Register GET page route |
+| `Action` | `(name string, handler ActionHandler)` | Register WS action handler |
+| `Layout` | `(handler LayoutHandler)` | Set global layout (uses `__content__` ID) |
+| `CSS` | `(urls []string, css string)` | Global stylesheets/inline CSS in `<head>` |
+| `GET` | `(path string, handler http.HandlerFunc)` | Register HTTP GET handler |
+| `POST` | `(path string, handler http.HandlerFunc)` | Register HTTP POST handler |
+| `DELETE` | `(path string, handler http.HandlerFunc)` | Register HTTP DELETE handler |
+| `Assets` | `(fsys fs.FS, dir, prefix string)` | Serve static files |
+| `Handler` | `() http.Handler` | Returns mux for custom server setup |
+| `Listen` | `(addr string) error` | Start HTTP server |
+| `Broadcast` | `(js string)` | Send JS to all connected clients |
+
 #### Global Functions
 
 | Function | Returns | Description |
@@ -1319,6 +1466,7 @@ go get github.com/michalCapo/g-sui@v1.001
 | `NewApp()` | `*App` | Create application |
 | `El(tag, class...)` | `*Node` | Create element |
 | `Target()` | `string` | Generate random DOM ID |
+| `CSS(urls, css)` | `*Node` | Per-page CSS injection (deduped links) |
 | `JS(code)` | `*Action` | Client-side-only action |
 | `If(cond, node)` | `*Node` | Conditional render |
 | `Or(cond, yes, no)` | `*Node` | Binary conditional |

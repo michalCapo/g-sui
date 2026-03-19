@@ -97,8 +97,32 @@ func (app *App) Page(path string, handler PageHandler) {
 	app.mu.Unlock()
 }
 
+// CSS registers external stylesheets and/or inline CSS rules that apply
+// to every page in the application. The tags are injected into the HTML
+// <head> server-side, so they load immediately without JavaScript.
+//
+//	app.CSS(
+//	    []string{"https://fonts.googleapis.com/css2?family=Oswald&display=swap"},
+//	    `body { font-family: 'Oswald', sans-serif; }`,
+//	)
+//
+// Pass nil for urls if you only need inline CSS, or "" for css if you
+// only need external links.
+func (app *App) CSS(urls []string, css string) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	for _, u := range urls {
+		app.HTMLHead = append(app.HTMLHead,
+			fmt.Sprintf(`<link rel="stylesheet" href="%s">`, u))
+	}
+	if css != "" {
+		app.HTMLHead = append(app.HTMLHead,
+			fmt.Sprintf("<style>%s</style>", css))
+	}
+}
+
 // Action registers a named server action callable via WebSocket.
-// The handler receives a Context (with .Bind() for payload) and returns
+// The handler receives a Context (with .Body() for payload) and returns
 // a raw JS string that the client executes directly.
 func (app *App) Action(name string, handler ActionHandler) {
 	app.mu.Lock()
