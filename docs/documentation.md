@@ -302,11 +302,11 @@ app.CSS(
 
 Registers external stylesheets and/or inline CSS rules that apply to every page. Tags are injected into the HTML `<head>` server-side, so they load immediately without JavaScript. Pass `nil` for `urls` if you only need inline CSS, or `""` for `css` if you only need external links.
 
-### CSS (Per-Page via Context)
+### HeadCSS (Per-Page via Context)
 
 ```go
 app.Page("/about", func(ctx *ui.Context) *ui.Node {
-    ctx.CSS(
+    ctx.HeadCSS(
         []string{"https://cdn.example.com/lib.css"},
         `.hero { animation: fadeIn 0.3s ease-out; }
          @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }`,
@@ -342,7 +342,7 @@ Registers a JavaScript block that runs once when the page loads. On a full page 
 | Method | Scope | Injection | Deduplication |
 |--------|-------|-----------|---------------|
 | `app.CSS(urls, css)` | Global (all pages) | Server-side `<head>` | N/A (rendered once) |
-| `ctx.CSS(urls, css)` | Per-page | Server-side `<head>` on full load; JS injection on SPA nav | External links deduped by `href` |
+| `ctx.HeadCSS(urls, css)` | Per-page | Server-side `<head>` on full load; JS injection on SPA nav | External links deduped by `href` |
 | `ctx.HeadJS(code)` | Per-page | `<script>` in `<head>` on full load; prepended JS on SPA nav | N/A |
 
 ### Listen
