@@ -51,6 +51,7 @@ ActionHandler → JS string       ←→  WebSocket (__ws)
 - **No client framework** -- the client is a ~120-line WS connector with offline overlay and auto-reconnect
 - **Tailwind CSS** -- loaded via browser CDN (`@tailwindcss/browser@4`)
 - **Dark mode** -- built-in theme system (System/Light/Dark) with `ThemeSwitcher` component
+- **Localization** -- per-component locale structs; English by default, override only what you need
 
 ## Features
 
@@ -164,6 +165,25 @@ ui.ThemeSwitcher()  // System -> Light -> Dark toggle
 ```
 
 Uses Tailwind `dark:` variants. Theme is persisted in localStorage and applied before render to prevent FOUC.
+
+## Localization
+
+Components use English text by default. Pass a locale struct only when you need non-English:
+
+```go
+// DataTable
+table.Locale(&ui.TableLocale{Search: "Hledat...", Apply: "Pouzit", NoData: "Zadna data"})
+
+// Collate
+collate.Locale(&ui.CollateLocale{Filter: "Filtr", Reset: "Obnovit", SortBy: "Radit dle"})
+
+// Confirm dialog
+ui.ConfirmDialog("Smazat?", "Opravdu?", action, ui.ConfirmOpt{
+    Locale: &ui.ConfirmLocale{Cancel: "Zrusit", Confirm: "Potvrdit"},
+})
+```
+
+Each component has its own locale type (`TableLocale`, `CollateLocale`, `ConfirmLocale`, `ThemeSwitcherLocale`, `StepProgressLocale`) with only the fields it uses. See [`docs/documentation.md`](docs/documentation.md#localization) for all fields and defaults.
 
 ## Security
 

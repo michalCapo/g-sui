@@ -903,15 +903,33 @@ func (c *CardBuilder) Build() *Node {
 // 10. Confirm Dialog
 // ---------------------------------------------------------------------------
 
+// ConfirmLocale holds translatable strings for ConfirmDialog.
+type ConfirmLocale struct {
+	Cancel  string
+	Confirm string
+}
+
 // ConfirmDialog creates a fixed-overlay confirmation dialog with title,
 // message, a confirm button (red), and a cancel button.
-func ConfirmDialog(title, message string, confirmAction *Action, cancelAction ...*Action) *Node {
-	overlayID := Target()
+// ConfirmOpt configures optional ConfirmDialog settings.
+type ConfirmOpt struct {
+	CancelAction *Action        // custom cancel action; nil = dismiss overlay
+	Locale       *ConfirmLocale // per-instance locale; nil = English default
+}
 
+func ConfirmDialog(title, message string, confirmAction *Action, opts ...ConfirmOpt) *Node {
+	overlayID := Target()
+	loc := &ConfirmLocale{Cancel: "Cancel", Confirm: "Confirm"}
 	var cancel *Action
-	if len(cancelAction) > 0 && cancelAction[0] != nil {
-		cancel = cancelAction[0]
-	} else {
+	if len(opts) > 0 {
+		if opts[0].CancelAction != nil {
+			cancel = opts[0].CancelAction
+		}
+		if opts[0].Locale != nil {
+			loc = opts[0].Locale
+		}
+	}
+	if cancel == nil {
 		cancel = JS(RemoveEl(overlayID))
 	}
 
@@ -922,9 +940,9 @@ func ConfirmDialog(title, message string, confirmAction *Action, cancelAction ..
 		P("text-sm text-gray-600 dark:text-gray-400 mt-2").Text(message),
 		Div("flex justify-end gap-3 mt-6").Render(
 			Button("px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer").
-				Text("Cancel").OnClick(cancel),
+				Text(loc.Cancel).OnClick(cancel),
 			Button("px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 cursor-pointer").
-				Text("Confirm").OnClick(confirmAction),
+				Text(loc.Confirm).OnClick(confirmAction),
 		),
 	)
 
@@ -1234,6 +1252,13 @@ type StepProgressBuilder struct {
 	color   string
 	size    string
 	class   string
+	locale  *StepProgressLocale
+}
+
+// StepProgressLocale holds translatable strings for StepProgress.
+type StepProgressLocale struct {
+	// StepOf formats "Step X of Y" — receives (current, total).
+	StepOf func(current, total int) string
 }
 
 // NewStepProgress creates a new StepProgressBuilder.
@@ -1249,6 +1274,21 @@ func (s *StepProgressBuilder) StepSize(sz string) *StepProgressBuilder { s.size 
 
 // StepClass appends additional CSS classes.
 func (s *StepProgressBuilder) StepClass(cls string) *StepProgressBuilder { s.class = cls; return s }
+
+// Locale sets a per-instance locale.
+func (s *StepProgressBuilder) Locale(l *StepProgressLocale) *StepProgressBuilder {
+	s.locale = l
+	return s
+}
+
+func (s *StepProgressBuilder) loc() *StepProgressLocale {
+	if s.locale != nil {
+		return s.locale
+	}
+	return &StepProgressLocale{
+		StepOf: func(current, total int) string { return fmt.Sprintf("Step %d of %d", current, total) },
+	}
+}
 
 func stepHeight(size string) string {
 	switch size {
@@ -1290,7 +1330,7 @@ func (s *StepProgressBuilder) Build() *Node {
 	wrapper := Div(wrapCls)
 	wrapper.Render(
 		Span("text-sm font-medium text-gray-500 dark:text-gray-400 mb-1").
-			Text(fmt.Sprintf("Step %d of %d", cur, s.total)),
+			Text(s.loc().StepOf(cur, s.total)),
 	)
 
 	containerCls := "w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden " + height
@@ -1618,24 +1658,44 @@ func (t *TooltipBuilder) Wrap(trigger *Node) *Node {
 // 16. Theme Switcher
 // ---------------------------------------------------------------------------
 
+// ThemeSwitcherLocale holds translatable strings for ThemeSwitcher.
+type ThemeSwitcherLocale struct {
+	ThemeAuto  string
+	ThemeLight string
+	ThemeDark  string
+}
+
+// ThemeSwitcherOpt configures optional ThemeSwitcher settings.
+type ThemeSwitcherOpt struct {
+	Class  string               // additional CSS class
+	Locale *ThemeSwitcherLocale // per-instance locale; nil = English default
+}
+
 // ThemeSwitcher renders a tri-state toggle button that cycles through
 // System → Light → Dark themes. It reads from localStorage("theme"),
 // calls window.setTheme(mode), and updates its icon+label reactively.
-// An optional CSS class string is appended to the button.
-func ThemeSwitcher(class ...string) *Node {
+func ThemeSwitcher(opts ...ThemeSwitcherOpt) *Node {
 	btnID := Target()
+	loc := &ThemeSwitcherLocale{ThemeAuto: "Auto", ThemeLight: "Light", ThemeDark: "Dark"}
+	extraClass := ""
+	if len(opts) > 0 {
+		if opts[0].Locale != nil {
+			loc = opts[0].Locale
+		}
+		extraClass = opts[0].Class
+	}
 
 	baseCls := "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer " +
 		"border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 " +
 		"dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 " +
 		"transition-colors"
-	if len(class) > 0 && class[0] != "" {
-		baseCls += " " + class[0]
+	if extraClass != "" {
+		baseCls += " " + extraClass
 	}
 
 	btn := Button(baseCls).ID(btnID).Render(
 		I("material-icons-round text-base").ID(btnID+"-icon").Text("brightness_auto"),
-		Span().ID(btnID+"-label").Text("Auto"),
+		Span().ID(btnID+"-label").Text(loc.ThemeAuto),
 	)
 
 	js := fmt.Sprintf(
@@ -1646,7 +1706,7 @@ func ThemeSwitcher(class ...string) *Node {
 			`if(!btn)return;`+
 			`var modes=['system','light','dark'];`+
 			`var icons={system:'brightness_auto',light:'light_mode',dark:'dark_mode'};`+
-			`var labels={system:'Auto',light:'Light',dark:'Dark'};`+
+			`var labels={system:'%s',light:'%s',dark:'%s'};`+
 			`function upd(){var m=localStorage.getItem('theme')||'system';icon.textContent=icons[m]||icons.system;lbl.textContent=labels[m]||labels.system}`+
 			`btn.addEventListener('click',function(){`+
 			`var cur=localStorage.getItem('theme')||'system';`+
@@ -1656,6 +1716,7 @@ func ThemeSwitcher(class ...string) *Node {
 			`window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){upd()});`+
 			`})();`,
 		escJS(btnID), escJS(btnID), escJS(btnID),
+		escJS(loc.ThemeAuto), escJS(loc.ThemeLight), escJS(loc.ThemeDark),
 	)
 
 	return btn.JS(js)
