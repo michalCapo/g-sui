@@ -399,6 +399,39 @@ func TestRawJSDeferredInner(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// RawJS `this` binding: `.JS()` code can use `this` to reference the element
+// ---------------------------------------------------------------------------
+
+func TestRawJSThisBinding(t *testing.T) {
+	n := El("svg", "w-6 h-6").Attr("viewBox", "0 0 24 24").
+		JS("this.innerHTML='<circle cx=\"12\" cy=\"12\" r=\"10\"/>'")
+	js := n.ToJS()
+
+	// Must use .call(eN) so `this` is the element
+	expect(t, js, ".call(e0)")
+	// The raw JS must still be deferred after appendChild
+	appendIdx := strings.Index(js, "document.body.appendChild(")
+	callIdx := strings.Index(js, ".call(e0)")
+	if appendIdx < 0 || callIdx < 0 {
+		t.Fatal("expected both appendChild and .call in output")
+	}
+	if callIdx < appendIdx {
+		t.Errorf(".call (at %d) must come after appendChild (at %d)", callIdx, appendIdx)
+	}
+}
+
+func TestRawJSThisBindingNested(t *testing.T) {
+	// Child node with .JS() — `this` should reference the child (e1), not parent (e0)
+	n := Div("parent").Render(
+		Span("child").JS("this.dataset.init='1'"),
+	)
+	js := n.ToJS()
+
+	expect(t, js, ".call(e1)")
+	notExpect(t, js, ".call(e0)")
+}
+
+// ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 

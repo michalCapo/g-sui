@@ -95,6 +95,7 @@ func Label(class ...string) *Node    { return El("label", class...) }
 func Textarea(class ...string) *Node { return El("textarea", class...) }
 func Select(class ...string) *Node   { return El("select", class...) }
 func Option(class ...string) *Node   { return El("option", class...) }
+func SVG(class ...string) *Node      { return El("svg", class...) }
 
 // Table elements
 func Table(class ...string) *Node { return El("table", class...) }
@@ -466,9 +467,11 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string) strin
 		fmt.Fprintf(b, "%s.appendChild(%s);", varName, childVar)
 	}
 
-	// Collect raw JS for deferred execution (after DOM insertion)
+	// Collect raw JS for deferred execution (after DOM insertion).
+	// The snippet is wrapped in .call(eN) so that `this` refers to
+	// the DOM element — no manual ID bookkeeping needed.
 	if n.rawJS != "" {
-		*postJS = append(*postJS, n.rawJS)
+		*postJS = append(*postJS, fmt.Sprintf("(function(){%s}).call(%s);", n.rawJS, varName))
 	}
 
 	return varName
