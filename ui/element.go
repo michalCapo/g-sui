@@ -167,6 +167,55 @@ func Wbr() *Node                   { return &Node{tag: "wbr", void: true} }
 func Link() *Node                  { return &Node{tag: "link", void: true} }
 func Meta() *Node                  { return &Node{tag: "meta", void: true} }
 
+// CSS injects external stylesheets and/or inline CSS rules into the
+// document <head>. It returns a hidden *Node that can be placed anywhere
+// in the page tree — the actual <link>/<style> elements are appended to
+// <head> via deferred JS so fonts, keyframes and global rules load
+// correctly.
+//
+// urls is a list of external stylesheet URLs (e.g. Google Fonts); pass nil
+// if you only need inline CSS. css is a raw CSS string; pass "" if you
+// only need external links.
+//
+//	ui.CSS(
+//	    []string{"https://fonts.googleapis.com/css2?family=Oswald&display=swap"},
+//	    `.hero { font-family: 'Oswald', sans-serif; }
+//	     @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }`,
+//	)
+func CSS(urls []string, css string) *Node {
+	if len(urls) == 0 && css == "" {
+		return Div().Style("display", "none")
+	}
+
+	var js strings.Builder
+
+	// External stylesheets — deduplicated by href to avoid double-loading
+	// on SPA navigations.
+	for _, u := range urls {
+		eu := escJS(u)
+		fmt.Fprintf(&js,
+			"if(!document.querySelector('link[href=\\'%s\\']')){"+
+				"var l=document.createElement('link');"+
+				"l.rel='stylesheet';l.href='%s';"+
+				"document.head.appendChild(l);"+
+				"}",
+			eu, eu,
+		)
+	}
+
+	// Inline CSS block.
+	if css != "" {
+		fmt.Fprintf(&js,
+			"var _s=document.createElement('style');"+
+				"_s.textContent='%s';"+
+				"document.head.appendChild(_s);",
+			escJS(css),
+		)
+	}
+
+	return Div().Style("display", "none").JS(js.String())
+}
+
 // Typed input constructors — shorthand for Input(<class>).Attr("type", "<type>").
 func IText(class ...string) *Node     { return Input(class...).Attr("type", "text") }
 func IPassword(class ...string) *Node { return Input(class...).Attr("type", "password") }
