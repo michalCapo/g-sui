@@ -2,7 +2,7 @@
 
 Go server-rendered UI framework with real-time WebSocket patches.
 
-g-sui compiles Go node trees into pure JavaScript. The browser receives raw JS that performs `document.createElement()` calls directly -- no HTML templates, no JSON intermediate, no client-side framework. User interactions trigger server actions via WebSocket, which respond with JS strings for DOM mutations.
+g-sui compiles Go node trees into pure JavaScript. The browser receives raw JS that performs `document.createElement()` calls directly -- no HTML templates, no JSON intermediate, no client-side framework. SVG elements use `document.createElementNS()` with proper namespace handling. User interactions trigger server actions via WebSocket, which respond with JS strings for DOM mutations.
 
 ## Documentation
 
@@ -54,7 +54,7 @@ ActionHandler → JS string       ←→  WebSocket (__ws)
 
 ## Features
 
-- Server-rendered UI with a Go DSL (60+ element constructors)
+- Server-rendered UI with a Go DSL (60+ element constructors, SVG namespace support)
 - WebSocket actions with data payloads and field collection (`Collect`)
 - Five DOM swap strategies: `ToJS`, `ToJSReplace`, `ToJSAppend`, `ToJSPrepend`, `ToJSInner`
 - Multi-action `Response` builder for complex updates
@@ -81,7 +81,7 @@ ActionHandler → JS string       ←→  WebSocket (__ws)
 - **Confirm Dialog** -- overlay with confirm/cancel actions
 - **Skeleton Loaders** -- table, cards, list, component, page, form
 - **Markdown** -- goldmark renderer
-- **Icon** -- Material Icons Round with `IconText` helper
+- **Icon** -- Material Icons Round with `IconText` helper, inline SVG with automatic namespace
 - **Theme Switcher** -- System/Light/Dark toggle
 - **reCAPTCHA v3** -- auto-refresh token
 
