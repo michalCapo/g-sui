@@ -27,6 +27,18 @@ type connState struct {
 // App: routes, actions, server
 // ---------------------------------------------------------------------------
 
+// httpRoute stores a deferred HTTP handler registration (method + pattern).
+type httpRoute struct {
+	method  string
+	pattern string
+	handler http.HandlerFunc
+}
+
+// LayoutHandler builds a shared layout wrapping every page. The returned
+// *Node tree must contain exactly one element with ID("__content__") where
+// the page content will be injected.
+type LayoutHandler func(ctx *Context) *Node
+
 // App is the top-level application container. It holds page routes (GET)
 // and named actions (WS). Pages return a *Node tree that compiles to JS
 // for the initial render. Actions return raw JS strings for DOM mutations.
@@ -37,6 +49,8 @@ type App struct {
 	clients    map[*websocket.Conn]bool
 	connStates map[*websocket.Conn]*connState
 	mux        *http.ServeMux
+	httpRoutes []httpRoute
+	layout     LayoutHandler
 
 	// Favicon is the URL path for the site favicon (e.g. "/assets/favicon.svg").
 	// When set, a <link rel="icon"> tag is emitted in the HTML shell.
@@ -49,6 +63,12 @@ type App struct {
 	// Description sets the <meta name="description"> content in the HTML shell.
 	// Used by search engines to summarize page content.
 	Description string
+
+	// HTMLHead contains raw HTML strings injected into the <head> section
+	// after the built-in Tailwind/Material Icons/WS script tags.
+	// Each entry is emitted as-is (e.g. "<style>body{margin:0}</style>",
+	// "<script src=\"...\"></script>", "<link ...>").
+	HTMLHead []string
 }
 
 // PageHandler builds the initial DOM for a GET route.
@@ -86,6 +106,28 @@ func (app *App) Action(name string, handler ActionHandler) {
 	app.mu.Unlock()
 }
 
+// GET registers a standard HTTP GET handler on the internal mux.
+// Use this for REST API endpoints that return JSON, files, etc.
+func (app *App) GET(path string, handler http.HandlerFunc) {
+	app.mu.Lock()
+	app.httpRoutes = append(app.httpRoutes, httpRoute{"GET", path, handler})
+	app.mu.Unlock()
+}
+
+// POST registers a standard HTTP POST handler on the internal mux.
+func (app *App) POST(path string, handler http.HandlerFunc) {
+	app.mu.Lock()
+	app.httpRoutes = append(app.httpRoutes, httpRoute{"POST", path, handler})
+	app.mu.Unlock()
+}
+
+// DELETE registers a standard HTTP DELETE handler on the internal mux.
+func (app *App) DELETE(path string, handler http.HandlerFunc) {
+	app.mu.Lock()
+	app.httpRoutes = append(app.httpRoutes, httpRoute{"DELETE", path, handler})
+	app.mu.Unlock()
+}
+
 // Assets serves static files from an embedded or on-disk filesystem.
 // The dir is stripped from fsys (via fs.Sub) and the result is served
 // under the given URL prefix. Example:
@@ -103,6 +145,25 @@ func (app *App) Assets(fsys fs.FS, dir, prefix string) {
 	app.mux.Handle(prefix, http.StripPrefix(prefix, http.FileServerFS(sub)))
 }
 
+// Layout registers a layout handler that wraps every page render.
+// The handler returns a *Node tree that must contain exactly one element
+// with ID("__content__"). The page handler's output is injected there.
+func (app *App) Layout(handler LayoutHandler) {
+	app.mu.Lock()
+	app.layout = handler
+	app.mu.Unlock()
+}
+
+// Handler sets up routes and returns the internal http.Handler (mux).
+// Use this when you need a custom http.Server for graceful shutdown, TLS, etc.
+//
+//	srv := &http.Server{Addr: ":8080", Handler: app.Handler()}
+//	srv.ListenAndServe()
+func (app *App) Handler() http.Handler {
+	app.setup()
+	return app.mux
+}
+
 // Listen sets up HTTP handlers and starts the server.
 func (app *App) Listen(addr string) error {
 	app.setup()
@@ -116,7 +177,9 @@ func (app *App) Listen(addr string) error {
 
 func (app *App) setup() {
 	// Built-in __nav action: handles popstate (browser back/forward).
-	// Looks up the page handler for the URL and replaces document.body content.
+	// Looks up the page handler for the URL and replaces content.
+	// If a layout is registered, only the __content__ container is replaced
+	// (the layout shell stays). Otherwise the full body is cleared and rebuilt.
 	// Also cancels any outstanding Push goroutines for the connection since
 	// their target elements no longer exist after navigation.
 	app.Action("__nav", func(ctx *Context) string {
@@ -130,19 +193,24 @@ func (app *App) setup() {
 
 		app.mu.RLock()
 		handler, ok := app.pages[req.URL]
+		layoutFn := app.layout
 		app.mu.RUnlock()
 
 		if !ok {
 			return ""
 		}
 
-		root := handler(ctx)
-		if root == nil {
+		pageNode := handler(ctx)
+		if pageNode == nil {
 			return ""
 		}
 
-		// Clear body and append the full page tree
-		return "(function(){document.body.innerHTML=''})();" + root.ToJS()
+		// With a layout: replace only __content__ inner content.
+		// Without a layout: clear body and append the full page tree.
+		if layoutFn != nil {
+			return pageNode.ToJSInner("__content__")
+		}
+		return "(function(){document.body.innerHTML=''})();" + pageNode.ToJS()
 	})
 
 	// Built-in __notfound action: the client sends this when a WS patch
@@ -159,13 +227,35 @@ func (app *App) setup() {
 	// WebSocket endpoint
 	app.mux.Handle("/__ws", websocket.Handler(app.handleWS))
 
-	// Page routes
+	// Register user-defined HTTP routes (GET/POST/DELETE) before the
+	// catch-all page handler so they take precedence.
+	for _, rt := range app.httpRoutes {
+		pattern := rt.method + " " + rt.pattern
+		app.mux.HandleFunc(pattern, rt.handler)
+	}
+
+	// Page routes (catch-all)
 	app.mux.HandleFunc("/", app.handlePage)
 }
 
 // ---------------------------------------------------------------------------
 // Page handler: GET requests return minimal HTML + JS
 // ---------------------------------------------------------------------------
+
+// injectContent recursively walks the node tree and appends pageNode as a
+// child of the first node with id="__content__". Returns true if found.
+func injectContent(node, pageNode *Node) bool {
+	if node.id == "__content__" {
+		node.children = append(node.children, pageNode)
+		return true
+	}
+	for _, child := range node.children {
+		if injectContent(child, pageNode) {
+			return true
+		}
+	}
+	return false
+}
 
 func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 	app.mu.RLock()
@@ -191,10 +281,30 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build the node tree
-	root := handler(ctx)
-	if root == nil {
+	pageNode := handler(ctx)
+	if pageNode == nil {
 		http.Error(w, "page handler returned nil", 500)
 		return
+	}
+
+	// If a layout is registered, wrap the page content inside it.
+	// The layout tree must contain a node with id="__content__" where
+	// the page content gets injected as children.
+	var root *Node
+	app.mu.RLock()
+	layoutFn := app.layout
+	app.mu.RUnlock()
+
+	if layoutFn != nil {
+		layoutNode := layoutFn(ctx)
+		if layoutNode != nil {
+			injectContent(layoutNode, pageNode)
+			root = layoutNode
+		} else {
+			root = pageNode
+		}
+	} else {
+		root = pageNode
 	}
 
 	// Compile to JS
@@ -213,6 +323,9 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 	if app.Description != "" {
 		descTag = fmt.Sprintf(`<meta name="description" content="%s">`, app.Description)
 	}
+
+	// Build custom head HTML
+	customHead := strings.Join(app.HTMLHead, "\n")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -246,13 +359,14 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 </style>
 <style>%s</style>
 <script src="/__ws.js" defer></script>
+%s
 </head>
 <body>
 <script>
 %s
 </script>
 </body>
-</html>`, faviconTag, titleTag, descTag, themeInitJS, darkOverrideCSS, jsBody)
+</html>`, faviconTag, titleTag, descTag, themeInitJS, darkOverrideCSS, customHead, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -613,6 +727,17 @@ func (ctx *Context) Broadcast(js string) {
 	ctx.app.mu.RLock()
 	defer ctx.app.mu.RUnlock()
 	for conn := range ctx.app.clients {
+		websocket.Message.Send(conn, js)
+	}
+}
+
+// Broadcast sends a JS string to ALL connected WebSocket clients.
+// Can be called from anywhere (background goroutines, HTTP handlers, etc.)
+// without needing a Context.
+func (app *App) Broadcast(js string) {
+	app.mu.RLock()
+	defer app.mu.RUnlock()
+	for conn := range app.clients {
 		websocket.Message.Send(conn, js)
 	}
 }

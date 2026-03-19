@@ -58,7 +58,10 @@ ActionHandler → JS string       ←→  WebSocket (__ws)
 - WebSocket actions with data payloads and field collection (`Collect`)
 - Five DOM swap strategies: `ToJS`, `ToJSReplace`, `ToJSAppend`, `ToJSPrepend`, `ToJSInner`
 - Multi-action `Response` builder for complex updates
-- Real-time server push via `ctx.Push()` and broadcast via `ctx.Broadcast()`
+- Real-time server push via `ctx.Push()` and broadcast via `ctx.Broadcast()` / `app.Broadcast()`
+- Custom HTTP routes: `app.GET()`, `app.POST()`, `app.DELETE()`
+- Layout system via `app.Layout()` and custom `Handler()` for embedding
+- SEO metadata: `app.Title`, `app.Description`, `app.HTMLHead`
 - Conditional rendering helpers: `If`, `Or`, `Map`
 - Toast notifications: success, error, error-reload, info
 - JS helpers: `Redirect`, `SetLocation`, `SetTitle`, `RemoveEl`, `SetText`, `SetAttr`, `AddClass`, `RemoveClass`, `Show`, `Hide`, `Download`, `DragToScroll`
@@ -93,10 +96,21 @@ ActionHandler → JS string       ←→  WebSocket (__ws)
 
 ### Data Tables
 
-- Generic `DataTable[T]` with search, sort, pagination, export
+- Generic `DataTable[T]` with search, sort, pagination, column filters, export
 - Column definitions with `*Node` content or plain text
+- Per-column filters: text, date, number, select with operators
+- Expandable row detail (accordion)
 - Debounced search, click-to-sort headers, page range with ellipsis
 - `SimpleTable` for quick non-generic tables
+
+### Collate (Data Panel)
+
+- Generic `Collate[T]` -- card/list-style data component with slide-out filter/sort panel
+- Configurable sort fields and filter types: boolean, date range, select, multi-check
+- Debounced search, load-more pagination, export action
+- Expandable row detail
+- Custom row rendering via callback
+- Server-driven filter/sort/search with `CollateFilterValue` payloads
 
 ## Examples
 
@@ -105,7 +119,7 @@ go run example/main.go
 # Open http://localhost:1423
 ```
 
-The example app includes 22 pages demonstrating components, forms, tables, CRUD operations, real-time updates, navigation, and more.
+The example app includes 23 pages demonstrating components, forms, tables, data panels, real-time updates, navigation, and more.
 
 ## Server Actions
 
