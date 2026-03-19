@@ -348,8 +348,14 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 		descTag = fmt.Sprintf(`<meta name="description" content="%s">`, app.Description)
 	}
 
-	// Build custom head HTML
+	// Build custom head HTML (app-wide + per-page)
 	customHead := strings.Join(app.HTMLHead, "\n")
+	if pageCSS := ctx.cssHeadHTML(); pageCSS != "" {
+		customHead += "\n" + pageCSS
+	}
+	if pageJS := ctx.jsHeadHTML(); pageJS != "" {
+		customHead += "\n" + pageJS
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -374,6 +380,7 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <script>%s</script>
+<style>body{opacity:0}body.__gsui-ready{opacity:1;transition:opacity 80ms ease-out}html:not(.__gsui-done)::before{content:'Loading\2026';position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;font:500 1.6rem/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.03em;color:var(--gsui-loader-fg,#a0a0a0);background:var(--gsui-loader-bg,#fff);animation:_gsui-pulse 1.4s ease-in-out infinite}html.dark:not(.__gsui-done)::before{--gsui-loader-bg:#0a0a0a;--gsui-loader-fg:#555}@keyframes _gsui-pulse{0%%,100%%{opacity:.4}50%%{opacity:1}}</style>
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" async></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"></noscript>
@@ -388,6 +395,13 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 <body>
 <script>
 %s
+;(function(){function reveal(){document.body.classList.add('__gsui-ready');document.documentElement.classList.add('__gsui-done')}
+var tw=document.querySelector('style[data-tailwindcss]');
+if(tw){reveal();return;}
+var mo=new MutationObserver(function(muts){for(var i=0;i<muts.length;i++){for(var j=0;j<muts[i].addedNodes.length;j++){var n=muts[i].addedNodes[j];if(n.tagName==='STYLE'&&n.hasAttribute('data-tailwindcss')){mo.disconnect();reveal();return;}}}});
+mo.observe(document.head,{childList:true});
+setTimeout(function(){mo.disconnect();reveal()},1200);
+})();
 </script>
 </body>
 </html>`, faviconTag, titleTag, descTag, themeInitJS, darkOverrideCSS, customHead, jsBody)
@@ -680,6 +694,20 @@ func (app *App) handleWS(ws *websocket.Conn) {
 			return handler(ctx)
 		}()
 
+		// Prepend any per-page CSS/JS injection from ctx.CSS()/ctx.HeadJS()
+		var prefix string
+		if cssJS := ctx.cssInjectJS(); cssJS != "" {
+			prefix += cssJS
+		}
+		if jsJS := ctx.jsInjectJS(); jsJS != "" {
+			prefix += jsJS
+		}
+		if prefix != "" && jsResponse != "" {
+			jsResponse = prefix + "\n" + jsResponse
+		} else if prefix != "" {
+			jsResponse = prefix
+		}
+
 		// Send the JS back to the client for immediate execution
 		if jsResponse != "" {
 			if err := websocket.Message.Send(ws, jsResponse); err != nil {
@@ -704,12 +732,121 @@ type Context struct {
 	wsData     map[string]any
 	app        *App
 	pushCtx    context.Context // cancelled when client navigates away or reports element not found
+	headCSS    []string        // per-page <style>/<link> tags collected via ctx.CSS()
+	headJS     []string        // per-page <script> blocks collected via ctx.HeadJS()
 }
 
 // WsData returns the raw WebSocket data map. Useful for passing to
 // form validation (FormBuilder.Validate) before deserializing into a struct.
 func (ctx *Context) WsData() map[string]any {
 	return ctx.wsData
+}
+
+// CSS registers external stylesheets and/or inline CSS rules for the
+// current page. On a full page load the tags are injected into the HTML
+// <head> server-side (instant, no JS needed). On SPA navigations (WS
+// actions) the same resources are injected into <head> via JS with
+// deduplication so they are not loaded twice.
+//
+//	ctx.CSS(
+//	    []string{"https://fonts.googleapis.com/css2?family=Oswald&display=swap"},
+//	    `.hero { font-family: 'Oswald', sans-serif; }`,
+//	)
+//
+// Pass nil for urls if you only need inline CSS, or "" for css if you
+// only need external links.
+func (ctx *Context) CSS(urls []string, css string) {
+	for _, u := range urls {
+		ctx.headCSS = append(ctx.headCSS,
+			fmt.Sprintf(`<link rel="stylesheet" href="%s">`, u))
+	}
+	if css != "" {
+		ctx.headCSS = append(ctx.headCSS,
+			fmt.Sprintf("<style>%s</style>", css))
+	}
+}
+
+// HeadJS registers a JavaScript block that runs once when the page loads.
+// On a full page load the script is emitted as a <script> tag in <head>.
+// On SPA navigations the code is prepended to the WS response so it
+// executes before the DOM swap.
+//
+// Use this for page-level setup (global functions, event listeners, etc.)
+// instead of the Div("").JS(`...`) pattern.
+//
+//	ctx.HeadJS(`
+//	    window.toggleMobileNav = function() {
+//	        var nav = document.getElementById('mobile-nav');
+//	        if (nav) nav.classList.toggle('hidden');
+//	    };
+//	`)
+func (ctx *Context) HeadJS(code string) {
+	if code != "" {
+		ctx.headJS = append(ctx.headJS, code)
+	}
+}
+
+// cssHeadHTML returns the collected per-page CSS as raw HTML for <head>.
+func (ctx *Context) cssHeadHTML() string {
+	return strings.Join(ctx.headCSS, "\n")
+}
+
+// jsHeadHTML returns the collected per-page JS as a <script> block for <head>.
+func (ctx *Context) jsHeadHTML() string {
+	if len(ctx.headJS) == 0 {
+		return ""
+	}
+	return "<script>" + strings.Join(ctx.headJS, "\n") + "</script>"
+}
+
+// cssInjectJS returns JS code that injects the per-page CSS into <head>
+// at runtime (used during SPA/WS navigations). External links are
+// deduplicated by href.
+func (ctx *Context) cssInjectJS() string {
+	if len(ctx.headCSS) == 0 {
+		return ""
+	}
+	var js strings.Builder
+	for _, tag := range ctx.headCSS {
+		if strings.HasPrefix(tag, "<link") {
+			// Extract href from <link rel="stylesheet" href="...">
+			start := strings.Index(tag, `href="`)
+			if start < 0 {
+				continue
+			}
+			start += 6
+			end := strings.Index(tag[start:], `"`)
+			if end < 0 {
+				continue
+			}
+			href := tag[start : start+end]
+			eu := escJS(href)
+			fmt.Fprintf(&js,
+				"if(!document.querySelector('link[href=\\'%s\\']')){"+
+					"var l=document.createElement('link');"+
+					"l.rel='stylesheet';l.href='%s';"+
+					"document.head.appendChild(l);}",
+				eu, eu,
+			)
+		} else if strings.HasPrefix(tag, "<style>") {
+			// Extract CSS content between <style> and </style>
+			inner := strings.TrimPrefix(tag, "<style>")
+			inner = strings.TrimSuffix(inner, "</style>")
+			fmt.Fprintf(&js,
+				"var _s=document.createElement('style');"+
+					"_s.textContent='%s';"+
+					"document.head.appendChild(_s);",
+				escJS(inner),
+			)
+		}
+	}
+	return js.String()
+}
+
+// jsInjectJS returns the collected per-page JS as raw code to prepend
+// to a WS response (used during SPA navigations).
+func (ctx *Context) jsInjectJS() string {
+	return strings.Join(ctx.headJS, "\n")
 }
 
 func (ctx *Context) Body(target any) error {

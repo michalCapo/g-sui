@@ -26,10 +26,11 @@
 14. [Data Tables](#data-tables)
 15. [Collate (Data Panel)](#collate-data-panel)
 16. [Theme & Dark Mode](#theme--dark-mode)
-17. [Security](#security)
-18. [Examples](#examples)
-19. [Deployment](#deployment)
-20. [API Reference](#api-reference)
+17. [Page Loading Screen](#page-loading-screen)
+18. [Security](#security)
+19. [Examples](#examples)
+20. [Deployment](#deployment)
+21. [API Reference](#api-reference)
 
 ---
 
@@ -301,24 +302,48 @@ app.CSS(
 
 Registers external stylesheets and/or inline CSS rules that apply to every page. Tags are injected into the HTML `<head>` server-side, so they load immediately without JavaScript. Pass `nil` for `urls` if you only need inline CSS, or `""` for `css` if you only need external links.
 
-### CSS (Per-Page / Per-Component)
+### CSS (Per-Page via Context)
 
 ```go
-ui.CSS(
-    []string{"https://cdn.example.com/lib.css"},
-    `.hero { animation: fadeIn 0.3s ease-out; }
-     @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }`,
-)
+app.Page("/about", func(ctx *ui.Context) *ui.Node {
+    ctx.CSS(
+        []string{"https://cdn.example.com/lib.css"},
+        `.hero { animation: fadeIn 0.3s ease-out; }
+         @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }`,
+    )
+    return ui.Div("hero").Text("About")
+})
 ```
 
-Package-level function that returns a hidden `*Node`. Place it anywhere in your page or component tree -- it injects `<link>` and `<style>` elements into `<head>` at runtime via JS. External links are deduplicated by `href` to avoid double-loading on SPA navigations.
+Registers external stylesheets and/or inline CSS rules for the current page only. On a full page load the tags are injected into the HTML `<head>` server-side (instant, no JS needed). On SPA navigations (WS actions) the same resources are injected into `<head>` via JS with deduplication so external links are not loaded twice. Pass `nil` for `urls` if you only need inline CSS, or `""` for `css` if you only need external links.
+
+### JS (Per-Page via Context)
+
+```go
+app.Page("/dashboard", func(ctx *ui.Context) *ui.Node {
+    ctx.HeadJS(`
+        window.toggleMobileNav = function() {
+            var nav = document.getElementById('mobile-nav');
+            if (nav) nav.classList.toggle('hidden');
+        };
+        window.closeMobileNav = function() {
+            var nav = document.getElementById('mobile-nav');
+            if (nav && !nav.classList.contains('hidden')) nav.classList.add('hidden');
+        };
+    `)
+    return ui.Div("").Text("Dashboard")
+})
+```
+
+Registers a JavaScript block that runs once when the page loads. On a full page load the script is emitted as a `<script>` tag in `<head>`. On SPA navigations the code is prepended to the WS response so it executes before the DOM swap. Use this for page-level setup (global functions, event listeners, etc.) instead of the `Div("").JS(...)` workaround.
 
 **When to use which:**
 
 | Method | Scope | Injection | Deduplication |
 |--------|-------|-----------|---------------|
 | `app.CSS(urls, css)` | Global (all pages) | Server-side `<head>` | N/A (rendered once) |
-| `ui.CSS(urls, css)` | Per-page / per-component | Client-side JS | External links deduped by `href` |
+| `ctx.CSS(urls, css)` | Per-page | Server-side `<head>` on full load; JS injection on SPA nav | External links deduped by `href` |
+| `ctx.HeadJS(code)` | Per-page | `<script>` in `<head>` on full load; prepended JS on SPA nav | N/A |
 
 ### Listen
 
@@ -351,6 +376,8 @@ Sets up HTTP handlers (page routes, WebSocket endpoint at `/__ws`, client script
 | `Body` | `(target any) error` | Unmarshals WS data into a struct |
 | `Push` | `(js string) error` | Sends JS to THIS client immediately |
 | `Broadcast` | `(js string)` | Sends JS to ALL connected clients |
+| `CSS` | `(urls []string, css string)` | Registers per-page CSS (stylesheets and/or inline rules) |
+| `HeadJS` | `(code string)` | Registers per-page JavaScript for `<head>` |
 
 ### Body Example
 
@@ -1305,6 +1332,23 @@ ui.Div("bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100")
 
 ---
 
+## Page Loading Screen
+
+On a full page load (hard refresh or first visit), Tailwind CSS is loaded asynchronously from CDN. There is a brief window where the DOM is built but unstyled, which would cause a flash of unstyled content (FOUC).
+
+g-sui prevents this with a built-in loading screen:
+
+1. **Body hidden** -- `body` starts with `opacity: 0`, hiding all unstyled content immediately
+2. **Loading overlay** -- a fullscreen overlay on `<html>` displays a centered pulsing "Loading..." message (dark-mode aware)
+3. **Reveal** -- once Tailwind injects its processed `<style data-tailwindcss>` element, both the overlay is removed and the body fades in with an 80ms transition
+4. **Safety timeout** -- if Tailwind CDN is slow or fails, the page reveals after 1.2 seconds regardless
+
+This only affects full page loads. SPA-style WebSocket navigations are unaffected since they only swap inner content.
+
+The loading screen requires no configuration -- it is built into the HTML shell automatically.
+
+---
+
 ## Security
 
 ### Server-Side
@@ -1459,6 +1503,17 @@ go get github.com/michalCapo/g-sui@v1.001
 | `Listen` | `(addr string) error` | Start HTTP server |
 | `Broadcast` | `(js string)` | Send JS to all connected clients |
 
+#### Context Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `WsData` | `() map[string]any` | Returns raw WebSocket data map |
+| `Body` | `(target any) error` | Unmarshals WS data into a struct |
+| `Push` | `(js string) error` | Sends JS to THIS client immediately |
+| `Broadcast` | `(js string)` | Sends JS to ALL connected clients |
+| `CSS` | `(urls []string, css string)` | Per-page CSS; `<head>` on full load, JS injection on SPA nav (links deduped) |
+| `HeadJS` | `(code string)` | Per-page JS; `<script>` in `<head>` on full load, prepended JS on SPA nav |
+
 #### Global Functions
 
 | Function | Returns | Description |
@@ -1466,7 +1521,7 @@ go get github.com/michalCapo/g-sui@v1.001
 | `NewApp()` | `*App` | Create application |
 | `El(tag, class...)` | `*Node` | Create element |
 | `Target()` | `string` | Generate random DOM ID |
-| `CSS(urls, css)` | `*Node` | Per-page CSS injection (deduped links) |
+
 | `JS(code)` | `*Action` | Client-side-only action |
 | `If(cond, node)` | `*Node` | Conditional render |
 | `Or(cond, yes, no)` | `*Node` | Binary conditional |
