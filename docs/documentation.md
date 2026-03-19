@@ -305,7 +305,7 @@ ui.El("section", "max-w-5xl mx-auto")
 | `OnClick` | `(action *Action) *Node` | Attaches click event |
 | `OnSubmit` | `(action *Action) *Node` | Attaches submit event |
 | `On` | `(event string, action *Action) *Node` | Attaches any named event |
-| `JS` | `(raw string) *Node` | Raw JS executed after mount |
+| `JS` | `(raw string) *Node` | Raw JS executed after mount (`this` refers to the element) |
 
 ### Composing Trees
 
@@ -326,7 +326,7 @@ ui.Div("p-6").Render(
 
 ### Standard Elements
 
-`Div`, `Span`, `Button`, `H1`-`H6`, `P`, `A`, `Nav`, `Main`, `Header`, `Footer`, `Section`, `Article`, `Aside`, `Form`, `Pre`, `Code`, `Ul`, `Ol`, `Li`, `Label`, `Textarea`, `Select`, `Option`
+`Div`, `Span`, `Button`, `H1`-`H6`, `P`, `A`, `Nav`, `Main`, `Header`, `Footer`, `Section`, `Article`, `Aside`, `Form`, `Pre`, `Code`, `Ul`, `Ol`, `Li`, `Label`, `Textarea`, `Select`, `Option`, `SVG`
 
 ### Table Elements
 
