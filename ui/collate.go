@@ -3,6 +3,44 @@ package ui
 import "fmt"
 
 // ---------------------------------------------------------------------------
+// Collate locale
+// ---------------------------------------------------------------------------
+
+// CollateLocale holds all translatable strings used by Collate.
+// Create one only when you need non-English text; pass it via .Locale().
+//
+//	loc := &ui.CollateLocale{Search: "Hľadať...", Apply: "Použiť", ...}
+//	collate := ui.NewCollate[T]("c").Locale(loc)
+type CollateLocale struct {
+	FilterLocale             // date/range labels shared with DataTable
+	Search            string // search input placeholder
+	Apply             string // apply button
+	Reset             string // reset button
+	Excel             string // export button
+	Filter            string // filter toggle button
+	LoadMore          string // load more button
+	NoData            string // empty state
+	AllOption         string // "— All —" select option
+	FiltersAndSorting string // panel header
+	Filters           string // filters section header
+	SortBy            string // sort section header
+
+	// ItemCount formats "X of Y" — receives (showing, total).
+	ItemCount func(showing, total int) string
+}
+
+func defaultCollateLocale() *CollateLocale {
+	return &CollateLocale{
+		FilterLocale: defaultFilterLocale(),
+		Search:       "Search...", Apply: "Apply", Reset: "Reset",
+		Excel: "Excel", Filter: "Filter", LoadMore: "Load more...",
+		NoData: "No data", AllOption: "— All —",
+		FiltersAndSorting: "Filters & Sorting", Filters: "Filters", SortBy: "Sort by",
+		ItemCount: func(showing, total int) string { return fmt.Sprintf("%d of %d", showing, total) },
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Collate: data component with filter panel, sort buttons, search, pagination
 // ---------------------------------------------------------------------------
 // Unlike DataTable (inline per-column filters & sort arrows), Collate uses
@@ -78,6 +116,9 @@ type Collate[T any] struct {
 	emptyText string
 	emptyIcon string
 	rowOffset int // for alternating stripes when appending
+
+	// Locale (per-instance override; nil = English default)
+	locale *CollateLocale
 }
 
 // NewCollate creates a new Collate with sensible defaults.
@@ -86,10 +127,26 @@ func NewCollate[T any](id string) *Collate[T] {
 		id:           id,
 		limit:        20,
 		page:         1,
-		emptyText:    "No data",
 		emptyIcon:    "inbox",
 		filterValues: make(map[string]*CollateFilterValue),
 	}
+}
+
+// Locale sets a per-instance locale for this component's UI strings.
+// When nil (default), English text is used.
+//
+//	collate.Locale(&ui.CollateLocale{Search: "Hľadať...", Apply: "Použiť"})
+func (c *Collate[T]) Locale(l *CollateLocale) *Collate[T] {
+	c.locale = l
+	return c
+}
+
+// loc returns the effective locale for this component.
+func (c *Collate[T]) loc() *CollateLocale {
+	if c.locale != nil {
+		return c.locale
+	}
+	return defaultCollateLocale()
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +235,13 @@ func (c *Collate[T]) CollateClass(cls string) *Collate[T] {
 func (c *Collate[T]) Empty(text string) *Collate[T] {
 	c.emptyText = text
 	return c
+}
+
+func (c *Collate[T]) getEmptyText() string {
+	if c.emptyText != "" {
+		return c.emptyText
+	}
+	return c.loc().NoData
 }
 
 // EmptyIcon sets the Material Icon name for the empty state.
@@ -353,7 +417,7 @@ func (c *Collate[T]) renderHeader() *Node {
 			"placeholder-gray-400 dark:placeholder-gray-500 "+
 			"focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400",
 	).ID(searchID).
-		Attr("placeholder", "Search...").
+		Attr("placeholder", c.loc().Search).
 		Attr("value", c.search).
 		On("keydown", JS(c.searchEnterJS(searchID))).
 		On("search", JS(c.searchImmediateJS(searchID)))
@@ -374,7 +438,7 @@ func (c *Collate[T]) renderHeader() *Node {
 		Span("text-base leading-none").
 			Style("font-family", "Material Icons Round").
 			Text("grid_on"),
-		Span().Text("Excel"),
+		Span().Text(c.loc().Excel),
 	)
 	items = append(items, exportBtn)
 
@@ -389,7 +453,7 @@ func (c *Collate[T]) renderHeader() *Node {
 				Style("font-family", "Material Icons Round").
 				Text("tune"),
 		)
-		btnParts = append(btnParts, Span().Text("Filter"))
+		btnParts = append(btnParts, Span().Text(c.loc().Filter))
 
 		if activeCount > 0 {
 			badge := Span(
@@ -437,7 +501,7 @@ func (c *Collate[T]) renderFilterPanel() *Node {
 	// Header
 	parts = append(parts,
 		Div("flex items-center justify-between mb-3").Render(
-			Span("text-sm font-semibold text-gray-700 dark:text-gray-300").Text("Filters & Sorting"),
+			Span("text-sm font-semibold text-gray-700 dark:text-gray-300").Text(c.loc().FiltersAndSorting),
 			Button(
 				"w-8 h-8 rounded-full flex items-center justify-center "+
 					"hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors",
@@ -481,7 +545,7 @@ func (c *Collate[T]) renderSortSection() *Node {
 	}
 
 	return Div("flex flex-col gap-2 mb-3").Render(
-		Div("text-xs font-bold text-gray-600 dark:text-gray-400 mb-1").Text("Sort by"),
+		Div("text-xs font-bold text-gray-600 dark:text-gray-400 mb-1").Text(c.loc().SortBy),
 		Div("flex flex-wrap gap-1").Render(buttons...),
 	)
 }
@@ -605,7 +669,7 @@ func (c *Collate[T]) renderFiltersSection() *Node {
 
 	return Div("flex flex-col gap-2 mt-2 pt-3 border-t border-gray-200 dark:border-gray-700").Render(
 		append([]*Node{
-			Div("text-xs font-bold text-gray-600 dark:text-gray-400 mb-1").Text("Filters"),
+			Div("text-xs font-bold text-gray-600 dark:text-gray-400 mb-1").Text(c.loc().Filters),
 		}, items...)...,
 	)
 }
@@ -661,27 +725,27 @@ func (c *Collate[T]) renderCollateDateFilter(ff CollateFilterField, current *Col
 	return Div("flex flex-col gap-1").Render(
 		Label("text-xs font-medium text-gray-600 dark:text-gray-400").Text(ff.Label),
 		Div("flex items-center gap-2").Render(
-			Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("From"),
+			Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text(c.loc().From),
 			IDate(inputCls).ID(fromID).
 				Attr("value", fromVal).
 				Attr("data-filter-field", ff.Field).
 				Attr("data-filter-type", "date-from"),
 		),
 		Div("flex items-center gap-2").Render(
-			Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("To"),
+			Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text(c.loc().To),
 			IDate(inputCls).ID(toID).
 				Attr("value", toVal).
 				Attr("data-filter-type", "date-to"),
 		),
 		// Quick date buttons
 		Div("flex flex-wrap gap-1 mt-1").Render(
-			c.collateQuickDateBtn(fromID, toID, "Today", "today"),
-			c.collateQuickDateBtn(fromID, toID, "This week", "thisweek"),
-			c.collateQuickDateBtn(fromID, toID, "This month", "thismonth"),
-			c.collateQuickDateBtn(fromID, toID, "This quarter", "thisquarter"),
-			c.collateQuickDateBtn(fromID, toID, "This year", "thisyear"),
-			c.collateQuickDateBtn(fromID, toID, "Last month", "lastmonth"),
-			c.collateQuickDateBtn(fromID, toID, "Last year", "lastyear"),
+			c.collateQuickDateBtn(fromID, toID, c.loc().Today, "today"),
+			c.collateQuickDateBtn(fromID, toID, c.loc().ThisWeek, "thisweek"),
+			c.collateQuickDateBtn(fromID, toID, c.loc().ThisMonth, "thismonth"),
+			c.collateQuickDateBtn(fromID, toID, c.loc().ThisQuarter, "thisquarter"),
+			c.collateQuickDateBtn(fromID, toID, c.loc().ThisYear, "thisyear"),
+			c.collateQuickDateBtn(fromID, toID, c.loc().LastMonth, "lastmonth"),
+			c.collateQuickDateBtn(fromID, toID, c.loc().LastYear, "lastyear"),
 		),
 	)
 }
@@ -728,7 +792,7 @@ func (c *Collate[T]) renderCollateSelectFilter(ff CollateFilterField, current *C
 		Attr("data-filter-type", "select")
 
 	// Empty option
-	emptyOpt := Option().Attr("value", "").Text("— All —")
+	emptyOpt := Option().Attr("value", "").Text(c.loc().AllOption)
 	if currentVal == "" {
 		emptyOpt.Attr("selected", "selected")
 	}
@@ -773,7 +837,7 @@ func (c *Collate[T]) renderPanelFooter() *Node {
 					Span("text-base leading-none").
 						Style("font-family", "Material Icons Round").
 						Text("undo"),
-					Span().Text("Reset"),
+					Span().Text(c.loc().Reset),
 				),
 
 			// Apply button
@@ -787,7 +851,7 @@ func (c *Collate[T]) renderPanelFooter() *Node {
 					Span("text-base leading-none").
 						Style("font-family", "Material Icons Round").
 						Text("check"),
-					Span().Text("Apply"),
+					Span().Text(c.loc().Apply),
 				),
 		),
 	)
@@ -807,7 +871,7 @@ func (c *Collate[T]) renderEmpty() *Node {
 			Style("font-family", "Material Icons Round").
 			Text(c.emptyIcon),
 		Span("text-gray-500 dark:text-gray-400 text-lg font-medium").
-			Text(c.emptyText),
+			Text(c.getEmptyText()),
 	)
 }
 
@@ -829,7 +893,7 @@ func (c *Collate[T]) renderFooter() *Node {
 			showing = c.totalItems
 		}
 		countText := Span("text-sm text-gray-500 dark:text-gray-400").
-			Text(fmt.Sprintf("%d of %d", showing, c.totalItems))
+			Text(c.loc().ItemCount(showing, c.totalItems))
 		items = append(items, countText)
 	}
 
@@ -851,7 +915,7 @@ func (c *Collate[T]) renderFooter() *Node {
 				"border border-gray-300 dark:border-gray-600 " +
 				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Text("Load more...").OnClick(JS(c.loadMoreJS()))
+		).Text(c.loc().LoadMore).OnClick(JS(c.loadMoreJS()))
 		items = append(items, loadMoreBtn)
 	}
 

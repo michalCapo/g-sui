@@ -26,11 +26,12 @@
 14. [Data Tables](#data-tables)
 15. [Collate (Data Panel)](#collate-data-panel)
 16. [Theme & Dark Mode](#theme--dark-mode)
-17. [Page Loading Screen](#page-loading-screen)
-18. [Security](#security)
-19. [Examples](#examples)
-20. [Deployment](#deployment)
-21. [API Reference](#api-reference)
+17. [Localization](#localization)
+18. [Page Loading Screen](#page-loading-screen)
+19. [Security](#security)
+20. [Examples](#examples)
+21. [Deployment](#deployment)
+22. [API Reference](#api-reference)
 
 ---
 
@@ -864,7 +865,10 @@ ui.NewProgress().
 ui.NewStepProgress(2, 5).     // current step, total steps
     StepColor("bg-blue-500").
     StepSize("md").
-    StepClass("mb-6").        // additional CSS classes
+    StepClass("mb-6").
+    Locale(&ui.StepProgressLocale{
+        StepOf: func(cur, total int) string { return fmt.Sprintf("Krok %d z %d", cur, total) },
+    }).
     Build()
 ```
 
@@ -875,7 +879,10 @@ ui.ConfirmDialog(
     "Delete Invoice",
     "Are you sure? This cannot be undone.",
     &ui.Action{Name: "invoice.delete", Data: map[string]any{"id": id}},
-    // optional cancel action (defaults to removing the dialog)
+    // optional: custom cancel action and/or locale
+    ui.ConfirmOpt{
+        Locale: &ui.ConfirmLocale{Cancel: "Zrusit", Confirm: "Potvrdit"},
+    },
 )
 ```
 
@@ -1196,6 +1203,7 @@ Clicking a row toggles an accordion-style detail panel below it.
 | `Empty(text)` | Text when no rows |
 | `DataTableClass(cls)` | Wrapper div class |
 | `TableClass(cls)` | `<table>` element class |
+| `Locale(loc)` | Per-instance `*TableLocale`; nil = English |
 | `Render(data)` | Full table render |
 | `RenderRows(data)` | Render rows only (for append) |
 | `RenderFooter()` | Render footer only |
@@ -1354,6 +1362,7 @@ return resp.Build()
 | `EmptyIcon(icon)` | Material icon for empty state |
 | `CollateClass(cls)` | Wrapper CSS class |
 | `RowOffset(n)` | Row offset for alternating stripes |
+| `Locale(loc)` | Per-instance `*CollateLocale`; nil = English |
 | `Render(data)` | Full render with data |
 | `RenderRows(data)` | Render rows only (for append) |
 | `RenderFooter()` | Render footer only |
@@ -1376,6 +1385,11 @@ g-sui includes built-in dark mode with three states: System, Light, Dark.
 
 ```go
 ui.ThemeSwitcher()  // Cycles: System -> Light -> Dark
+
+// With locale:
+ui.ThemeSwitcher(ui.ThemeSwitcherOpt{
+    Locale: &ui.ThemeSwitcherLocale{ThemeAuto: "Auto", ThemeLight: "Svetly", ThemeDark: "Tmavy"},
+})
 ```
 
 ### Manual Theme Control
@@ -1391,6 +1405,181 @@ Use Tailwind's `dark:` variant:
 ```go
 ui.Div("bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100")
 ```
+
+---
+
+## Localization
+
+Components ship with English text by default. When no locale is set, English strings are used automatically -- no configuration needed for English-only apps.
+
+To translate a component, create a locale struct with the fields you need and pass it via `.Locale()`. Each component has its own locale type containing only the strings it uses.
+
+### Per-Component Locale Types
+
+| Type | Component | Defined in |
+|------|-----------|------------|
+| `TableLocale` | `DataTable`, `FilterPopup`, `SimpleTable` | `table.go` |
+| `CollateLocale` | `Collate` | `collate.go` |
+| `ConfirmLocale` | `ConfirmDialog` | `components.go` |
+| `ThemeSwitcherLocale` | `ThemeSwitcher` | `components.go` |
+| `StepProgressLocale` | `StepProgress` | `components.go` |
+| `FilterLocale` | Embedded by `TableLocale` and `CollateLocale` | `table.go` |
+
+### DataTable
+
+```go
+table := ui.NewDataTable[Invoice]("t").
+    Locale(&ui.TableLocale{
+        FilterLocale: ui.FilterLocale{
+            From: "Od", To: "Do",
+            Today: "Dnes", ThisWeek: "Tento tyden",
+            ThisMonth: "Tento mesic", ThisQuarter: "Tento kvartal",
+            ThisYear: "Tento rok", LastMonth: "Minuly mesic", LastYear: "Minuly rok",
+        },
+        Search:      "Hledat...",
+        Apply:       "Pouzit",
+        Cancel:      "Zrusit",
+        Reset:       "Obnovit",
+        Excel:       "Excel",
+        LoadMore:    "Nacist dalsi...",
+        NoData:      "Zadna data",
+        SearchText:  "Hledat text...",
+        SelectAll:   "Vybrat vse",
+        ClearSelect: "Zrusit vyber",
+        Value:       "Hodnota",
+        Contains:    "Obsahuje",
+        StartsWith:  "Zacina na",
+        Equals:      "Rovna se",
+        Range:       "Rozsah",
+        GreaterOrEq: ">=",
+        LessOrEq:    "<=",
+        GreaterThan: ">",
+        LessThan:    "<",
+        NumEquals:   "= Rovna se",
+        ItemCount:   func(showing, total int) string {
+            return fmt.Sprintf("%d z %d", showing, total)
+        },
+    }).
+    Render(data)
+```
+
+### Collate
+
+```go
+collate := ui.NewCollate[Employee]("c").
+    Locale(&ui.CollateLocale{
+        FilterLocale: ui.FilterLocale{
+            From: "Od", To: "Do",
+            Today: "Dnes", ThisWeek: "Tento tyden",
+            ThisMonth: "Tento mesic", ThisQuarter: "Tento kvartal",
+            ThisYear: "Tento rok", LastMonth: "Minuly mesic", LastYear: "Minuly rok",
+        },
+        Search:            "Hledat...",
+        Apply:             "Pouzit",
+        Reset:             "Obnovit",
+        Excel:             "Excel",
+        Filter:            "Filtr",
+        LoadMore:          "Nacist dalsi...",
+        NoData:            "Zadna data",
+        AllOption:         "-- Vse --",
+        FiltersAndSorting: "Filtry a razeni",
+        Filters:           "Filtry",
+        SortBy:            "Radit dle",
+        ItemCount: func(showing, total int) string {
+            return fmt.Sprintf("%d z %d", showing, total)
+        },
+    }).
+    Render(data)
+```
+
+### Confirm Dialog
+
+```go
+ui.ConfirmDialog("Smazat?", "Opravdu chcete smazat?", deleteAction, ui.ConfirmOpt{
+    Locale: &ui.ConfirmLocale{Cancel: "Zrusit", Confirm: "Potvrdit"},
+})
+```
+
+### Theme Switcher
+
+```go
+ui.ThemeSwitcher(ui.ThemeSwitcherOpt{
+    Locale: &ui.ThemeSwitcherLocale{
+        ThemeAuto: "Automaticky", ThemeLight: "Svetly", ThemeDark: "Tmavy",
+    },
+})
+```
+
+### Step Progress
+
+```go
+ui.NewStepProgress(2, 5).
+    Locale(&ui.StepProgressLocale{
+        StepOf: func(current, total int) string {
+            return fmt.Sprintf("Krok %d z %d", current, total)
+        },
+    }).
+    Build()
+```
+
+### FilterLocale Fields
+
+`FilterLocale` is embedded in both `TableLocale` and `CollateLocale`. It holds shared date/range labels:
+
+| Field | Default |
+|-------|---------|
+| `From` | `"From"` |
+| `To` | `"To"` |
+| `Today` | `"Today"` |
+| `ThisWeek` | `"This week"` |
+| `ThisMonth` | `"This month"` |
+| `ThisQuarter` | `"This quarter"` |
+| `ThisYear` | `"This year"` |
+| `LastMonth` | `"Last month"` |
+| `LastYear` | `"Last year"` |
+
+### TableLocale Fields
+
+| Field | Default |
+|-------|---------|
+| `Search` | `"Search..."` |
+| `Apply` | `"Apply"` |
+| `Cancel` | `"Cancel"` |
+| `Reset` | `"Reset"` |
+| `Excel` | `"Excel"` |
+| `LoadMore` | `"Load more..."` |
+| `NoData` | `"No data"` |
+| `SearchText` | `"Search text..."` |
+| `SelectAll` | `"Select all"` |
+| `ClearSelect` | `"Clear selection"` |
+| `Value` | `"Value"` |
+| `Contains` | `"Contains"` |
+| `StartsWith` | `"Starts with"` |
+| `Equals` | `"Equals"` |
+| `Range` | `"Range"` |
+| `GreaterOrEq` | `"≥ Greater or equal"` |
+| `LessOrEq` | `"≤ Less or equal"` |
+| `GreaterThan` | `"> Greater than"` |
+| `LessThan` | `"< Less than"` |
+| `NumEquals` | `"= Equals"` |
+| `ItemCount` | `func(showing, total int) string` -- `"X of Y"` |
+
+### CollateLocale Fields
+
+| Field | Default |
+|-------|---------|
+| `Search` | `"Search..."` |
+| `Apply` | `"Apply"` |
+| `Reset` | `"Reset"` |
+| `Excel` | `"Excel"` |
+| `Filter` | `"Filter"` |
+| `LoadMore` | `"Load more..."` |
+| `NoData` | `"No data"` |
+| `AllOption` | `"— All —"` |
+| `FiltersAndSorting` | `"Filters & Sorting"` |
+| `Filters` | `"Filters"` |
+| `SortBy` | `"Sort by"` |
+| `ItemCount` | `func(showing, total int) string` -- `"X of Y"` |
 
 ---
 
@@ -1532,6 +1721,12 @@ go get github.com/michalCapo/g-sui@v1.001
 | `StepProgressBuilder` | Step progress builder |
 | `TooltipBuilder` | Tooltip builder |
 | `CaptchaV3Builder` | reCAPTCHA v3 builder |
+| `FilterLocale` | Shared date/range filter strings (embedded by `TableLocale`, `CollateLocale`) |
+| `TableLocale` | Locale strings for `DataTable` and `FilterPopup` |
+| `CollateLocale` | Locale strings for `Collate` |
+| `ConfirmLocale` | Locale strings for `ConfirmDialog` |
+| `ThemeSwitcherLocale` | Locale strings for `ThemeSwitcher` |
+| `StepProgressLocale` | Locale strings for `StepProgress` |
 
 #### Constants
 

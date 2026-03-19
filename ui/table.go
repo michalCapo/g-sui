@@ -3,6 +3,78 @@ package ui
 import "fmt"
 
 // ---------------------------------------------------------------------------
+// DataTable locale
+// ---------------------------------------------------------------------------
+
+// FilterLocale holds translatable strings shared by filter UIs (date pickers,
+// number/text operators). Embedded by both TableLocale and CollateLocale.
+type FilterLocale struct {
+	From        string // "From" label
+	To          string // "To" label
+	Today       string // date quick-select
+	ThisWeek    string
+	ThisMonth   string
+	ThisQuarter string
+	ThisYear    string
+	LastMonth   string
+	LastYear    string
+}
+
+// TableLocale holds all translatable strings used by DataTable.
+// Create one only when you need non-English text; pass it via .Locale().
+//
+//	loc := &ui.TableLocale{Search: "Hľadať...", Apply: "Použiť", ...}
+//	table := ui.NewDataTable[T]("t").Locale(loc)
+type TableLocale struct {
+	FilterLocale        // date/range labels shared with Collate
+	Search       string // search input placeholder
+	Apply        string // apply button
+	Cancel       string // cancel button
+	Reset        string // reset button
+	Excel        string // export button
+	LoadMore     string // load more button
+	NoData       string // empty state
+	SearchText   string // text filter input placeholder
+	SelectAll    string // select all label
+	ClearSelect  string // clear selection label
+	Value        string // "Value" placeholder (number filter)
+	Contains     string // text filter operator
+	StartsWith   string // text filter operator
+	Equals       string // text filter operator
+	Range        string // number filter operator
+	GreaterOrEq  string // ≥
+	LessOrEq     string // ≤
+	GreaterThan  string // >
+	LessThan     string // <
+	NumEquals    string // = (number)
+
+	// ItemCount formats "X of Y" — receives (showing, total).
+	ItemCount func(showing, total int) string
+}
+
+func defaultFilterLocale() FilterLocale {
+	return FilterLocale{
+		From: "From", To: "To",
+		Today: "Today", ThisWeek: "This week", ThisMonth: "This month",
+		ThisQuarter: "This quarter", ThisYear: "This year",
+		LastMonth: "Last month", LastYear: "Last year",
+	}
+}
+
+func defaultTableLocale() *TableLocale {
+	return &TableLocale{
+		FilterLocale: defaultFilterLocale(),
+		Search:       "Search...", Apply: "Apply", Cancel: "Cancel", Reset: "Reset",
+		Excel: "Excel", LoadMore: "Load more...", NoData: "No data",
+		SearchText: "Search text...", SelectAll: "Select all", ClearSelect: "Clear selection",
+		Value: "Value", Contains: "Contains", StartsWith: "Starts with", Equals: "Equals",
+		Range: "Range", GreaterOrEq: "≥ Greater or equal", LessOrEq: "≤ Less or equal",
+		GreaterThan: "> Greater than", LessThan: "< Less than", NumEquals: "= Equals",
+		ItemCount: func(showing, total int) string { return fmt.Sprintf("%d of %d", showing, total) },
+	}
+}
+
+// ---------------------------------------------------------------------------
 // DataTable: generic, configurable table with search, sort, pagination, export
 // and advanced per-column filtering
 // ---------------------------------------------------------------------------
@@ -76,6 +148,9 @@ type DataTable[T any] struct {
 
 	// Row detail (accordion)
 	detail func(*T) *Node // renders expandable detail content below a row
+
+	// Locale (per-instance override; nil = English default)
+	locale *TableLocale
 }
 
 // FilterBadge represents an active filter badge
@@ -112,11 +187,27 @@ func NewDataTable[T any](id string) *DataTable[T] {
 		pageSize:     10,
 		sortCol:      -1,
 		sortDir:      "asc",
-		emptyText:    "No data",
 		tableCls:     "w-full table-auto text-sm",
 		filters:      make(map[int]*ColumnFilter),
 		filterValues: make(map[int]*FilterValue),
 	}
+}
+
+// Locale sets a per-instance locale for this table's UI strings.
+// When nil (default), English text is used.
+//
+//	table.Locale(&ui.TableLocale{Search: "Hľadať...", Apply: "Použiť"})
+func (dt *DataTable[T]) Locale(l *TableLocale) *DataTable[T] {
+	dt.locale = l
+	return dt
+}
+
+// loc returns the effective locale for this table.
+func (dt *DataTable[T]) loc() *TableLocale {
+	if dt.locale != nil {
+		return dt.locale
+	}
+	return defaultTableLocale()
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +390,13 @@ func (dt *DataTable[T]) TotalItems(count int) *DataTable[T] {
 func (dt *DataTable[T]) getAction() string {
 	return dt.action
 }
+
+func (dt *DataTable[T]) getEmptyText() string {
+	if dt.emptyText != "" {
+		return dt.emptyText
+	}
+	return dt.loc().NoData
+}
 func (dt *DataTable[T]) Sort(col int, dir string) *DataTable[T] {
 	dt.sortCol = col
 	dt.sortDir = dir
@@ -403,7 +501,7 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 			"placeholder-gray-400 dark:placeholder-gray-500 "+
 			"focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400",
 	).ID(searchID).
-		Attr("placeholder", "Search...").
+		Attr("placeholder", dt.loc().Search).
 		Attr("value", dt.searchValue).
 		On("keydown", JS(dt.searchEnterJS(searchID))).
 		On("search", JS(dt.searchImmediateJS(searchID)))
@@ -435,7 +533,7 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 		resetBtn := Button(
 			"text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 " +
 				"cursor-pointer transition-colors",
-		).Text("Reset").OnClick(JS(dt.resetFiltersJS()))
+		).Text(dt.loc().Reset).OnClick(JS(dt.resetFiltersJS()))
 		filterBarItems = append(filterBarItems, resetBtn)
 	}
 
@@ -588,7 +686,7 @@ func (dt *DataTable[T]) renderTable(data []*T) *Node {
 		emptyRow := Tr().Render(
 			Td("text-center p-8 text-gray-400 dark:text-gray-500").
 				Attr("colspan", fmt.Sprintf("%d", colSpan)).
-				Text(dt.emptyText),
+				Text(dt.getEmptyText()),
 		)
 		tbody = Tbody().ID(tbodyID).Render(emptyRow)
 	} else {
@@ -768,15 +866,16 @@ func (dt *DataTable[T]) renderFilterPopupInline(colIdx int) *Node {
 
 	// Content based on filter type
 	var content *Node
+	l := dt.loc()
 	switch filter.Type {
 	case FilterTypeDate:
-		content = renderDateFilter(colIdx, currentValue)
+		content = renderDateFilter(l, colIdx, currentValue)
 	case FilterTypeNumber:
-		content = renderNumberFilter(colIdx, currentValue)
+		content = renderNumberFilter(l, colIdx, currentValue)
 	case FilterTypeSelect:
-		content = renderSelectFilter(colIdx, filter.Options, currentValue)
+		content = renderSelectFilter(l, colIdx, filter.Options, currentValue)
 	default:
-		content = renderTextFilter(colIdx, currentValue)
+		content = renderTextFilter(l, colIdx, currentValue)
 	}
 
 	// Action buttons: [Apply]  Cancel
@@ -785,10 +884,10 @@ func (dt *DataTable[T]) renderFilterPopupInline(colIdx int) *Node {
 			"px-3 py-1.5 text-xs font-medium rounded-md cursor-pointer "+
 				"bg-gray-900 dark:bg-gray-700 text-white dark:text-gray-100 "+
 				"hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors",
-		).Text("Apply").OnClick(JS(dt.applyFilterJS(colIdx))),
+		).Text(dt.loc().Apply).OnClick(JS(dt.applyFilterJS(colIdx))),
 		Button(
 			"text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text("Cancel").OnClick(JS(fmt.Sprintf(
+		).Text(dt.loc().Cancel).OnClick(JS(fmt.Sprintf(
 			"event.stopPropagation();document.getElementById('%s').style.display='none'",
 			escJS(popupID),
 		))),
@@ -912,7 +1011,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 			Span("text-base leading-none").
 				Style("font-family", "Material Icons Round").
 				Text("grid_on"),
-			Span().Text("Excel"),
+			Span().Text(dt.loc().Excel),
 		)
 		footerItems = append(footerItems, exportBtn)
 	}
@@ -927,16 +1026,16 @@ func (dt *DataTable[T]) renderFooter() *Node {
 			showing = dt.totalItems
 		}
 		countText := Span("text-sm text-gray-500 dark:text-gray-400").
-			Text(fmt.Sprintf("%d of %d", showing, dt.totalItems))
+			Text(dt.loc().ItemCount(showing, dt.totalItems))
 		footerItems = append(footerItems, countText)
 	}
 
 	// Reset paging button (when user has loaded more than first page)
 	if dt.page > 1 && action != "" {
 		resetBtn := Button(
-			"inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-md cursor-pointer "+
-				"border border-gray-300 dark:border-gray-600 "+
-				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 "+
+			"inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-md cursor-pointer " +
+				"border border-gray-300 dark:border-gray-600 " +
+				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 " +
 				"hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors",
 		).Text("×").OnClick(JS(dt.resetPagingJS()))
 		footerItems = append(footerItems, resetBtn)
@@ -944,11 +1043,11 @@ func (dt *DataTable[T]) renderFooter() *Node {
 
 	if dt.hasMore && action != "" {
 		loadMoreBtn := Button(
-			"inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer "+
-				"border border-gray-300 dark:border-gray-600 "+
-				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
+			"inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer " +
+				"border border-gray-300 dark:border-gray-600 " +
+				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Text("Load more...").OnClick(JS(dt.loadMoreJS()))
+		).Text(dt.loc().LoadMore).OnClick(JS(dt.loadMoreJS()))
 		footerItems = append(footerItems, loadMoreBtn)
 	}
 
@@ -1009,7 +1108,12 @@ func (dt *DataTable[T]) FooterID() string {
 // FilterPopup renders a filter popup for a specific column.
 // This should be used by the server to render the popup content when
 // operation='openFilter' is received.
-func FilterPopup(colIdx int, colLabel string, filterType FilterType, options []string, currentValue *FilterValue) *Node {
+func FilterPopup(colIdx int, colLabel string, filterType FilterType, options []string, currentValue *FilterValue, l ...*TableLocale) *Node {
+	loc := defaultTableLocale()
+	if len(l) > 0 && l[0] != nil {
+		loc = l[0]
+	}
+
 	popupID := fmt.Sprintf("filter-popup-%d", colIdx)
 
 	// Popup container
@@ -1024,13 +1128,13 @@ func FilterPopup(colIdx int, colLabel string, filterType FilterType, options []s
 	var content *Node
 	switch filterType {
 	case FilterTypeDate:
-		content = renderDateFilter(colIdx, currentValue)
+		content = renderDateFilter(loc, colIdx, currentValue)
 	case FilterTypeNumber:
-		content = renderNumberFilter(colIdx, currentValue)
+		content = renderNumberFilter(loc, colIdx, currentValue)
 	case FilterTypeSelect:
-		content = renderSelectFilter(colIdx, options, currentValue)
+		content = renderSelectFilter(loc, colIdx, options, currentValue)
 	default:
-		content = renderTextFilter(colIdx, currentValue)
+		content = renderTextFilter(loc, colIdx, currentValue)
 	}
 
 	// Action buttons: Apply (black) left, Cancel (text) right, no border
@@ -1039,10 +1143,10 @@ func FilterPopup(colIdx int, colLabel string, filterType FilterType, options []s
 			"px-3 py-1.5 text-xs font-medium rounded-md cursor-pointer "+
 				"bg-gray-900 dark:bg-gray-700 text-white dark:text-gray-100 "+
 				"hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors",
-		).Text("Apply").OnClick(JS(fmt.Sprintf("applyFilter(%d)", colIdx))),
+		).Text(loc.Apply).OnClick(JS(fmt.Sprintf("applyFilter(%d)", colIdx))),
 		Button(
 			"text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text("Cancel").OnClick(JS(fmt.Sprintf(
+		).Text(loc.Cancel).OnClick(JS(fmt.Sprintf(
 			"document.getElementById('filter-popup-%d').style.display='none'", colIdx,
 		))),
 	)
@@ -1050,7 +1154,7 @@ func FilterPopup(colIdx int, colLabel string, filterType FilterType, options []s
 	return popup.Render(header, content, actions)
 }
 
-func renderTextFilter(colIdx int, currentValue *FilterValue) *Node {
+func renderTextFilter(loc *TableLocale, colIdx int, currentValue *FilterValue) *Node {
 	operator := OpContains
 	value := ""
 	if currentValue != nil {
@@ -1068,9 +1172,9 @@ func renderTextFilter(colIdx int, currentValue *FilterValue) *Node {
 		val   string
 		label string
 	}{
-		{string(OpContains), "Contains"},
-		{string(OpStartsWith), "Starts with"},
-		{string(OpEquals), "Equals"},
+		{string(OpContains), loc.Contains},
+		{string(OpStartsWith), loc.StartsWith},
+		{string(OpEquals), loc.Equals},
 	}
 
 	for _, op := range opOptions {
@@ -1087,13 +1191,13 @@ func renderTextFilter(colIdx int, currentValue *FilterValue) *Node {
 			"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 "+
 			"focus:outline-none focus:ring-1 focus:ring-blue-500",
 	).ID(fmt.Sprintf("filter-%d-val", colIdx)).
-		Attr("placeholder", "Search text...").
+		Attr("placeholder", loc.SearchText).
 		Attr("value", value)
 
 	return Div().Render(opSelect, valInput)
 }
 
-func renderDateFilter(colIdx int, currentValue *FilterValue) *Node {
+func renderDateFilter(loc *TableLocale, colIdx int, currentValue *FilterValue) *Node {
 	from := ""
 	to := ""
 	if currentValue != nil {
@@ -1107,25 +1211,25 @@ func renderDateFilter(colIdx int, currentValue *FilterValue) *Node {
 
 	// Od (From) row
 	fromRow := Div("flex items-center gap-2 mb-1.5").Render(
-		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("From"),
+		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text(loc.From),
 		IDate(inputCls).ID(fmt.Sprintf("filter-%d-from", colIdx)).Attr("value", from),
 	)
 
 	// To row
 	toRow := Div("flex items-center gap-2 mb-2").Render(
-		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text("To"),
+		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text(loc.To),
 		IDate(inputCls).ID(fmt.Sprintf("filter-%d-to", colIdx)).Attr("value", to),
 	)
 
 	// Quick select buttons
 	quickButtons := Div("flex flex-wrap gap-1").Render(
-		renderQuickDateBtn(colIdx, "Today", "today"),
-		renderQuickDateBtn(colIdx, "This week", "thisweek"),
-		renderQuickDateBtn(colIdx, "This month", "thismonth"),
-		renderQuickDateBtn(colIdx, "This quarter", "thisquarter"),
-		renderQuickDateBtn(colIdx, "This year", "thisyear"),
-		renderQuickDateBtn(colIdx, "Last month", "lastmonth"),
-		renderQuickDateBtn(colIdx, "Last year", "lastyear"),
+		renderQuickDateBtn(colIdx, loc.Today, "today"),
+		renderQuickDateBtn(colIdx, loc.ThisWeek, "thisweek"),
+		renderQuickDateBtn(colIdx, loc.ThisMonth, "thismonth"),
+		renderQuickDateBtn(colIdx, loc.ThisQuarter, "thisquarter"),
+		renderQuickDateBtn(colIdx, loc.ThisYear, "thisyear"),
+		renderQuickDateBtn(colIdx, loc.LastMonth, "lastmonth"),
+		renderQuickDateBtn(colIdx, loc.LastYear, "lastyear"),
 	)
 
 	return Div().Render(fromRow, toRow, quickButtons)
@@ -1156,7 +1260,7 @@ func renderQuickDateBtn(colIdx int, label, rangeType string) *Node {
 	)))
 }
 
-func renderNumberFilter(colIdx int, currentValue *FilterValue) *Node {
+func renderNumberFilter(loc *TableLocale, colIdx int, currentValue *FilterValue) *Node {
 	operator := OpRange
 	from := ""
 	to := ""
@@ -1176,12 +1280,12 @@ func renderNumberFilter(colIdx int, currentValue *FilterValue) *Node {
 		val   string
 		label string
 	}{
-		{string(OpRange), "Range"},
-		{string(OpGTE), "≥ Greater or equal"},
-		{string(OpLTE), "≤ Less or equal"},
-		{string(OpGT), "> Greater than"},
-		{string(OpLT), "< Less than"},
-		{string(OpEquals), "= Equals"},
+		{string(OpRange), loc.Range},
+		{string(OpGTE), loc.GreaterOrEq},
+		{string(OpLTE), loc.LessOrEq},
+		{string(OpGT), loc.GreaterThan},
+		{string(OpLT), loc.LessThan},
+		{string(OpEquals), loc.NumEquals},
 	}
 
 	for _, op := range opOptions {
@@ -1200,9 +1304,9 @@ func renderNumberFilter(colIdx int, currentValue *FilterValue) *Node {
 	toID := fmt.Sprintf("filter-%d-to", colIdx)
 	isRange := operator == OpRange
 
-	fromPlaceholder := "Value"
+	fromPlaceholder := loc.Value
 	if isRange {
-		fromPlaceholder = "From"
+		fromPlaceholder = loc.From
 	}
 
 	fromInput := INumber(inputCls).ID(fromID).
@@ -1215,13 +1319,13 @@ func renderNumberFilter(colIdx int, currentValue *FilterValue) *Node {
 	}
 	toWrap := Div("flex gap-1.5").ID(fmt.Sprintf("filter-%d-to-wrap", colIdx)).
 		Style("display", toDisplay).
-		Render(INumber(inputCls).ID(toID).Attr("placeholder", "To").Attr("value", to))
+		Render(INumber(inputCls).ID(toID).Attr("placeholder", loc.To).Attr("value", to))
 
 	// Toggle "to" field visibility and "from" placeholder based on operator
 	opSelect.On("change", JS(fmt.Sprintf(
 		"var isRange=this.value==='range';"+
 			"document.getElementById('%s').style.display=isRange?'flex':'none';"+
-			"document.getElementById('%s').placeholder=isRange?'From':'Value';",
+			fmt.Sprintf("document.getElementById('%%s').placeholder=isRange?'%s':'%s';", escJS(loc.From), escJS(loc.Value)),
 		escJS(fmt.Sprintf("filter-%d-to-wrap", colIdx)), escJS(fromID),
 	)))
 
@@ -1230,7 +1334,7 @@ func renderNumberFilter(colIdx int, currentValue *FilterValue) *Node {
 	return Div().Render(opSelect, inputs)
 }
 
-func renderSelectFilter(colIdx int, options []string, currentValue *FilterValue) *Node {
+func renderSelectFilter(loc *TableLocale, colIdx int, options []string, currentValue *FilterValue) *Node {
 	selected := make(map[string]bool)
 	if currentValue != nil {
 		for _, v := range currentValue.Values {
@@ -1242,12 +1346,12 @@ func renderSelectFilter(colIdx int, options []string, currentValue *FilterValue)
 	header := Div("flex items-center justify-between mb-2").Render(
 		Button(
 			"text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text("Select all").OnClick(JS(fmt.Sprintf(
+		).Text(loc.SelectAll).OnClick(JS(fmt.Sprintf(
 			"document.querySelectorAll('[id^=\"filter-%d-opt-\"]').forEach(function(c){c.checked=true})", colIdx,
 		))),
 		Button(
 			"text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text("Clear selection").OnClick(JS(fmt.Sprintf(
+		).Text(loc.ClearSelect).OnClick(JS(fmt.Sprintf(
 			"document.querySelectorAll('[id^=\"filter-%d-opt-\"]').forEach(function(c){c.checked=false})", colIdx,
 		))),
 	)
