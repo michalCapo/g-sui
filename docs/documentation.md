@@ -36,7 +36,7 @@
 
 ## Architecture
 
-g-sui compiles Go node trees into **pure JavaScript** strings. The browser receives raw JS that performs `document.createElement()` calls directly -- no HTML templates, no JSON intermediate format, no client-side framework.
+g-sui compiles Go node trees into **pure JavaScript** strings. The browser receives raw JS that performs `document.createElement()` calls directly -- no HTML templates, no JSON intermediate format, no client-side framework. SVG elements are created with `document.createElementNS()` using the proper SVG namespace, so inline SVG icons render correctly without workarounds.
 
 ```
 ┌──────────────────────────────────────────┐
@@ -473,7 +473,28 @@ ui.Div("p-6").Render(
 
 ### Standard Elements
 
-`Div`, `Span`, `Button`, `H1`-`H6`, `P`, `A`, `Nav`, `Main`, `Header`, `Footer`, `Section`, `Article`, `Aside`, `Form`, `Pre`, `Code`, `Ul`, `Ol`, `Li`, `Label`, `Textarea`, `Select`, `Option`, `SVG`
+`Div`, `Span`, `Button`, `H1`-`H6`, `P`, `A`, `Nav`, `Main`, `Header`, `Footer`, `Section`, `Article`, `Aside`, `Form`, `Pre`, `Code`, `Ul`, `Ol`, `Li`, `Label`, `Textarea`, `Select`, `Option`
+
+### SVG Elements
+
+`SVG` creates the root `<svg>` element. All children of an SVG root are automatically created with `document.createElementNS('http://www.w3.org/2000/svg', tag)` -- no manual namespace handling needed. Use `El(tag)` for SVG child elements:
+
+```go
+// Inline SVG icon -- all elements use the correct SVG namespace
+ui.SVG("w-6 h-6").
+    Attr("viewBox", "0 0 24 24").Attr("fill", "none").
+    Attr("stroke", "currentColor").Attr("stroke-width", "2").
+    Render(
+        ui.El("circle").Attr("cx", "12").Attr("cy", "12").Attr("r", "10"),
+        ui.El("path").Attr("d", "M9 12l2 2 4-4"),
+    )
+```
+
+Supported SVG child tags (all created with `createElementNS` when inside an SVG root):
+
+`g`, `path`, `circle`, `ellipse`, `line`, `polyline`, `polygon`, `rect`, `text`, `tspan`, `defs`, `symbol`, `use`, `image`, `clipPath`, `mask`, `pattern`, `linearGradient`, `radialGradient`, `stop`, `filter`, `marker`, `title`, `desc`, `foreignObject`, `animate`, `animateMotion`, `animateTransform`, `set`, `textPath`
+
+SVG elements use `setAttribute('class', ...)` instead of `.className` for compatibility with the SVG DOM.
 
 ### Table Elements
 
@@ -591,6 +612,10 @@ Every `*Node` compiles to JavaScript. Five compilation strategies exist:
 | `ToJSInner(targetID)` | Replaces innerHTML of target |
 
 All methods produce self-executing IIFEs. If the target element is not found, a warning is logged and `__ws.notfound` is called (which cancels any active Push goroutines for that connection).
+
+### SVG Namespace
+
+When compiling, the framework detects SVG elements and emits `document.createElementNS('http://www.w3.org/2000/svg', tag)` instead of `document.createElement(tag)`. The SVG context propagates automatically to all descendants -- any `El("path")`, `El("circle")`, etc. nested inside an `SVG()` root will use the correct namespace. CSS classes on SVG elements are set via `setAttribute('class', ...)` since SVG's `.className` is an `SVGAnimatedString`.
 
 ### Example
 
@@ -875,11 +900,48 @@ Renders markdown to HTML using goldmark. Uses `.JS()` to set innerHTML after mou
 
 ### Icon
 
+**Material Icons** (font-based):
+
 ```go
 ui.Icon("home")                         // Material Icons Round
 ui.Icon("settings", "text-lg text-blue-600")
 ui.IconText("check_circle", "Verified", "text-green-600")
 ```
+
+**Inline SVG** (namespace-aware, no font dependency):
+
+```go
+// Stroke icon
+ui.SVG("w-5 h-5").
+    Attr("viewBox", "0 0 24 24").Attr("fill", "none").
+    Attr("stroke", "currentColor").Attr("stroke-width", "2").
+    Attr("stroke-linecap", "round").Attr("stroke-linejoin", "round").
+    Render(
+        ui.El("circle").Attr("cx", "12").Attr("cy", "12").Attr("r", "10"),
+        ui.El("path").Attr("d", "M9 12l2 2 4-4"),
+    )
+
+// Filled icon
+ui.SVG("w-5 h-5 text-pink-500").
+    Attr("viewBox", "0 0 24 24").Attr("fill", "currentColor").
+    Render(
+        ui.El("path").Attr("d", "M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z"),
+    )
+
+// Animated spinner
+ui.SVG("w-5 h-5 animate-spin").
+    Attr("viewBox", "0 0 24 24").Attr("fill", "none").
+    Render(
+        ui.El("circle").Attr("cx", "12").Attr("cy", "12").Attr("r", "10").
+            Attr("stroke", "currentColor").Attr("stroke-width", "3").
+            Style("opacity", "0.25"),
+        ui.El("path").Attr("d", "M4 12a8 8 0 018-8").
+            Attr("stroke", "currentColor").Attr("stroke-width", "3").
+            Attr("stroke-linecap", "round"),
+    )
+```
+
+All SVG child elements (`path`, `circle`, `line`, `polygon`, etc.) inherit the SVG namespace automatically. Tailwind classes like `w-5`, `h-5`, `text-pink-500`, `animate-spin` work on SVG elements via `setAttribute('class', ...)`.
 
 ### Theme Switcher
 

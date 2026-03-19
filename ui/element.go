@@ -2,6 +2,11 @@
 // typed DOM node trees that compile to pure JavaScript strings.
 // The browser receives raw JS that performs document.createElement calls
 // directly -- no HTML, no JSON intermediate, no client-side framework.
+//
+// SVG elements (svg, path, circle, rect, etc.) are automatically created
+// with document.createElementNS using the SVG namespace. Child elements
+// of an SVG root inherit the namespace. Classes on SVG elements use
+// setAttribute('class', ...) instead of .className for compatibility.
 package ui
 
 import (
@@ -407,21 +412,56 @@ func (n *Node) ToJSInner(targetID string) string {
 	return b.String()
 }
 
+// svgTags lists element names that belong to the SVG namespace.
+// When any of these is encountered (or is a descendant of one),
+// compile emits createElementNS instead of createElement.
+var svgTags = map[string]bool{
+	"svg": true, "g": true, "path": true, "circle": true, "ellipse": true,
+	"line": true, "polyline": true, "polygon": true, "rect": true, "text": true,
+	"tspan": true, "defs": true, "symbol": true, "use": true, "image": true,
+	"clipPath": true, "mask": true, "pattern": true, "linearGradient": true,
+	"radialGradient": true, "stop": true, "filter": true, "feBlend": true,
+	"feColorMatrix": true, "feComponentTransfer": true, "feComposite": true,
+	"feConvolveMatrix": true, "feDiffuseLighting": true, "feDisplacementMap": true,
+	"feFlood": true, "feGaussianBlur": true, "feImage": true, "feMerge": true,
+	"feMergeNode": true, "feMorphology": true, "feOffset": true,
+	"feSpecularLighting": true, "feTile": true, "feTurbulence": true,
+	"marker": true, "title": true, "desc": true, "metadata": true,
+	"foreignObject": true, "switch": true, "a": true, "animate": true,
+	"animateMotion": true, "animateTransform": true, "set": true,
+	"textPath": true,
+}
+
+const svgNS = "http://www.w3.org/2000/svg"
+
 // compile recursively emits JS statements to build a DOM element tree.
 // Returns the variable name assigned to this node.
 // Raw JS blocks (node.rawJS) are collected into postJS and deferred until
 // after the root node is inserted into the DOM so that getElementById works.
-func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string) string {
+// The inSVG flag propagates SVG namespace context to descendants.
+func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG ...bool) string {
 	varName := fmt.Sprintf("e%d", *counter)
 	*counter++
 
-	fmt.Fprintf(b, "var %s=document.createElement('%s');", varName, escJS(n.tag))
+	parentIsSVG := len(inSVG) > 0 && inSVG[0]
+	useSVGNS := parentIsSVG || n.tag == "svg"
+
+	if useSVGNS {
+		fmt.Fprintf(b, "var %s=document.createElementNS('%s','%s');", varName, svgNS, escJS(n.tag))
+	} else {
+		fmt.Fprintf(b, "var %s=document.createElement('%s');", varName, escJS(n.tag))
+	}
 
 	if n.id != "" {
 		fmt.Fprintf(b, "%s.id='%s';", varName, escJS(n.id))
 	}
 	if n.class != "" {
-		fmt.Fprintf(b, "%s.className='%s';", varName, escJS(n.class))
+		if useSVGNS {
+			// SVG elements have className as SVGAnimatedString; use setAttribute.
+			fmt.Fprintf(b, "%s.setAttribute('class','%s');", varName, escJS(n.class))
+		} else {
+			fmt.Fprintf(b, "%s.className='%s';", varName, escJS(n.class))
+		}
 	}
 	if n.text != "" {
 		fmt.Fprintf(b, "%s.textContent='%s';", varName, escJS(n.text))
@@ -463,7 +503,7 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string) strin
 
 	// Children
 	for _, child := range n.children {
-		childVar := child.compile(b, counter, postJS)
+		childVar := child.compile(b, counter, postJS, useSVGNS)
 		fmt.Fprintf(b, "%s.appendChild(%s);", varName, childVar)
 	}
 

@@ -432,6 +432,44 @@ func TestRawJSThisBindingNested(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// SVG namespace: svg elements must use createElementNS
+// ---------------------------------------------------------------------------
+
+func TestSVGUsesCreateElementNS(t *testing.T) {
+	n := SVG("w-6 h-6").Attr("viewBox", "0 0 24 24")
+	js := n.ToJS()
+
+	expect(t, js, "createElementNS('http://www.w3.org/2000/svg','svg')")
+	notExpect(t, js, "createElement('svg')")
+	// class must use setAttribute for SVG elements
+	expect(t, js, "setAttribute('class','w-6 h-6')")
+	notExpect(t, js, ".className=")
+}
+
+func TestSVGChildrenInheritNamespace(t *testing.T) {
+	n := SVG("w-6 h-6").Render(
+		El("path").Attr("d", "M0 0L10 10"),
+		El("circle").Attr("cx", "5").Attr("cy", "5").Attr("r", "3"),
+	)
+	js := n.ToJS()
+
+	expect(t, js, "createElementNS('http://www.w3.org/2000/svg','svg')")
+	expect(t, js, "createElementNS('http://www.w3.org/2000/svg','path')")
+	expect(t, js, "createElementNS('http://www.w3.org/2000/svg','circle')")
+	notExpect(t, js, "createElement('path')")
+	notExpect(t, js, "createElement('circle')")
+}
+
+func TestNonSVGStillUsesCreateElement(t *testing.T) {
+	n := Div("flex").Render(Span("text"))
+	js := n.ToJS()
+
+	expect(t, js, "createElement('div')")
+	expect(t, js, "createElement('span')")
+	notExpect(t, js, "createElementNS")
+}
+
+// ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
