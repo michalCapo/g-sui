@@ -694,7 +694,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 			return handler(ctx)
 		}()
 
-		// Prepend any per-page CSS/JS injection from ctx.CSS()/ctx.HeadJS()
+		// Prepend any per-page CSS/JS injection from ctx.HeadCSS()/ctx.HeadJS()
 		var prefix string
 		if cssJS := ctx.cssInjectJS(); cssJS != "" {
 			prefix += cssJS
@@ -732,7 +732,7 @@ type Context struct {
 	wsData     map[string]any
 	app        *App
 	pushCtx    context.Context // cancelled when client navigates away or reports element not found
-	headCSS    []string        // per-page <style>/<link> tags collected via ctx.CSS()
+	headCSS    []string        // per-page <style>/<link> tags collected via ctx.HeadCSS()
 	headJS     []string        // per-page <script> blocks collected via ctx.HeadJS()
 }
 
@@ -742,20 +742,20 @@ func (ctx *Context) WsData() map[string]any {
 	return ctx.wsData
 }
 
-// CSS registers external stylesheets and/or inline CSS rules for the
+// HeadCSS registers external stylesheets and/or inline CSS rules for the
 // current page. On a full page load the tags are injected into the HTML
 // <head> server-side (instant, no JS needed). On SPA navigations (WS
 // actions) the same resources are injected into <head> via JS with
 // deduplication so they are not loaded twice.
 //
-//	ctx.CSS(
+//	ctx.HeadCSS(
 //	    []string{"https://fonts.googleapis.com/css2?family=Oswald&display=swap"},
 //	    `.hero { font-family: 'Oswald', sans-serif; }`,
 //	)
 //
 // Pass nil for urls if you only need inline CSS, or "" for css if you
 // only need external links.
-func (ctx *Context) CSS(urls []string, css string) {
+func (ctx *Context) HeadCSS(urls []string, css string) {
 	for _, u := range urls {
 		ctx.headCSS = append(ctx.headCSS,
 			fmt.Sprintf(`<link rel="stylesheet" href="%s">`, u))
