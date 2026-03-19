@@ -20,25 +20,25 @@ type Employee struct {
 }
 
 var allEmployees = []*Employee{
-	{ID: 1, Name: "Anna Horváthová", Department: "Engineering", Salary: 4200, HireDate: "2026-01-15", Active: true, Role: "Senior Developer"},
-	{ID: 2, Name: "Marek Kováč", Department: "Engineering", Salary: 3600, HireDate: "2026-02-10", Active: true, Role: "Developer"},
-	{ID: 3, Name: "Jana Novotná", Department: "Marketing", Salary: 3100, HireDate: "2025-06-20", Active: true, Role: "Marketing Manager"},
-	{ID: 4, Name: "Peter Baláž", Department: "Engineering", Salary: 4800, HireDate: "2025-09-01", Active: true, Role: "Tech Lead"},
-	{ID: 5, Name: "Eva Šimková", Department: "HR", Salary: 2800, HireDate: "2026-03-05", Active: true, Role: "HR Specialist"},
-	{ID: 6, Name: "Tomáš Krajčí", Department: "Sales", Salary: 3400, HireDate: "2025-11-05", Active: false, Role: "Sales Rep"},
-	{ID: 7, Name: "Lucia Molnárová", Department: "Engineering", Salary: 3900, HireDate: "2025-08-22", Active: true, Role: "Developer"},
-	{ID: 8, Name: "Martin Černý", Department: "Marketing", Salary: 2900, HireDate: "2026-01-08", Active: true, Role: "Content Writer"},
-	{ID: 9, Name: "Katarína Vargová", Department: "Engineering", Salary: 5200, HireDate: "2025-05-12", Active: true, Role: "Architect"},
-	{ID: 10, Name: "Jakub Pokorný", Department: "Sales", Salary: 3200, HireDate: "2025-07-01", Active: true, Role: "Sales Rep"},
-	{ID: 11, Name: "Zuzana Rybárová", Department: "HR", Salary: 3500, HireDate: "2025-12-10", Active: true, Role: "HR Manager"},
-	{ID: 12, Name: "Daniel Vlček", Department: "Engineering", Salary: 4100, HireDate: "2025-02-28", Active: false, Role: "Senior Developer"},
-	{ID: 13, Name: "Michaela Tóthová", Department: "Marketing", Salary: 3300, HireDate: "2026-03-15", Active: true, Role: "Designer"},
-	{ID: 14, Name: "Ondrej Hudák", Department: "Sales", Salary: 3700, HireDate: "2025-04-18", Active: true, Role: "Sales Manager"},
-	{ID: 15, Name: "Barbora Kučerová", Department: "Engineering", Salary: 3800, HireDate: "2026-02-14", Active: true, Role: "Developer"},
-	{ID: 16, Name: "Štefan Mészáros", Department: "HR", Salary: 2600, HireDate: "2026-03-01", Active: true, Role: "Recruiter"},
-	{ID: 17, Name: "Natália Szabóová", Department: "Engineering", Salary: 4500, HireDate: "2025-07-20", Active: true, Role: "DevOps Engineer"},
-	{ID: 18, Name: "Richard Páleník", Department: "Sales", Salary: 3000, HireDate: "2025-11-12", Active: false, Role: "Sales Rep"},
-	{ID: 19, Name: "Lenka Fiľová", Department: "Marketing", Salary: 3200, HireDate: "2025-10-25", Active: true, Role: "SEO Specialist"},
+	{ID: 1, Name: "Anna Horvath", Department: "Engineering", Salary: 4200, HireDate: "2026-01-15", Active: true, Role: "Senior Developer"},
+	{ID: 2, Name: "Mark Taylor", Department: "Engineering", Salary: 3600, HireDate: "2026-02-10", Active: true, Role: "Developer"},
+	{ID: 3, Name: "Jane Newton", Department: "Marketing", Salary: 3100, HireDate: "2025-06-20", Active: true, Role: "Marketing Manager"},
+	{ID: 4, Name: "Peter Blake", Department: "Engineering", Salary: 4800, HireDate: "2025-09-01", Active: true, Role: "Tech Lead"},
+	{ID: 5, Name: "Eva Simmons", Department: "HR", Salary: 2800, HireDate: "2026-03-05", Active: true, Role: "HR Specialist"},
+	{ID: 6, Name: "Thomas Craig", Department: "Sales", Salary: 3400, HireDate: "2025-11-05", Active: false, Role: "Sales Rep"},
+	{ID: 7, Name: "Lucy Molnar", Department: "Engineering", Salary: 3900, HireDate: "2025-08-22", Active: true, Role: "Developer"},
+	{ID: 8, Name: "Martin Cherry", Department: "Marketing", Salary: 2900, HireDate: "2026-01-08", Active: true, Role: "Content Writer"},
+	{ID: 9, Name: "Katherine Varga", Department: "Engineering", Salary: 5200, HireDate: "2025-05-12", Active: true, Role: "Architect"},
+	{ID: 10, Name: "Jacob Porter", Department: "Sales", Salary: 3200, HireDate: "2025-07-01", Active: true, Role: "Sales Rep"},
+	{ID: 11, Name: "Susan Fisher", Department: "HR", Salary: 3500, HireDate: "2025-12-10", Active: true, Role: "HR Manager"},
+	{ID: 12, Name: "Daniel Wolf", Department: "Engineering", Salary: 4100, HireDate: "2025-02-28", Active: false, Role: "Senior Developer"},
+	{ID: 13, Name: "Michelle Todd", Department: "Marketing", Salary: 3300, HireDate: "2026-03-15", Active: true, Role: "Designer"},
+	{ID: 14, Name: "Andrew Hudson", Department: "Sales", Salary: 3700, HireDate: "2025-04-18", Active: true, Role: "Sales Manager"},
+	{ID: 15, Name: "Barbara Cooper", Department: "Engineering", Salary: 3800, HireDate: "2026-02-14", Active: true, Role: "Developer"},
+	{ID: 16, Name: "Stephen Marsh", Department: "HR", Salary: 2600, HireDate: "2026-03-01", Active: true, Role: "Recruiter"},
+	{ID: 17, Name: "Natalie Shaw", Department: "Engineering", Salary: 4500, HireDate: "2025-07-20", Active: true, Role: "DevOps Engineer"},
+	{ID: 18, Name: "Richard Palmer", Department: "Sales", Salary: 3000, HireDate: "2025-11-12", Active: false, Role: "Sales Rep"},
+	{ID: 19, Name: "Linda Fields", Department: "Marketing", Salary: 3200, HireDate: "2025-10-25", Active: true, Role: "SEO Specialist"},
 	{ID: 20, Name: "Adam Gregor", Department: "Engineering", Salary: 4000, HireDate: "2026-01-03", Active: true, Role: "Developer"},
 }
 
@@ -73,17 +73,17 @@ func newCollate() *r.Collate[Employee] {
 		Action("collate.data").
 		Limit(8).
 		Sort(
-			r.CollateSortField{Field: "name", Label: "Meno"},
-			r.CollateSortField{Field: "department", Label: "Oddelenie"},
-			r.CollateSortField{Field: "salary", Label: "Plat"},
-			r.CollateSortField{Field: "hire_date", Label: "Nástup"},
+			r.CollateSortField{Field: "name", Label: "Name"},
+			r.CollateSortField{Field: "department", Label: "Department"},
+			r.CollateSortField{Field: "salary", Label: "Salary"},
+			r.CollateSortField{Field: "hire_date", Label: "Hire Date"},
 		).
 		Filter(
-			r.CollateFilterField{Field: "active", Label: "Iba aktívni", Type: r.CollateBool},
-			r.CollateFilterField{Field: "hire_date", Label: "Dátum nástupu", Type: r.CollateDateRange},
+			r.CollateFilterField{Field: "active", Label: "Active Only", Type: r.CollateBool},
+			r.CollateFilterField{Field: "hire_date", Label: "Hire Date", Type: r.CollateDateRange},
 			r.CollateFilterField{
 				Field: "department",
-				Label: "Oddelenie",
+				Label: "Department",
 				Type:  r.CollateSelect,
 				Options: []r.CollateOption{
 					{Value: "Engineering", Label: "Engineering"},
@@ -95,7 +95,7 @@ func newCollate() *r.Collate[Employee] {
 		).
 		Row(renderEmployeeRow).
 		Detail(renderEmployeeDetail).
-		Empty("Žiadni zamestnanci").
+		Empty("No employees").
 		EmptyIcon("group_off")
 }
 
@@ -106,10 +106,10 @@ func renderEmployeeRow(emp *Employee, idx int) *r.Node {
 	}
 
 	statusColor := "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-	statusText := "Aktívny"
+	statusText := "Active"
 	if !emp.Active {
 		statusColor = "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-		statusText = "Neaktívny"
+		statusText = "Inactive"
 	}
 
 	return r.Div(stripeCls+" pr-10 relative").Render(
@@ -145,10 +145,10 @@ func renderEmployeeRow(emp *Employee, idx int) *r.Node {
 
 func renderEmployeeDetail(emp *Employee) *r.Node {
 	statusColor := "text-green-600 dark:text-green-400"
-	statusText := "Aktívny"
+	statusText := "Active"
 	if !emp.Active {
 		statusColor = "text-red-500 dark:text-red-400"
-		statusText = "Neaktívny"
+		statusText = "Inactive"
 	}
 
 	labelCls := "text-[11px] font-semibold text-blue-600/70 dark:text-blue-400/70 uppercase tracking-wider"
@@ -156,23 +156,23 @@ func renderEmployeeDetail(emp *Employee) *r.Node {
 
 	return r.Div("grid grid-cols-3 gap-x-10 gap-y-5 py-1").Render(
 		r.Div("flex flex-col").Render(
-			r.Span(labelCls).Text("ID zamestnanca"),
+			r.Span(labelCls).Text("Employee ID"),
 			r.Span(valueCls).Text(fmt.Sprintf("#%04d", emp.ID)),
 		),
 		r.Div("flex flex-col").Render(
-			r.Span(labelCls).Text("Mzda"),
+			r.Span(labelCls).Text("Salary"),
 			r.Span(valueCls).Text(fmt.Sprintf("€%.2f", emp.Salary)),
 		),
 		r.Div("flex flex-col").Render(
-			r.Span(labelCls).Text("Oddelenie"),
+			r.Span(labelCls).Text("Department"),
 			r.Span(valueCls).Text(emp.Department),
 		),
 		r.Div("flex flex-col").Render(
-			r.Span(labelCls).Text("Pozícia"),
+			r.Span(labelCls).Text("Position"),
 			r.Span(valueCls).Text(emp.Role),
 		),
 		r.Div("flex flex-col").Render(
-			r.Span(labelCls).Text("Dátum nástupu"),
+			r.Span(labelCls).Text("Hire Date"),
 			r.Span(valueCls).Text(emp.HireDate),
 		),
 		r.Div("flex flex-col").Render(

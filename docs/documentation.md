@@ -24,11 +24,12 @@
 12. [Components](#components)
 13. [Form Builder](#form-builder)
 14. [Data Tables](#data-tables)
-15. [Theme & Dark Mode](#theme--dark-mode)
-16. [Security](#security)
-17. [Examples](#examples)
-18. [Deployment](#deployment)
-19. [API Reference](#api-reference)
+15. [Collate (Data Panel)](#collate-data-panel)
+16. [Theme & Dark Mode](#theme--dark-mode)
+17. [Security](#security)
+18. [Examples](#examples)
+19. [Deployment](#deployment)
+20. [API Reference](#api-reference)
 
 ---
 
@@ -113,6 +114,15 @@ app := ui.NewApp()
 
 Creates the application instance. Holds page routes, action handlers, WebSocket clients, and an HTTP mux.
 
+#### App Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Favicon` | `string` | Path to favicon (adds `<link rel="icon">`) |
+| `Title` | `string` | Default document title |
+| `Description` | `string` | Meta description tag |
+| `HTMLHead` | `[]string` | Additional raw HTML injected into `<head>` |
+
 ### Page Routes
 
 ```go
@@ -135,6 +145,48 @@ app.Action("counter.inc", func(ctx *ui.Context) string {
 ```
 
 Registers a named server action callable via WebSocket. The handler receives a `Context` and returns a raw JS string that the client executes.
+
+### Custom HTTP Routes
+
+```go
+app.GET("/api/health", func(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("ok"))
+})
+app.POST("/api/upload", uploadHandler)
+app.DELETE("/api/items/:id", deleteHandler)
+```
+
+Standard HTTP handlers for REST endpoints or webhooks. Path parameters use `:param` syntax.
+
+### Layout
+
+```go
+app.Layout(func(ctx *ui.Context) *ui.Node {
+    return ui.Div("min-h-screen").Render(
+        ui.Nav("bg-white shadow").Render(/* nav content */),
+        ui.Main("max-w-5xl mx-auto").ID("content"),
+    )
+})
+```
+
+Sets a global layout handler. The layout wraps page content for all routes.
+
+### Handler
+
+```go
+handler := app.Handler()
+http.ListenAndServeTLS(":443", "cert.pem", "key.pem", handler)
+```
+
+Returns the `http.Handler` for custom server configurations (TLS, middleware wrapping, etc.).
+
+### App-Level Broadcast
+
+```go
+app.Broadcast(ui.Notify("info", "Server restarting in 5 minutes"))
+```
+
+Sends a JS string to all connected WebSocket clients without needing a `Context`.
 
 ### Static Assets
 
@@ -549,9 +601,13 @@ ui.NewCard().
     CardBody(ui.P("text-gray-600").Text("Content here.")).
     CardFooter(ui.Button("...").Text("Action")).
     CardImage("/img/photo.jpg", "Photo").
-    CardVariant("shadowed").   // shadowed, bordered, flat, glass
+    CardImageSize("400", "300").       // width, height for CLS prevention
+    CardImagePriority(true).           // fetchpriority="high" for LCP
+    CardVariant("shadowed").           // shadowed, bordered, flat, glass
     CardHover(true).
     CardCompact(true).
+    CardPadding("p-8").                // custom padding
+    CardClass("custom-card-class").
     Build()
 ```
 
@@ -835,6 +891,68 @@ table := ui.NewDataTable[Invoice]("invoice-table").
     Render(invoices)
 ```
 
+### Unified Column Definition
+
+The `Col` method provides a single-call column definition combining header, cell renderer, sort, and filter:
+
+```go
+table := ui.NewDataTable[Invoice]("invoice-table").
+    Action("invoice.data").
+    Col("Number", ui.ColOpt[Invoice]{
+        Text:    func(inv *Invoice) *Node { return ui.Span().Text(inv.Number) },
+        Sortable: true,
+    }).
+    Col("Amount", ui.ColOpt[Invoice]{
+        Text:     func(inv *Invoice) *Node { return ui.Span().Text(fmt.Sprintf("$%.2f", inv.Amount)) },
+        Sortable: true,
+        Filter:   ui.NumFilter,
+        HeadCls:  "text-right",
+        CellCls:  "text-right",
+    }).
+    Col("Department", ui.ColOpt[Invoice]{
+        Text:          func(inv *Invoice) *Node { return ui.Span().Text(inv.Department) },
+        Filter:        ui.SelectFilter,
+        FilterOptions: []string{"Engineering", "Marketing", "Sales", "HR"},
+    }).
+    Render(invoices)
+```
+
+### Column Filters
+
+Per-column filters are shown as popups triggered from the header. Four filter types are available:
+
+| Type | Constant | Aliases | Description |
+|------|----------|---------|-------------|
+| `FilterTypeText` | `"text"` | `TxtFilter` | Contains, starts with, equals |
+| `FilterTypeDate` | `"date"` | `DateFilter` | Date range (from/to) |
+| `FilterTypeNumber` | `"number"` | `NumFilter` | Range, gte, lte, gt, lt, equals |
+| `FilterTypeSelect` | `"select"` | `SelectFilter` | Select from predefined options |
+
+Filter operators:
+
+| Operator | Constant | Used By |
+|----------|----------|---------|
+| `"contains"` | `OpContains` | Text |
+| `"startswith"` | `OpStartsWith` | Text |
+| `"equals"` | `OpEquals` | Text, Number |
+| `"range"` | `OpRange` | Date, Number |
+| `"gte"` | `OpGTE` | Number |
+| `"lte"` | `OpLTE` | Number |
+| `"gt"` | `OpGT` | Number |
+| `"lt"` | `OpLT` | Number |
+
+### Expandable Row Detail
+
+```go
+table.Detail(func(inv *Invoice) *Node {
+    return ui.Div("p-4 bg-gray-50").Render(
+        ui.Span("text-sm").Text(fmt.Sprintf("Notes: %s", inv.Notes)),
+    )
+})
+```
+
+Clicking a row toggles an accordion-style detail panel below it.
+
 ### DataTable Configuration
 
 | Method | Description |
@@ -843,17 +961,28 @@ table := ui.NewDataTable[Invoice]("invoice-table").
 | `HeadHTML(label, cls...)` | Add raw content header |
 | `Field(fn, cls...)` | Column with `*Node` content |
 | `FieldText(fn, cls...)` | Column with plain text (auto-escaped) |
-| `Searchable(action)` | Enable search with debounced input |
+| `Col(label, ColOpt)` | Unified column definition (header + cell + sort + filter) |
+| `Action(name)` | WS action name for all data operations |
 | `Sortable(cols...)` | Mark columns as sortable |
-| `SortAction(action)` | WS action for sort clicks |
-| `Paginated(action, page, totalPages)` | Enable pagination |
-| `TotalItems(count)` | Show item count in pagination |
-| `Export(action)` | Enable export button |
+| `Detail(fn)` | Expandable row detail renderer |
+| `SetFilterValue(col, val)` | Set active filter value for column |
+| `SetFilterLabels(badges)` | Set active filter badge labels |
+| `Page(page)` | Current page number |
+| `PageSize(size)` | Items per page |
+| `TotalPages(total)` | Total number of pages |
+| `TotalItems(count)` | Total item count |
+| `HasMore(bool)` | Whether more items exist (load-more mode) |
+| `RowOffset(offset)` | Row offset for alternating stripes |
 | `Sort(col, dir)` | Current sort state |
 | `Search(val)` | Current search value |
 | `Empty(text)` | Text when no rows |
 | `DataTableClass(cls)` | Wrapper div class |
 | `TableClass(cls)` | `<table>` element class |
+| `Render(data)` | Full table render |
+| `RenderRows(data)` | Render rows only (for append) |
+| `RenderFooter()` | Render footer only |
+| `TbodyID()` | ID of the tbody element |
+| `FooterID()` | ID of the footer element |
 
 ### SimpleTable
 
@@ -870,6 +999,146 @@ ui.NewSimpleTable(3, "w-full").
     CellText("User").
     Build()
 ```
+
+---
+
+## Collate (Data Panel)
+
+A generic data component with a slide-out filter/sort panel, search bar, load-more pagination, and export. Unlike `DataTable` (inline per-column filters and sort arrows), `Collate` uses a dedicated filter panel with an Apply button. All operations go through a single WS action.
+
+### Creating a Collate
+
+```go
+type Employee struct {
+    ID         int
+    Name       string
+    Department string
+    Salary     float64
+    HireDate   string
+    Active     bool
+    Role       string
+}
+
+collate := ui.NewCollate[Employee]("employees-collate").
+    Action("employees.data").
+    Limit(10).
+    Sort(
+        ui.CollateSortField{Field: "name", Label: "Name"},
+        ui.CollateSortField{Field: "department", Label: "Department"},
+        ui.CollateSortField{Field: "salary", Label: "Salary"},
+        ui.CollateSortField{Field: "hire_date", Label: "Hire Date"},
+    ).
+    Filter(
+        ui.CollateFilterField{Field: "active", Label: "Active Only", Type: ui.CollateBool},
+        ui.CollateFilterField{Field: "hire_date", Label: "Hire Date", Type: ui.CollateDateRange},
+        ui.CollateFilterField{
+            Field: "department",
+            Label: "Department",
+            Type:  ui.CollateSelect,
+            Options: []ui.CollateOption{
+                {Value: "Engineering", Label: "Engineering"},
+                {Value: "Marketing", Label: "Marketing"},
+                {Value: "Sales", Label: "Sales"},
+            },
+        },
+    ).
+    Row(func(emp *Employee, idx int) *ui.Node {
+        return ui.Div("p-4 border-b").Render(
+            ui.Span("font-medium").Text(emp.Name),
+            ui.Span("text-sm text-gray-500 ml-2").Text(emp.Department),
+        )
+    }).
+    Detail(func(emp *Employee) *ui.Node {
+        return ui.Div("p-4 bg-gray-50").Render(
+            ui.Span("text-sm").Text(fmt.Sprintf("Salary: $%.2f", emp.Salary)),
+        )
+    }).
+    Empty("No employees").
+    EmptyIcon("group_off").
+    Page(1).TotalItems(len(allEmployees)).HasMore(true).
+    Render(data)
+```
+
+### Filter Types
+
+| Constant | Control | Description |
+|----------|---------|-------------|
+| `CollateBool` | Checkbox | Boolean toggle (e.g., "Active Only") |
+| `CollateDateRange` | Date pickers | From/to date range |
+| `CollateSelect` | Dropdown | Single-value select from options |
+| `CollateMultiCheck` | Checkboxes | Multiple values from options |
+
+### CollateFilterValue
+
+The action handler receives filter values as `[]CollateFilterValue`:
+
+```go
+type CollateFilterValue struct {
+    Field string `json:"field"` // filter field name
+    Type  string `json:"type"`  // "bool", "date", "select"
+    Bool  bool   `json:"bool"`  // for CollateBool
+    From  string `json:"from"`  // for CollateDateRange
+    To    string `json:"to"`    // for CollateDateRange
+    Value string `json:"value"` // for CollateSelect
+}
+```
+
+### Action Request Format
+
+The WS action receives a JSON payload with these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `operation` | string | `"search"`, `"filter"`, `"reset"`, `"loadmore"`, `"export"` |
+| `search` | string | Current search query |
+| `page` | int | Current page (1-based) |
+| `limit` | int | Items per page |
+| `order` | string | Sort order, e.g. `"name asc"` or `"salary desc"` |
+| `filters` | array | Array of `CollateFilterValue` objects |
+
+### Load More (Append Rows)
+
+```go
+// In the action handler, for "loadmore" operation:
+dt := newCollateWithState(req.Search, req.Order).
+    Page(req.Page).TotalItems(totalItems).HasMore(hasMore).
+    RowOffset(start)
+
+resp := ui.NewResponse()
+rows := dt.RenderRows(pageData)
+for _, row := range rows {
+    resp.Append(dt.BodyID(), row)
+}
+resp.Replace(dt.FooterID(), dt.RenderFooter())
+return resp.Build()
+```
+
+### Collate Configuration
+
+| Method | Description |
+|--------|-------------|
+| `NewCollate[T](id)` | Create with unique ID |
+| `Action(name)` | WS action name for all operations |
+| `Sort(fields...)` | Sortable fields shown in panel |
+| `Filter(fields...)` | Filter fields shown in panel |
+| `Row(fn)` | Row renderer `func(*T, int) *Node` |
+| `Detail(fn)` | Expandable detail `func(*T) *Node` |
+| `Limit(n)` | Items per page |
+| `Page(p)` | Current page (1-based) |
+| `TotalItems(n)` | Total matching items |
+| `Search(val)` | Current search query |
+| `Order(order)` | Current sort (e.g. `"name asc"`) |
+| `HasMore(bool)` | Whether more items exist |
+| `SetFilter(field, val)` | Set active filter value |
+| `Empty(text)` | Empty state message |
+| `EmptyIcon(icon)` | Material icon for empty state |
+| `CollateClass(cls)` | Wrapper CSS class |
+| `RowOffset(n)` | Row offset for alternating stripes |
+| `Render(data)` | Full render with data |
+| `RenderRows(data)` | Render rows only (for append) |
+| `RenderFooter()` | Render footer only |
+| `BodyID()` | ID of the row container |
+| `FooterID()` | ID of the footer element |
 
 ---
 
@@ -950,6 +1219,7 @@ go run example/main.go
 | `/button`, `/text`, `/password`, `/number`, `/date`, `/area`, `/select`, `/checkbox`, `/radio` | Individual input demos |
 | `/icons` | Material Icons showcase |
 | `/table` | Table component demo |
+| `/collate` | Collate data panel with filter/sort, search, load-more, expandable detail |
 | `/others` | Miscellaneous component demos |
 
 ---
@@ -989,6 +1259,7 @@ go get github.com/michalCapo/g-sui@v1.001
 | `Node` | DOM element that compiles to JavaScript |
 | `Action` | Server-side handler descriptor (or client-side JS) |
 | `App` | Application container (routes, actions, WS clients) |
+| `LayoutHandler` | `func(ctx *Context) *Node` |
 | `PageHandler` | `func(ctx *Context) *Node` |
 | `ActionHandler` | `func(ctx *Context) string` |
 | `Context` | Request data for pages and WS actions |
@@ -1000,7 +1271,19 @@ go get github.com/michalCapo/g-sui@v1.001
 | `FieldOption` | Value/label pair for select/radio |
 | `FormErrors` | `map[string]string` of validation errors |
 | `DataTable[T]` | Generic configurable table |
+| `ColOpt[T]` | Unified column definition for `DataTable` |
+| `FilterType` | Column filter type (`"text"`, `"date"`, `"number"`, `"select"`) |
+| `FilterOperator` | Filter operator (`"contains"`, `"equals"`, `"range"`, etc.) |
+| `FilterValue` | Active filter value with operator and value(s) |
+| `ColumnFilter` | Column filter configuration |
+| `FilterBadge` | Active filter badge display |
 | `SimpleTable` | Non-generic quick table |
+| `Collate[T]` | Generic data panel with filter/sort panel |
+| `CollateSortField` | Sort field definition for Collate |
+| `CollateFilterType` | Filter control type for Collate |
+| `CollateFilterField` | Filter field definition for Collate |
+| `CollateOption` | Value/label pair for Collate filters |
+| `CollateFilterValue` | Active filter value for Collate |
 | `AlertBuilder` | Alert component builder |
 | `BadgeBuilder` | Badge component builder |
 | `ButtonBuilder` | High-level button builder |
@@ -1022,6 +1305,12 @@ go get github.com/michalCapo/g-sui@v1.001
 **Field Types:** `FieldText`, `FieldPassword`, `FieldEmail`, `FieldNumber`, `FieldPhone`, `FieldDate`, `FieldTime`, `FieldDatetime`, `FieldUrl`, `FieldSearch`, `FieldTextarea`, `FieldSelect`, `FieldRadio`, `FieldRadioBtn`, `FieldRadioCard`, `FieldCheckbox`, `FieldHidden`
 
 **Radio Styles:** `RadioInline`, `RadioButton`, `RadioCard`
+
+**Filter Types:** `FilterTypeText` (`TxtFilter`), `FilterTypeDate` (`DateFilter`), `FilterTypeNumber` (`NumFilter`), `FilterTypeSelect` (`SelectFilter`)
+
+**Filter Operators:** `OpContains`, `OpStartsWith`, `OpEquals`, `OpRange`, `OpGTE`, `OpLTE`, `OpGT`, `OpLT`
+
+**Collate Filter Types:** `CollateBool`, `CollateDateRange`, `CollateSelect`, `CollateMultiCheck`
 
 #### Global Functions
 
@@ -1051,7 +1340,9 @@ go get github.com/michalCapo/g-sui@v1.001
 | `NewResponse()` | `*Response` | Multi-action builder |
 | `NewForm(id)` | `*FormBuilder` | Form builder |
 | `NewDataTable[T](id)` | `*DataTable[T]` | Generic table |
+| `FilterPopup(col, label, type, opts, val)` | `*Node` | Standalone filter popup |
 | `NewSimpleTable(cols, cls...)` | `*SimpleTable` | Quick table |
+| `NewCollate[T](id)` | `*Collate[T]` | Collate data panel |
 | `NewAlert()` | `*AlertBuilder` | Alert builder |
 | `NewBadge(text)` | `*BadgeBuilder` | Badge builder |
 | `NewButton(label)` | `*ButtonBuilder` | Button builder |
