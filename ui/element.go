@@ -489,13 +489,13 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 			collectJSON, _ := json.Marshal(action.Collect)
 			dataJSON, _ := json.Marshal(action.Data)
 			fmt.Fprintf(b,
-				"%s.addEventListener('%s',function(){__ws.call('%s',%s,%s)});",
+				"%s.addEventListener('%s',function(event){event.preventDefault();__ws.call('%s',%s,%s)});",
 				varName, escJS(event), escJS(action.Name), string(dataJSON), string(collectJSON),
 			)
 		} else {
 			dataJSON, _ := json.Marshal(action.Data)
 			fmt.Fprintf(b,
-				"%s.addEventListener('%s',function(){__ws.call('%s',%s)});",
+				"%s.addEventListener('%s',function(event){event.preventDefault();__ws.call('%s',%s)});",
 				varName, escJS(event), escJS(action.Name), string(dataJSON),
 			)
 		}
