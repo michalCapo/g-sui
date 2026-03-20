@@ -1,10 +1,13 @@
 package pages
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/go-pdf/fpdf"
 	r "github.com/michalCapo/g-sui/ui"
 )
 
@@ -352,6 +355,11 @@ func handleTableData(ctx *r.Context) string {
 		return fmt.Sprintf("console.log('Exporting %d items');", len(filtered))
 	}
 
+	// Handle PDF export
+	if req.Operation == "export-pdf" {
+		return exportProductsPDF(filtered)
+	}
+
 	// Handle "load more": append rows to existing tbody + replace footer
 	if req.Operation == "loadmore" {
 		if req.Page < 1 {
@@ -521,6 +529,58 @@ func productDetail(p *Product) *r.Node {
 		field("Status", p.Status),
 		field("Value", fmt.Sprintf("$%.2f", p.Price*float64(p.Stock))),
 	)
+}
+
+func exportProductsPDF(products []*Product) string {
+	pdf := fpdf.New("L", "mm", "A4", "")
+	pdf.SetAutoPageBreak(true, 15)
+	pdf.AddPage()
+
+	// Title
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.CellFormat(0, 10, "Products", "", 1, "C", false, 0, "")
+	pdf.Ln(4)
+
+	// Table header
+	headers := []string{"ID", "Name", "Price", "Stock", "Created", "Category", "Status"}
+	widths := []float64{15, 60, 30, 25, 35, 40, 30}
+
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetFillColor(240, 240, 240)
+	for i, h := range headers {
+		pdf.CellFormat(widths[i], 8, h, "1", 0, "C", true, 0, "")
+	}
+	pdf.Ln(-1)
+
+	// Table rows
+	pdf.SetFont("Helvetica", "", 9)
+	for _, p := range products {
+		row := []string{
+			fmt.Sprintf("%d", p.ID),
+			p.Name,
+			fmt.Sprintf("$%.2f", p.Price),
+			fmt.Sprintf("%d", p.Stock),
+			p.CreatedAt,
+			p.Category,
+			p.Status,
+		}
+		for i, cell := range row {
+			align := "L"
+			if i == 0 || i == 2 || i == 3 {
+				align = "R"
+			}
+			pdf.CellFormat(widths[i], 7, cell, "1", 0, align, false, 0, "")
+		}
+		pdf.Ln(-1)
+	}
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return fmt.Sprintf("console.error('PDF error: %s');", err)
+	}
+
+	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+	return r.Download("products.pdf", "application/pdf", b64)
 }
 
 func RegisterTable(app *r.App, layout func(*r.Node) *r.Node) {

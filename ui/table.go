@@ -32,6 +32,7 @@ type TableLocale struct {
 	Cancel       string // cancel button
 	Reset        string // reset button
 	Excel        string // export button
+	PDF          string // PDF export button
 	LoadMore     string // load more button
 	NoData       string // empty state
 	SearchText   string // text filter input placeholder
@@ -65,7 +66,7 @@ func defaultTableLocale() *TableLocale {
 	return &TableLocale{
 		FilterLocale: defaultFilterLocale(),
 		Search:       "Search...", Apply: "Apply", Cancel: "Cancel", Reset: "Reset",
-		Excel: "Excel", LoadMore: "Load more...", NoData: "No data",
+		Excel: "Excel", PDF: "PDF", LoadMore: "Load more...", NoData: "No data",
 		SearchText: "Search text...", SelectAll: "Select all", ClearSelect: "Clear selection",
 		Value: "Value", Contains: "Contains", StartsWith: "Starts with", Equals: "Equals",
 		Range: "Range", GreaterOrEq: "≥ Greater or equal", LessOrEq: "≤ Less or equal",
@@ -605,6 +606,18 @@ func (dt *DataTable[T]) exportJS() string {
 	)
 }
 
+func (dt *DataTable[T]) exportPdfJS() string {
+	action := dt.getAction()
+	if action == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		"__ws.call('%s',{operation:'export-pdf',search:'%s',pageSize:%d,sort:%d,dir:'%s'})",
+		escJS(action), escJS(dt.searchValue),
+		dt.pageSize, dt.sortCol, escJS(dt.sortDir),
+	)
+}
+
 // ---------------------------------------------------------------------------
 // Table: thead + tbody
 // ---------------------------------------------------------------------------
@@ -1000,14 +1013,22 @@ func (dt *DataTable[T]) renderFooter() *Node {
 
 	footerItems := make([]*Node, 0, 4)
 
-	// Excel export button (bottom-left)
+	// Export buttons (bottom-left)
 	if action != "" {
-		exportBtn := Button(
-			"inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer "+
-				"border border-gray-300 dark:border-gray-600 "+
-				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
-				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).OnClick(JS(dt.exportJS())).Render(
+		exportBtnCls := "inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer " +
+			"border border-gray-300 dark:border-gray-600 " +
+			"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
+			"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+
+		pdfBtn := Button(exportBtnCls).OnClick(JS(dt.exportPdfJS())).Render(
+			Span("text-base leading-none").
+				Style("font-family", "Material Icons Round").
+				Text("picture_as_pdf"),
+			Span().Text(dt.loc().PDF),
+		)
+		footerItems = append(footerItems, pdfBtn)
+
+		exportBtn := Button(exportBtnCls).OnClick(JS(dt.exportJS())).Render(
 			Span("text-base leading-none").
 				Style("font-family", "Material Icons Round").
 				Text("grid_on"),

@@ -17,6 +17,7 @@ type CollateLocale struct {
 	Apply             string // apply button
 	Reset             string // reset button
 	Excel             string // export button
+	PDF               string // PDF export button
 	Filter            string // filter toggle button
 	LoadMore          string // load more button
 	NoData            string // empty state
@@ -33,7 +34,7 @@ func defaultCollateLocale() *CollateLocale {
 	return &CollateLocale{
 		FilterLocale: defaultFilterLocale(),
 		Search:       "Search...", Apply: "Apply", Reset: "Reset",
-		Excel: "Excel", Filter: "Filter", LoadMore: "Load more...",
+		Excel: "Excel", PDF: "PDF", Filter: "Filter", LoadMore: "Load more...",
 		NoData: "No data", AllOption: "— All —",
 		FiltersAndSorting: "Filters & Sorting", Filters: "Filters", SortBy: "Sort by",
 		ItemCount: func(showing, total int) string { return fmt.Sprintf("%d of %d", showing, total) },
@@ -428,13 +429,21 @@ func (c *Collate[T]) renderHeader() *Node {
 	// Spacer
 	items = append(items, Div("flex-1"))
 
-	// Excel export button (right aligned, next to filter)
-	exportBtn := Button(
-		"inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md cursor-pointer "+
-			"border border-gray-300 dark:border-gray-600 "+
-			"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
-			"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-	).OnClick(JS(c.exportJS())).Render(
+	// Export buttons (right aligned, next to filter)
+	exportBtnCls := "inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md cursor-pointer " +
+		"border border-gray-300 dark:border-gray-600 " +
+		"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
+		"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+
+	pdfBtn := Button(exportBtnCls).OnClick(JS(c.exportPdfJS())).Render(
+		Span("text-base leading-none").
+			Style("font-family", "Material Icons Round").
+			Text("picture_as_pdf"),
+		Span().Text(c.loc().PDF),
+	)
+	items = append(items, pdfBtn)
+
+	exportBtn := Button(exportBtnCls).OnClick(JS(c.exportJS())).Render(
 		Span("text-base leading-none").
 			Style("font-family", "Material Icons Round").
 			Text("grid_on"),
@@ -1009,6 +1018,16 @@ func (c *Collate[T]) exportJS() string {
 	}
 	return fmt.Sprintf(
 		"__ws.call('%s',{operation:'export',search:'%s',order:'%s'})",
+		escJS(c.action), escJS(c.search), escJS(c.order),
+	)
+}
+
+func (c *Collate[T]) exportPdfJS() string {
+	if c.action == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		"__ws.call('%s',{operation:'export-pdf',search:'%s',order:'%s'})",
 		escJS(c.action), escJS(c.search), escJS(c.order),
 	)
 }
