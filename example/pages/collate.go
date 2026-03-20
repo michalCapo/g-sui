@@ -1,10 +1,13 @@
 package pages
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/go-pdf/fpdf"
 	r "github.com/michalCapo/g-sui/ui"
 )
 
@@ -238,9 +241,14 @@ func handleCollateData(ctx *r.Context) string {
 
 	totalItems := len(filtered)
 
-	// Handle export
+	// Handle Excel export
 	if req.Operation == "export" {
 		return fmt.Sprintf("console.log('Exporting %d employees');", totalItems)
+	}
+
+	// Handle PDF export
+	if req.Operation == "export-pdf" {
+		return exportEmployeesPDF(filtered)
 	}
 
 	// Handle load more
@@ -384,6 +392,62 @@ func sortEmployees(data []*Employee, order string) {
 		}
 		return cmp < 0
 	})
+}
+
+func exportEmployeesPDF(employees []*Employee) string {
+	pdf := fpdf.New("L", "mm", "A4", "")
+	pdf.SetAutoPageBreak(true, 15)
+	pdf.AddPage()
+
+	// Title
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.CellFormat(0, 10, "Employees", "", 1, "C", false, 0, "")
+	pdf.Ln(4)
+
+	// Table header
+	headers := []string{"ID", "Name", "Department", "Salary", "Hire Date", "Status", "Role"}
+	widths := []float64{15, 50, 40, 30, 30, 25, 60}
+
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetFillColor(240, 240, 240)
+	for i, h := range headers {
+		pdf.CellFormat(widths[i], 8, h, "1", 0, "C", true, 0, "")
+	}
+	pdf.Ln(-1)
+
+	// Table rows
+	pdf.SetFont("Helvetica", "", 9)
+	for _, emp := range employees {
+		status := "Active"
+		if !emp.Active {
+			status = "Inactive"
+		}
+		row := []string{
+			fmt.Sprintf("%d", emp.ID),
+			emp.Name,
+			emp.Department,
+			fmt.Sprintf("%.0f", emp.Salary),
+			emp.HireDate,
+			status,
+			emp.Role,
+		}
+		for i, cell := range row {
+			align := "L"
+			if i == 0 || i == 3 {
+				align = "R"
+			}
+			pdf.CellFormat(widths[i], 7, cell, "1", 0, align, false, 0, "")
+		}
+		pdf.Ln(-1)
+	}
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return fmt.Sprintf("console.error('PDF error: %s');", err)
+	}
+
+	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+	return r.Download("employees.pdf", "application/pdf", b64)
 }
 
 func RegisterCollate(app *r.App, layout func(*r.Node) *r.Node) {
