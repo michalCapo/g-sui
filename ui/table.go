@@ -84,10 +84,11 @@ func defaultTableLocale() *TableLocale {
 type FilterType string
 
 const (
-	FilterTypeText   FilterType = "text"
-	FilterTypeDate   FilterType = "date"
-	FilterTypeNumber FilterType = "number"
-	FilterTypeSelect FilterType = "select"
+	FilterTypeText       FilterType = "text"
+	FilterTypeDate       FilterType = "date"
+	FilterTypeMonthYear  FilterType = "monthyear"
+	FilterTypeNumber     FilterType = "number"
+	FilterTypeSelect     FilterType = "select"
 )
 
 // FilterOperator defines the operator for text/number filters
@@ -226,10 +227,11 @@ type ColOpt[T any] struct {
 }
 
 const (
-	NumFilter    FilterType = FilterTypeNumber
-	TxtFilter    FilterType = FilterTypeText
-	DateFilter   FilterType = FilterTypeDate
-	SelectFilter FilterType = FilterTypeSelect
+	NumFilter        FilterType = FilterTypeNumber
+	TxtFilter        FilterType = FilterTypeText
+	DateFilter       FilterType = FilterTypeDate
+	MonthYearFilter  FilterType = FilterTypeMonthYear
+	SelectFilter     FilterType = FilterTypeSelect
 )
 
 // Col adds a column with header label and options including the render function.
@@ -964,6 +966,8 @@ func (dt *DataTable[T]) renderFilterPopupInline(colIdx int) *Node {
 	switch filter.Type {
 	case FilterTypeDate:
 		content = renderDateFilter(l, colIdx, currentValue)
+	case FilterTypeMonthYear:
+		content = renderMonthYearFilter(l, colIdx, currentValue)
 	case FilterTypeNumber:
 		content = renderNumberFilter(l, colIdx, currentValue)
 	case FilterTypeSelect:
@@ -1013,6 +1017,16 @@ func (dt *DataTable[T]) applyFilterJS(colIdx int) string {
 				"var t=document.getElementById('filter-%d-to').value;"+
 				"document.getElementById('%s').style.display='none';"+
 				"__ws.call('%s',{operation:'filter',col:%d,type:'date',from:f,to:t,search:'%s',page:1,pageSize:%d,sort:%d,dir:'%s'})",
+			colIdx, colIdx, escJS(popupID),
+			escJS(action), colIdx, escJS(dt.searchValue), dt.pageSize, dt.sortCol, escJS(dt.sortDir),
+		)
+	case FilterTypeMonthYear:
+		return fmt.Sprintf(
+			"event.stopPropagation();"+
+				"var f=document.getElementById('filter-%d-from').value;"+
+				"var t=document.getElementById('filter-%d-to').value;"+
+				"document.getElementById('%s').style.display='none';"+
+				"__ws.call('%s',{operation:'filter',col:%d,type:'monthyear',from:f,to:t,search:'%s',page:1,pageSize:%d,sort:%d,dir:'%s'})",
 			colIdx, colIdx, escJS(popupID),
 			escJS(action), colIdx, escJS(dt.searchValue), dt.pageSize, dt.sortCol, escJS(dt.sortDir),
 		)
@@ -1231,6 +1245,8 @@ func FilterPopup(colIdx int, colLabel string, filterType FilterType, options []s
 	switch filterType {
 	case FilterTypeDate:
 		content = renderDateFilter(loc, colIdx, currentValue)
+	case FilterTypeMonthYear:
+		content = renderMonthYearFilter(loc, colIdx, currentValue)
 	case FilterTypeNumber:
 		content = renderNumberFilter(loc, colIdx, currentValue)
 	case FilterTypeSelect:
@@ -1354,6 +1370,65 @@ func renderQuickDateBtn(colIdx int, label, rangeType string) *Node {
 			"case 'thisyear':f=fmt(new Date(y,0,1));t=fmt(new Date(y,11,31));break;"+
 			"case 'lastmonth':f=fmt(new Date(y,m-1,1));t=fmt(new Date(y,m,0));break;"+
 			"case 'lastyear':f=fmt(new Date(y-1,0,1));t=fmt(new Date(y-1,11,31));break;"+
+			"}"+
+			"document.getElementById('filter-%d-from').value=f;"+
+			"document.getElementById('filter-%d-to').value=t;"+
+			"})()",
+		escJS(rangeType), colIdx, colIdx,
+	)))
+}
+
+func renderMonthYearFilter(loc *TableLocale, colIdx int, currentValue *FilterValue) *Node {
+	from := ""
+	to := ""
+	if currentValue != nil {
+		from = currentValue.From
+		to = currentValue.To
+	}
+
+	inputCls := "flex-1 min-w-0 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded " +
+		"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 " +
+		"focus:outline-none focus:ring-1 focus:ring-blue-500"
+
+	// From row with month picker
+	fromRow := Div("flex items-center gap-2 mb-1.5").Render(
+		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text(loc.From),
+		IMonth(inputCls).ID(fmt.Sprintf("filter-%d-from", colIdx)).Attr("value", from),
+	)
+
+	// To row with month picker
+	toRow := Div("flex items-center gap-2 mb-2").Render(
+		Label("text-xs text-gray-500 dark:text-gray-400 w-6").Text(loc.To),
+		IMonth(inputCls).ID(fmt.Sprintf("filter-%d-to", colIdx)).Attr("value", to),
+	)
+
+	// Quick select buttons
+	quickButtons := Div("flex flex-wrap gap-1").Render(
+		renderQuickMonthBtn(colIdx, loc.ThisMonth, "thismonth"),
+		renderQuickMonthBtn(colIdx, loc.ThisQuarter, "thisquarter"),
+		renderQuickMonthBtn(colIdx, loc.ThisYear, "thisyear"),
+		renderQuickMonthBtn(colIdx, loc.LastMonth, "lastmonth"),
+		renderQuickMonthBtn(colIdx, loc.LastYear, "lastyear"),
+	)
+
+	return Div().Render(fromRow, toRow, quickButtons)
+}
+
+func renderQuickMonthBtn(colIdx int, label, rangeType string) *Node {
+	return Button(
+		"px-2 py-1 text-[10px] rounded-full border border-gray-200 dark:border-gray-600 " +
+			"bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 " +
+			"hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer",
+	).Text(label).OnClick(JS(fmt.Sprintf(
+		"(function(){"+
+			"var d=new Date(),y=d.getFullYear(),m=d.getMonth(),f,t;"+
+			"function fmt(yr,mo){return yr+'-'+String(mo).padStart(2,'0')}"+
+			"switch('%s'){"+
+			"case 'thismonth':f=t=fmt(y,m+1);break;"+
+			"case 'thisquarter':var q=Math.floor(m/3)*3;f=fmt(y,q+1);t=fmt(y,q+3);break;"+
+			"case 'thisyear':f=fmt(y,1);t=fmt(y,12);break;"+
+			"case 'lastmonth':var pm=m===0?12:m,py=m===0?y-1:y;f=t=fmt(py,pm);break;"+
+			"case 'lastyear':f=fmt(y-1,1);t=fmt(y-1,12);break;"+
 			"}"+
 			"document.getElementById('filter-%d-from').value=f;"+
 			"document.getElementById('filter-%d-to').value=t;"+

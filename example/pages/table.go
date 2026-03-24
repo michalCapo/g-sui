@@ -13,13 +13,14 @@ import (
 
 // Product is the sample type for the DataTable demo.
 type Product struct {
-	ID        int
-	Name      string
-	Price     float64
-	Stock     int
-	CreatedAt string // Date column for filter demo
-	Category  string // Select filter demo
-	Status    string // Status badge demo
+	ID           int
+	Name         string
+	Price        float64
+	Stock        int
+	CreatedAt    string // Date column for filter demo
+	Category     string // Select filter demo
+	Status       string // Status badge demo
+	ReleaseMonth string // MonthYear filter demo (format: "2026-03")
 }
 
 func TablePage(ctx *r.Context) *r.Node {
@@ -86,30 +87,30 @@ func TablePage(ctx *r.Context) *r.Node {
 
 // allProducts is the full dataset for the DataTable demo
 var allProducts = []*Product{
-	{ID: 1, Name: "Laptop", Price: 999.99, Stock: 25, CreatedAt: "2026-01-15", Category: "Electronics", Status: "Draft"},
-	{ID: 2, Name: "Mouse", Price: 29.50, Stock: 150, CreatedAt: "2026-01-20", Category: "Accessories", Status: "Sent"},
-	{ID: 3, Name: "Keyboard", Price: 79.00, Stock: 80, CreatedAt: "2026-02-05", Category: "Accessories", Status: "Paid"},
-	{ID: 4, Name: "Monitor", Price: 449.99, Stock: 30, CreatedAt: "2026-02-10", Category: "Electronics", Status: "Paid"},
-	{ID: 5, Name: "Headphones", Price: 59.95, Stock: 200, CreatedAt: "2026-02-15", Category: "Accessories", Status: "Overdue"},
-	{ID: 6, Name: "Webcam", Price: 89.99, Stock: 45, CreatedAt: "2026-03-01", Category: "Electronics", Status: "Sent"},
-	{ID: 7, Name: "USB Cable", Price: 12.99, Stock: 500, CreatedAt: "2026-03-05", Category: "Accessories", Status: "Paid"},
-	{ID: 8, Name: "Desk Lamp", Price: 34.50, Stock: 60, CreatedAt: "2026-03-10", Category: "Office", Status: "Draft"},
-	{ID: 9, Name: "Notebook", Price: 8.99, Stock: 300, CreatedAt: "2026-03-15", Category: "Office", Status: "Paid"},
-	{ID: 10, Name: "Pen Set", Price: 15.00, Stock: 120, CreatedAt: "2026-03-20", Category: "Office", Status: "Sent"},
-	{ID: 11, Name: "Monitor Stand", Price: 45.00, Stock: 40, CreatedAt: "2026-04-01", Category: "Accessories", Status: "Overdue"},
-	{ID: 12, Name: "Laptop Bag", Price: 55.00, Stock: 75, CreatedAt: "2026-04-05", Category: "Accessories", Status: "Paid"},
-	{ID: 13, Name: "Tablet", Price: 599.99, Stock: 35, CreatedAt: "2026-05-01", Category: "Electronics", Status: "Draft"},
-	{ID: 14, Name: "Mouse Pad", Price: 14.99, Stock: 220, CreatedAt: "2026-05-10", Category: "Accessories", Status: "Sent"},
-	{ID: 15, Name: "Printer", Price: 249.00, Stock: 15, CreatedAt: "2026-05-15", Category: "Electronics", Status: "Paid"},
-	{ID: 16, Name: "Stapler", Price: 9.50, Stock: 180, CreatedAt: "2026-06-01", Category: "Office", Status: "Overdue"},
-	{ID: 17, Name: "Router", Price: 129.99, Stock: 55, CreatedAt: "2026-06-10", Category: "Electronics", Status: "Sent"},
-	{ID: 18, Name: "USB Hub", Price: 24.99, Stock: 140, CreatedAt: "2026-06-20", Category: "Accessories", Status: "Paid"},
-	{ID: 19, Name: "Desk Chair", Price: 349.00, Stock: 20, CreatedAt: "2026-07-05", Category: "Office", Status: "Draft"},
-	{ID: 20, Name: "Microphone", Price: 89.00, Stock: 65, CreatedAt: "2026-07-15", Category: "Electronics", Status: "Paid"},
-	{ID: 21, Name: "Whiteboard", Price: 42.00, Stock: 30, CreatedAt: "2026-08-01", Category: "Office", Status: "Sent"},
-	{ID: 22, Name: "HDMI Cable", Price: 11.99, Stock: 400, CreatedAt: "2026-08-10", Category: "Accessories", Status: "Paid"},
-	{ID: 23, Name: "Speaker", Price: 69.95, Stock: 90, CreatedAt: "2026-09-01", Category: "Electronics", Status: "Overdue"},
-	{ID: 24, Name: "Paper Tray", Price: 18.50, Stock: 110, CreatedAt: "2026-09-15", Category: "Office", Status: "Paid"},
+	{ID: 1, Name: "Laptop", Price: 999.99, Stock: 25, CreatedAt: "2026-01-15", Category: "Electronics", Status: "Draft", ReleaseMonth: "2026-01"},
+	{ID: 2, Name: "Mouse", Price: 29.50, Stock: 150, CreatedAt: "2026-01-20", Category: "Accessories", Status: "Sent", ReleaseMonth: "2026-01"},
+	{ID: 3, Name: "Keyboard", Price: 79.00, Stock: 80, CreatedAt: "2026-02-05", Category: "Accessories", Status: "Paid", ReleaseMonth: "2026-02"},
+	{ID: 4, Name: "Monitor", Price: 449.99, Stock: 30, CreatedAt: "2026-02-10", Category: "Electronics", Status: "Paid", ReleaseMonth: "2026-02"},
+	{ID: 5, Name: "Headphones", Price: 59.95, Stock: 200, CreatedAt: "2026-02-15", Category: "Accessories", Status: "Overdue", ReleaseMonth: "2026-02"},
+	{ID: 6, Name: "Webcam", Price: 89.99, Stock: 45, CreatedAt: "2026-03-01", Category: "Electronics", Status: "Sent", ReleaseMonth: "2026-03"},
+	{ID: 7, Name: "USB Cable", Price: 12.99, Stock: 500, CreatedAt: "2026-03-05", Category: "Accessories", Status: "Paid", ReleaseMonth: "2026-03"},
+	{ID: 8, Name: "Desk Lamp", Price: 34.50, Stock: 60, CreatedAt: "2026-03-10", Category: "Office", Status: "Draft", ReleaseMonth: "2026-03"},
+	{ID: 9, Name: "Notebook", Price: 8.99, Stock: 300, CreatedAt: "2026-03-15", Category: "Office", Status: "Paid", ReleaseMonth: "2026-03"},
+	{ID: 10, Name: "Pen Set", Price: 15.00, Stock: 120, CreatedAt: "2026-03-20", Category: "Office", Status: "Sent", ReleaseMonth: "2026-03"},
+	{ID: 11, Name: "Monitor Stand", Price: 45.00, Stock: 40, CreatedAt: "2026-04-01", Category: "Accessories", Status: "Overdue", ReleaseMonth: "2026-04"},
+	{ID: 12, Name: "Laptop Bag", Price: 55.00, Stock: 75, CreatedAt: "2026-04-05", Category: "Accessories", Status: "Paid", ReleaseMonth: "2026-04"},
+	{ID: 13, Name: "Tablet", Price: 599.99, Stock: 35, CreatedAt: "2026-05-01", Category: "Electronics", Status: "Draft", ReleaseMonth: "2026-05"},
+	{ID: 14, Name: "Mouse Pad", Price: 14.99, Stock: 220, CreatedAt: "2026-05-10", Category: "Accessories", Status: "Sent", ReleaseMonth: "2026-05"},
+	{ID: 15, Name: "Printer", Price: 249.00, Stock: 15, CreatedAt: "2026-05-15", Category: "Electronics", Status: "Paid", ReleaseMonth: "2026-05"},
+	{ID: 16, Name: "Stapler", Price: 9.50, Stock: 180, CreatedAt: "2026-06-01", Category: "Office", Status: "Overdue", ReleaseMonth: "2026-06"},
+	{ID: 17, Name: "Router", Price: 129.99, Stock: 55, CreatedAt: "2026-06-10", Category: "Electronics", Status: "Sent", ReleaseMonth: "2026-06"},
+	{ID: 18, Name: "USB Hub", Price: 24.99, Stock: 140, CreatedAt: "2026-06-20", Category: "Accessories", Status: "Paid", ReleaseMonth: "2026-06"},
+	{ID: 19, Name: "Desk Chair", Price: 349.00, Stock: 20, CreatedAt: "2026-07-05", Category: "Office", Status: "Draft", ReleaseMonth: "2026-07"},
+	{ID: 20, Name: "Microphone", Price: 89.00, Stock: 65, CreatedAt: "2026-07-15", Category: "Electronics", Status: "Paid", ReleaseMonth: "2026-07"},
+	{ID: 21, Name: "Whiteboard", Price: 42.00, Stock: 30, CreatedAt: "2026-08-01", Category: "Office", Status: "Sent", ReleaseMonth: "2026-08"},
+	{ID: 22, Name: "HDMI Cable", Price: 11.99, Stock: 400, CreatedAt: "2026-08-10", Category: "Accessories", Status: "Paid", ReleaseMonth: "2026-08"},
+	{ID: 23, Name: "Speaker", Price: 69.95, Stock: 90, CreatedAt: "2026-09-01", Category: "Electronics", Status: "Overdue", ReleaseMonth: "2026-09"},
+	{ID: 24, Name: "Paper Tray", Price: 18.50, Stock: 110, CreatedAt: "2026-09-15", Category: "Office", Status: "Paid", ReleaseMonth: "2026-09"},
 }
 
 // TableDataRequest represents the incoming data from table operations
@@ -170,6 +171,14 @@ func applyColumnFilters(p *Product, filters map[int]*activeFilter) bool {
 		switch f.Type {
 		case "date":
 			val := p.CreatedAt
+			if f.From != "" && val < f.From {
+				return false
+			}
+			if f.To != "" && val > f.To {
+				return false
+			}
+		case "monthyear":
+			val := p.ReleaseMonth
 			if f.From != "" && val < f.From {
 				return false
 			}
@@ -281,7 +290,7 @@ func parseFloat(s string) float64 {
 }
 
 func sortProducts(data []*Product, col int, dir string) {
-	if col < 0 || col > 6 {
+	if col < 0 || col > 7 {
 		return
 	}
 	sort.Slice(data, func(i, j int) bool {
@@ -305,6 +314,8 @@ func sortProducts(data []*Product, col int, dir string) {
 			cmp = strings.Compare(data[i].Category, data[j].Category)
 		case 6:
 			cmp = strings.Compare(data[i].Status, data[j].Status)
+		case 7:
+			cmp = strings.Compare(data[i].ReleaseMonth, data[j].ReleaseMonth)
 		}
 		if dir == "desc" {
 			return cmp > 0
@@ -328,7 +339,7 @@ func handleTableData(ctx *r.Context) string {
 			// Apply a specific column filter
 			if req.Type == "select" && len(req.Vals) == 0 {
 				delete(activeFilters, req.Col)
-			} else if req.Type == "date" && req.From == "" && req.To == "" {
+			} else if (req.Type == "date" || req.Type == "monthyear") && req.From == "" && req.To == "" {
 				delete(activeFilters, req.Col)
 			} else if req.Type == "number" && req.From == "" && req.To == "" {
 				delete(activeFilters, req.Col)
@@ -414,7 +425,7 @@ func newDataWithFilters() *r.DataTable[Product] {
 
 	// Build filter badges and set filter values
 	var badges []r.FilterBadge
-	colLabels := map[int]string{0: "ID", 1: "Name", 2: "Price", 3: "Stock", 4: "Created", 5: "Category", 6: "Status"}
+	colLabels := map[int]string{0: "ID", 1: "Name", 2: "Price", 3: "Stock", 4: "Created", 5: "Category", 6: "Status", 7: "Release"}
 
 	for col, f := range activeFilters {
 		label := colLabels[col]
@@ -422,6 +433,8 @@ func newDataWithFilters() *r.DataTable[Product] {
 
 		switch f.Type {
 		case "date":
+			valueStr = f.From + " – " + f.To
+		case "monthyear":
 			valueStr = f.From + " – " + f.To
 		case "number":
 			if f.Op == "range" {
@@ -509,6 +522,11 @@ func NewData() *r.DataTable[Product] {
 				return r.NewBadge(p.Status).Color(color).BadgeSize("sm").Build()
 			},
 		}).
+		Col("Release", r.ColOpt[Product]{
+			Sortable: true,
+			Filter:   r.MonthYearFilter,
+			Text:     func(p *Product) *r.Node { return r.Span().Text(p.ReleaseMonth) },
+		}).
 		Detail(productDetail).
 		Action("table.data")
 
@@ -532,6 +550,7 @@ func productDetail(p *Product) *r.Node {
 		field("Created", p.CreatedAt),
 		field("Category", p.Category),
 		field("Status", p.Status),
+		field("Release", p.ReleaseMonth),
 		field("Value", fmt.Sprintf("$%.2f", p.Price*float64(p.Stock))),
 	)
 }
@@ -547,8 +566,8 @@ func exportProductsPDF(products []*Product) string {
 	pdf.Ln(4)
 
 	// Table header
-	headers := []string{"ID", "Name", "Price", "Stock", "Created", "Category", "Status"}
-	widths := []float64{15, 60, 30, 25, 35, 40, 30}
+	headers := []string{"ID", "Name", "Price", "Stock", "Created", "Category", "Status", "Release"}
+	widths := []float64{15, 55, 25, 20, 30, 35, 25, 25}
 
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.SetFillColor(240, 240, 240)
@@ -568,6 +587,7 @@ func exportProductsPDF(products []*Product) string {
 			p.CreatedAt,
 			p.Category,
 			p.Status,
+			p.ReleaseMonth,
 		}
 		for i, cell := range row {
 			align := "L"
@@ -590,11 +610,11 @@ func exportProductsPDF(products []*Product) string {
 
 func exportProductsCSV(products []*Product) string {
 	var buf bytes.Buffer
-	buf.WriteString("ID,Name,Price,Stock,Created,Category,Status\n")
+	buf.WriteString("ID,Name,Price,Stock,Created,Category,Status,ReleaseMonth\n")
 	for _, p := range products {
 		name := strings.ReplaceAll(p.Name, "\"", "\"\"")
-		buf.WriteString(fmt.Sprintf("%d,\"%s\",%.2f,%d,%s,%s,%s\n",
-			p.ID, name, p.Price, p.Stock, p.CreatedAt, p.Category, p.Status))
+		buf.WriteString(fmt.Sprintf("%d,\"%s\",%.2f,%d,%s,%s,%s,%s\n",
+			p.ID, name, p.Price, p.Stock, p.CreatedAt, p.Category, p.Status, p.ReleaseMonth))
 	}
 	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	return r.Download("products.csv", "text/csv", b64)
