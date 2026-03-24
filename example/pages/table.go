@@ -350,9 +350,9 @@ func handleTableData(ctx *r.Context) string {
 	sortProducts(filtered, req.Sort, req.Dir)
 	totalItems := len(filtered)
 
-	// Handle export
+	// Handle export (CSV)
 	if req.Operation == "export" {
-		return fmt.Sprintf("console.log('Exporting %d items');", len(filtered))
+		return exportProductsCSV(filtered)
 	}
 
 	// Handle PDF export
@@ -581,6 +581,18 @@ func exportProductsPDF(products []*Product) string {
 
 	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	return r.Download("products.pdf", "application/pdf", b64)
+}
+
+func exportProductsCSV(products []*Product) string {
+	var buf bytes.Buffer
+	buf.WriteString("ID,Name,Price,Stock,Created,Category,Status\n")
+	for _, p := range products {
+		name := strings.ReplaceAll(p.Name, "\"", "\"\"")
+		buf.WriteString(fmt.Sprintf("%d,\"%s\",%.2f,%d,%s,%s,%s\n",
+			p.ID, name, p.Price, p.Stock, p.CreatedAt, p.Category, p.Status))
+	}
+	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+	return r.Download("products.csv", "text/csv", b64)
 }
 
 func RegisterTable(app *r.App, layout func(*r.Node) *r.Node) {

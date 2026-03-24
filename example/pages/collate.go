@@ -241,9 +241,9 @@ func handleCollateData(ctx *r.Context) string {
 
 	totalItems := len(filtered)
 
-	// Handle Excel export
+	// Handle Excel export (CSV)
 	if req.Operation == "export" {
-		return fmt.Sprintf("console.log('Exporting %d employees');", totalItems)
+		return exportEmployeesCSV(filtered)
 	}
 
 	// Handle PDF export
@@ -448,6 +448,23 @@ func exportEmployeesPDF(employees []*Employee) string {
 
 	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	return r.Download("employees.pdf", "application/pdf", b64)
+}
+
+func exportEmployeesCSV(employees []*Employee) string {
+	var buf bytes.Buffer
+	buf.WriteString("ID,Name,Department,Salary,Hire Date,Status,Role\n")
+	for _, emp := range employees {
+		status := "Active"
+		if !emp.Active {
+			status = "Inactive"
+		}
+		name := strings.ReplaceAll(emp.Name, "\"", "\"\"")
+		role := strings.ReplaceAll(emp.Role, "\"", "\"\"")
+		buf.WriteString(fmt.Sprintf("%d,\"%s\",%s,%.2f,%s,%s,\"%s\"\n",
+			emp.ID, name, emp.Department, emp.Salary, emp.HireDate, status, role))
+	}
+	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+	return r.Download("employees.csv", "text/csv", b64)
 }
 
 func RegisterCollate(app *r.App, layout func(*r.Node) *r.Node) {
