@@ -1266,7 +1266,7 @@ func renderTextFilter(loc *TableLocale, colIdx int, currentValue *FilterValue) *
 
 	// Operator dropdown
 	opSelect := Select(
-		"w-full mb-2 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded " +
+		"block w-full mb-2 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded " +
 			"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500",
 	).ID(fmt.Sprintf("filter-%d-op", colIdx))
 
@@ -1289,7 +1289,7 @@ func renderTextFilter(loc *TableLocale, colIdx int, currentValue *FilterValue) *
 
 	// Value input
 	valInput := IText(
-		"w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded "+
+		"block w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded "+
 			"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 "+
 			"focus:outline-none focus:ring-1 focus:ring-blue-500",
 	).ID(fmt.Sprintf("filter-%d-val", colIdx)).
@@ -1374,7 +1374,7 @@ func renderNumberFilter(loc *TableLocale, colIdx int, currentValue *FilterValue)
 
 	// Operator dropdown
 	opSelect := Select(
-		"w-full mb-2 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded " +
+		"block w-full mb-2 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded " +
 			"bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500",
 	).ID(fmt.Sprintf("filter-%d-op", colIdx))
 
