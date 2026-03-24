@@ -181,6 +181,7 @@ func INumber(class ...string) *Node   { return Input(class...).Attr("type", "num
 func ISearch(class ...string) *Node   { return Input(class...).Attr("type", "search") }
 func IUrl(class ...string) *Node      { return Input(class...).Attr("type", "url") }
 func IDate(class ...string) *Node     { return Input(class...).Attr("type", "date") }
+func IMonth(class ...string) *Node    { return Input(class...).Attr("type", "month") }
 func ITime(class ...string) *Node     { return Input(class...).Attr("type", "time") }
 func IDatetime(class ...string) *Node { return Input(class...).Attr("type", "datetime-local") }
 func IFile(class ...string) *Node     { return Input(class...).Attr("type", "file") }
