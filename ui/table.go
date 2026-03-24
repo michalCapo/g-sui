@@ -521,7 +521,12 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 	}
 
 	// Active filter badges (pill shaped with x to remove)
-	for _, badge := range dt.filterLabels {
+	// Auto-generate badges from filterValues if none were explicitly set
+	badges := dt.filterLabels
+	if len(badges) == 0 && len(dt.filterValues) > 0 {
+		badges = dt.autoBadges()
+	}
+	for _, badge := range badges {
 		badgeNode := dt.renderFilterBadge(badge)
 		filterBarItems = append(filterBarItems, badgeNode)
 	}
@@ -556,6 +561,82 @@ func (dt *DataTable[T]) renderFilterBadge(badge FilterBadge) *Node {
 			OnClick(JS(badge.OnRemove)).
 			Text("×"),
 	)
+}
+
+// autoBadges generates FilterBadge entries from filterValues using column
+// definitions. Called automatically by renderToolbar when SetFilterLabels was
+// not explicitly used, so that initial page renders show badges without the
+// caller having to build them manually.
+func (dt *DataTable[T]) autoBadges() []FilterBadge {
+	badges := make([]FilterBadge, 0, len(dt.filterValues))
+	action := dt.getAction()
+
+	for col, fv := range dt.filterValues {
+		// Column label from header
+		label := ""
+		if col < len(dt.heads) {
+			label = dt.heads[col].label
+		}
+		if label == "" {
+			label = fmt.Sprintf("Col %d", col)
+		}
+
+		// Build human-readable value string
+		var valueStr string
+		if cf := dt.filters[col]; cf != nil {
+			switch cf.Type {
+			case FilterTypeDate:
+				valueStr = fv.From + " – " + fv.To
+			case FilterTypeNumber:
+				if fv.Operator == "range" || fv.Operator == "" {
+					valueStr = fv.From + " – " + fv.To
+				} else {
+					valueStr = fv.Operator + " " + fv.From
+				}
+			case FilterTypeSelect:
+				valueStr = ""
+				for i, v := range fv.Values {
+					if i > 0 {
+						valueStr += ", "
+					}
+					valueStr += v
+				}
+			default: // text
+				valueStr = fv.Value
+			}
+		} else {
+			// No filter config — best-effort
+			if fv.From != "" || fv.To != "" {
+				valueStr = fv.From + " – " + fv.To
+			} else if len(fv.Values) > 0 {
+				valueStr = ""
+				for i, v := range fv.Values {
+					if i > 0 {
+						valueStr += ", "
+					}
+					valueStr += v
+				}
+			} else {
+				valueStr = fv.Value
+			}
+		}
+
+		onRemove := ""
+		if action != "" {
+			onRemove = fmt.Sprintf(
+				"__ws.call('%s',{operation:'removeFilter',col:%d,search:'%s',page:1,pageSize:%d,sort:%d,dir:'%s'})",
+				escJS(action), col, escJS(dt.searchValue), dt.pageSize, dt.sortCol, escJS(dt.sortDir),
+			)
+		}
+
+		badges = append(badges, FilterBadge{
+			Label:    label,
+			Value:    valueStr,
+			Column:   col,
+			OnRemove: onRemove,
+		})
+	}
+	return badges
 }
 
 func (dt *DataTable[T]) resetFiltersJS() string {

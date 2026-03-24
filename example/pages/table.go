@@ -346,6 +346,11 @@ func handleTableData(ctx *r.Context) string {
 		}
 	}
 
+	// Handle removing a single filter (badge × button)
+	if req.Operation == "removeFilter" {
+		delete(activeFilters, req.Col)
+	}
+
 	filtered := filterProducts(req.Search, activeFilters)
 	sortProducts(filtered, req.Sort, req.Dir)
 	totalItems := len(filtered)
@@ -439,7 +444,7 @@ func newDataWithFilters() *r.DataTable[Product] {
 			Value:  valueStr,
 			Column: col,
 			OnRemove: fmt.Sprintf(
-				"__ws.call('table.data',{operation:'filter',col:%d,type:'',search:'',page:1,sort:-1,dir:'asc'})",
+				"__ws.call('table.data',{operation:'removeFilter',col:%d,search:'',page:1,sort:-1,dir:'asc'})",
 				col,
 			),
 		})
