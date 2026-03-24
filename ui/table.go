@@ -919,7 +919,7 @@ func (dt *DataTable[T]) renderFilterIcon(colIdx int) *Node {
 	popupID := fmt.Sprintf("%s-filter-popup-%d", dt.id, colIdx)
 
 	// Filter icon (tune/sliders) - click toggles popup, stops propagation to prevent sort
-	icon := Span("text-base leading-none "+iconColor+" cursor-pointer hover:text-lime-500 dark:hover:text-lime-400 transition-colors").
+	icon := Span("text-2xl leading-none "+iconColor+" cursor-pointer hover:text-lime-500 dark:hover:text-lime-400 transition-colors").
 		Style("font-family", "Material Icons Round").
 		Text("tune")
 
@@ -1053,10 +1053,10 @@ func (dt *DataTable[T]) sortIndicator(colIdx int) *Node {
 	if dt.sortCol == colIdx {
 		if dt.sortDir == "desc" {
 			// Active desc: green down arrow
-			return Span("text-lime-500 dark:text-lime-400 text-xs ml-0.5").Text("\u2193")
+			return Span("text-lime-500 dark:text-lime-400 text-lg ml-0.5").Text("\u2193")
 		}
 		// Active asc: green up arrow
-		return Span("text-lime-500 dark:text-lime-400 text-xs ml-0.5").Text("\u2191")
+		return Span("text-lime-500 dark:text-lime-400 text-lg ml-0.5").Text("\u2191")
 	}
 	// Inactive: no visible arrow (empty span for spacing)
 	return Span()
