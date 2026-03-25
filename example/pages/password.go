@@ -61,7 +61,7 @@ func Password(ctx *r.Context) *r.Node {
 	)
 }
 
-func RegisterPassword(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/password", func(ctx *r.Context) *r.Node { return layout(Password(ctx)) })
+func RegisterPassword(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/password", func(ctx *r.Context) *r.Node { return layout(ctx, Password(ctx)) })
 	app.Action("nav.password", NavTo("/password", func() *r.Node { return Password(nil) }))
 }

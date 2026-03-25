@@ -55,8 +55,8 @@ func handleCounterDec(ctx *r.Context) string {
 	return counterWidget(data.ID, newCount).ToJSReplace(data.ID)
 }
 
-func RegisterCounter(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/counter", func(ctx *r.Context) *r.Node { return layout(Counter(ctx)) })
+func RegisterCounter(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/counter", func(ctx *r.Context) *r.Node { return layout(ctx, Counter(ctx)) })
 	app.Action("nav.counter", NavTo("/counter", func() *r.Node { return Counter(nil) }))
 	app.Action("counter.inc", handleCounterInc)
 	app.Action("counter.dec", handleCounterDec)

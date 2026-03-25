@@ -89,7 +89,7 @@ func Button() *r.Node {
 	)
 }
 
-func RegisterButton(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/button", func(ctx *r.Context) *r.Node { return layout(Button()) })
+func RegisterButton(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/button", func(ctx *r.Context) *r.Node { return layout(ctx, Button()) })
 	app.Action("nav.button", NavTo("/button", func() *r.Node { return Button() }))
 }

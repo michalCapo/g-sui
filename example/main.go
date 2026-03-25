@@ -52,7 +52,8 @@ func main() {
 // Layout
 // ---------------------------------------------------------------------------
 
-func layout(content *r.Node) *r.Node {
+func layout(ctx *r.Context, content *r.Node) *r.Node {
+	ctx.HeadJS(`(function(o){o.style.visibility='hidden';setTimeout(function(){o.style.visibility='visible'},250)})(document.body||document.documentElement);`)
 	return r.Div("min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors overflow-y-scroll").Render(
 		r.Nav("bg-white dark:bg-gray-900 shadow dark:shadow-gray-800/50").Attr("aria-label", "Main navigation").Render(
 			r.Div("mx-auto px-4 py-3 flex items-start gap-2").Render(

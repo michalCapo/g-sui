@@ -63,7 +63,7 @@ func Text(ctx *r.Context) *r.Node {
 	)
 }
 
-func RegisterText(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/text", func(ctx *r.Context) *r.Node { return layout(Text(ctx)) })
+func RegisterText(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/text", func(ctx *r.Context) *r.Node { return layout(ctx, Text(ctx)) })
 	app.Action("nav.text", NavTo("/text", func() *r.Node { return Text(nil) }))
 }

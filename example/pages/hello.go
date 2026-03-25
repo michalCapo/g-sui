@@ -44,8 +44,8 @@ func HandleHelloCrash(ctx *r.Context) string {
 	panic("Hello again")
 }
 
-func RegisterHello(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/hello", func(ctx *r.Context) *r.Node { return layout(Hello(ctx)) })
+func RegisterHello(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/hello", func(ctx *r.Context) *r.Node { return layout(ctx, Hello(ctx)) })
 	app.Action("nav.hello", NavTo("/hello", func() *r.Node { return Hello(nil) }))
 	app.Action("hello.ok", HandleHelloOk)
 	app.Action("hello.error", HandleHelloError)

@@ -43,8 +43,8 @@ func HandleAppendStart(ctx *r.Context) string {
 	return item.ToJSPrepend("append-list")
 }
 
-func RegisterAppend(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/append", func(ctx *r.Context) *r.Node { return layout(Append(ctx)) })
+func RegisterAppend(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/append", func(ctx *r.Context) *r.Node { return layout(ctx, Append(ctx)) })
 	app.Action("nav.append", NavTo("/append", func() *r.Node { return Append(nil) }))
 	app.Action("append.end", HandleAppendEnd)
 	app.Action("append.start", HandleAppendStart)

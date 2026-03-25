@@ -39,7 +39,7 @@ func Checkbox(ctx *r.Context) *r.Node {
 	)
 }
 
-func RegisterCheckbox(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/checkbox", func(ctx *r.Context) *r.Node { return layout(Checkbox(ctx)) })
+func RegisterCheckbox(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/checkbox", func(ctx *r.Context) *r.Node { return layout(ctx, Checkbox(ctx)) })
 	app.Action("nav.checkbox", NavTo("/checkbox", func() *r.Node { return Checkbox(nil) }))
 }
