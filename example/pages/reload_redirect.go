@@ -22,9 +22,6 @@ func ReloadRedirect(ctx *r.Context) *r.Node {
 				r.Button("px-4 py-2 rounded cursor-pointer border-2 border-green-600 text-green-600 hover:bg-green-50 text-sm").
 					Text("Redirect to Dashboard").
 					OnClick(&r.Action{Name: "redirect.dashboard"}),
-				r.Button("px-4 py-2 rounded cursor-pointer border-2 border-purple-600 text-purple-600 hover:bg-purple-50 text-sm").
-					Text("Redirect to Invoices").
-					OnClick(&r.Action{Name: "redirect.invoices"}),
 				r.Button("px-4 py-2 rounded cursor-pointer border-2 border-yellow-600 text-yellow-600 hover:bg-yellow-50 text-sm").
 					Text("Redirect to Button").
 					OnClick(&r.Action{Name: "redirect.button"}),
@@ -37,10 +34,6 @@ func HandleRedirectDashboard(ctx *r.Context) string {
 	return r.Notify("info", "Redirecting to dashboard...") + r.Redirect("/")
 }
 
-func HandleRedirectInvoices(ctx *r.Context) string {
-	return r.Notify("info", "Redirecting to invoices...") + r.Redirect("/invoices")
-}
-
 func HandleRedirectButton(ctx *r.Context) string {
 	return r.Notify("info", "Redirecting to button page...") + r.Redirect("/button")
 }
@@ -49,6 +42,5 @@ func RegisterReloadRedirect(app *r.App, layout func(*r.Node) *r.Node) {
 	app.Page("/reload-redirect", func(ctx *r.Context) *r.Node { return layout(ReloadRedirect(ctx)) })
 	app.Action("nav.reload", NavTo("/reload-redirect", func() *r.Node { return ReloadRedirect(nil) }))
 	app.Action("redirect.dashboard", HandleRedirectDashboard)
-	app.Action("redirect.invoices", HandleRedirectInvoices)
 	app.Action("redirect.button", HandleRedirectButton)
 }
