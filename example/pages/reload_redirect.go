@@ -38,8 +38,8 @@ func HandleRedirectButton(ctx *r.Context) string {
 	return r.Notify("info", "Redirecting to button page...") + r.Redirect("/button")
 }
 
-func RegisterReloadRedirect(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/reload-redirect", func(ctx *r.Context) *r.Node { return layout(ReloadRedirect(ctx)) })
+func RegisterReloadRedirect(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/reload-redirect", func(ctx *r.Context) *r.Node { return layout(ctx, ReloadRedirect(ctx)) })
 	app.Action("nav.reload", NavTo("/reload-redirect", func() *r.Node { return ReloadRedirect(nil) }))
 	app.Action("redirect.dashboard", HandleRedirectDashboard)
 	app.Action("redirect.button", HandleRedirectButton)

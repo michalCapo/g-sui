@@ -49,7 +49,7 @@ Inline ` + "`code`" + ` and **bold** with *italic* text.
 	)
 }
 
-func RegisterOthers(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/others", func(ctx *r.Context) *r.Node { return layout(Others(ctx)) })
+func RegisterOthers(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/others", func(ctx *r.Context) *r.Node { return layout(ctx, Others(ctx)) })
 	app.Action("nav.others", NavTo("/others", func() *r.Node { return Others(nil) }))
 }

@@ -620,8 +620,8 @@ func exportProductsCSV(products []*Product) string {
 	return r.Download("products.csv", "text/csv", b64)
 }
 
-func RegisterTable(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/table", func(ctx *r.Context) *r.Node { return layout(TablePage(ctx)) })
+func RegisterTable(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/table", func(ctx *r.Context) *r.Node { return layout(ctx, TablePage(ctx)) })
 	app.Action("nav.table", NavTo("/table", func() *r.Node { return TablePage(nil) }))
 	app.Action("table.data", handleTableData)
 }

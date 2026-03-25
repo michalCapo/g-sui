@@ -399,8 +399,8 @@ func NavTo(url string, content func() *r.Node) r.ActionHandler {
 	}
 }
 
-func RegisterRoutes(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/routes", func(ctx *r.Context) *r.Node { return layout(RoutesExample(ctx)) })
+func RegisterRoutes(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/routes", func(ctx *r.Context) *r.Node { return layout(ctx, RoutesExample(ctx)) })
 	app.Action("nav.routes", NavTo("/routes", func() *r.Node { return RoutesExample(nil) }))
 	app.Action("routes.user", HandleRoutesUser)
 	app.Action("routes.userpost", HandleRoutesUserPost)

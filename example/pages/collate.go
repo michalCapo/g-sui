@@ -467,8 +467,8 @@ func exportEmployeesCSV(employees []*Employee) string {
 	return r.Download("employees.csv", "text/csv", b64)
 }
 
-func RegisterCollate(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/collate", func(ctx *r.Context) *r.Node { return layout(CollatePage(ctx)) })
+func RegisterCollate(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/collate", func(ctx *r.Context) *r.Node { return layout(ctx, CollatePage(ctx)) })
 	app.Action("nav.collate", NavTo("/collate", func() *r.Node { return CollatePage(nil) }))
 	app.Action("collate.data", handleCollateData)
 }

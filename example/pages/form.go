@@ -123,8 +123,8 @@ func HandleFormSubmit(ctx *r.Context) string {
 		Build()
 }
 
-func RegisterForm(app *r.App, layout func(*r.Node) *r.Node) {
-	app.Page("/form", func(ctx *r.Context) *r.Node { return layout(FormPage(ctx)) })
+func RegisterForm(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
+	app.Page("/form", func(ctx *r.Context) *r.Node { return layout(ctx, FormPage(ctx)) })
 	app.Action("nav.form", NavTo("/form", func() *r.Node { return FormPage(nil) }))
 	app.Action("form.submit", HandleFormSubmit)
 }

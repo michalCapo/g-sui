@@ -565,10 +565,7 @@ func Notify(variant, message string) string {
 // Redirect returns JS that navigates to a new URL (full page reload).
 // The body is hidden for 200ms before navigating for a smooth transition.
 func Redirect(url string) string {
-	return fmt.Sprintf(
-		"document.body.style.opacity='0';document.body.style.transition='opacity 400ms';"+
-			"setTimeout(function(){window.location.href='%s'},400);",
-		escJS(url))
+	return fmt.Sprintf("setTimeout(function(){window.location.href='%s'},10);", escJS(url))
 }
 
 // SetLocation returns JS that updates the browser URL without a page reload
