@@ -566,8 +566,8 @@ func Notify(variant, message string) string {
 // The body is hidden for 200ms before navigating for a smooth transition.
 func Redirect(url string) string {
 	return fmt.Sprintf(
-		"document.body.style.opacity='0';document.body.style.transition='opacity 300ms';"+
-			"setTimeout(function(){window.location.href='%s'},300);",
+		"document.body.style.opacity='0';document.body.style.transition='opacity 400ms';"+
+			"setTimeout(function(){window.location.href='%s'},400);",
 		escJS(url))
 }
 
