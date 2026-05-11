@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Deploy script for g-sui
+# Release script for g-sui
 # Version format: v1.X.X (e.g., v1.1.0, v1.1.1, v1.1.2)
-# Each deploy increments the patch version by 1
+# Each release increments the patch version by 1
 
 set -e  # Exit on error
 
@@ -43,7 +43,7 @@ go mod tidy
 # Check if go.mod has uncommitted changes after tidy
 if ! git diff-index --quiet HEAD -- go.mod go.sum; then
     echo "Warning: go.mod or go.sum has changes after 'go mod tidy'"
-    echo "Please commit these changes before deploying:"
+    echo "Please commit these changes before releasing:"
     git diff --stat go.mod go.sum
     exit 1
 fi
@@ -80,7 +80,7 @@ echo "Registering version with Go module proxy..."
 GOPROXY=proxy.golang.org go list -m "$MODULE_PATH@$NEW_VERSION" || echo "Warning: Failed to register with proxy (may take a few minutes to propagate)"
 
 echo ""
-echo "Successfully deployed version $NEW_VERSION"
+echo "Successfully released version $NEW_VERSION"
 echo "  Tag created and pushed to origin"
 echo ""
 echo "Module can now be used as a dependency:"

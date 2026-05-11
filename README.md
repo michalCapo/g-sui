@@ -193,14 +193,6 @@ Each component has its own locale type (`TableLocale`, `CollateLocale`, `Confirm
 - **WebSocket-only** -- no form submissions or XHR
 - **Auto-reconnect** -- offline overlay with automatic retry
 
-## Deploy
-
-```bash
-./deploy
-```
-
-Creates an annotated git tag and pushes to remote. Version format: `v1.XXX`, auto-incrementing by `0.001`.
-
 ## License
 
 MIT

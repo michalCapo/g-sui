@@ -30,7 +30,7 @@
 18. [Page Loading Screen](#page-loading-screen)
 19. [Security](#security)
 20. [Examples](#examples)
-21. [Deployment](#deployment)
+21. [Release](#release)
 22. [API Reference](#api-reference)
 
 ---
@@ -1635,14 +1635,14 @@ go run example/main.go
 
 ---
 
-## Deployment
+## Release
 
-### Deploy Script
+### Release Script
 
-The `deploy` script creates and pushes version tags:
+The `release` script creates and pushes version tags:
 
 ```bash
-./deploy
+./release
 ```
 
 - Versioning format: `v1.XXX` (e.g., `v1.001`, `v1.002`, `v1.003`)
