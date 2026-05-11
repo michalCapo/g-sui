@@ -821,9 +821,9 @@ func (ctx *Context) cssInjectJS() string {
 					"document.head.appendChild(l);}",
 				eu, eu,
 			)
-		} else if strings.HasPrefix(tag, "<style>") {
+		} else if after, ok := strings.CutPrefix(tag, "<style>"); ok {
 			// Extract CSS content between <style> and </style>
-			inner := strings.TrimPrefix(tag, "<style>")
+			inner := after
 			inner = strings.TrimSuffix(inner, "</style>")
 			fmt.Fprintf(&js,
 				"var _s=document.createElement('style');"+

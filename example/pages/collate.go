@@ -257,10 +257,7 @@ func handleCollateData(ctx *r.Context) string {
 			req.Page = 1
 		}
 		start := (req.Page - 1) * limit
-		end := start + limit
-		if end > totalItems {
-			end = totalItems
-		}
+		end := min(start+limit, totalItems)
 		if start >= totalItems {
 			return ""
 		}
@@ -284,10 +281,7 @@ func handleCollateData(ctx *r.Context) string {
 	if req.Page < 1 {
 		req.Page = 1
 	}
-	end := req.Page * limit
-	if end > totalItems {
-		end = totalItems
-	}
+	end := min(req.Page*limit, totalItems)
 	pageData := filtered[:end]
 	hasMore := end < totalItems
 

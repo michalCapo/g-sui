@@ -435,7 +435,7 @@ func (c *Collate[T]) renderHeader() *Node {
 		"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 		"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
 
-	pdfBtn := Button(exportBtnCls).OnClick(JS(c.exportPdfJS())).Render(
+	pdfBtn := Button(exportBtnCls).Attr("type", "button").OnClick(JS(c.exportPdfJS())).Render(
 		Span("text-base leading-none").
 			Style("font-family", "Material Icons Round").
 			Text("picture_as_pdf"),
@@ -443,7 +443,7 @@ func (c *Collate[T]) renderHeader() *Node {
 	)
 	items = append(items, pdfBtn)
 
-	exportBtn := Button(exportBtnCls).OnClick(JS(c.exportJS())).Render(
+	exportBtn := Button(exportBtnCls).Attr("type", "button").OnClick(JS(c.exportJS())).Render(
 		Span("text-base leading-none").
 			Style("font-family", "Material Icons Round").
 			Text("grid_on"),
@@ -473,11 +473,11 @@ func (c *Collate[T]) renderHeader() *Node {
 		}
 
 		filterBtn := Button(
-			"inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md cursor-pointer " +
-				"border border-gray-300 dark:border-gray-600 " +
-				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
+			"inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md cursor-pointer "+
+				"border border-gray-300 dark:border-gray-600 "+
+				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).OnClick(JS(fmt.Sprintf(
+		).Attr("type", "button").OnClick(JS(fmt.Sprintf(
 			"var p=document.getElementById('%s');p.classList.toggle('hidden')",
 			escJS(panelID),
 		))).Render(btnParts...)
@@ -514,7 +514,7 @@ func (c *Collate[T]) renderFilterPanel() *Node {
 			Button(
 				"w-8 h-8 rounded-full flex items-center justify-center "+
 					"hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors",
-			).OnClick(JS(fmt.Sprintf(
+			).Attr("type", "button").OnClick(JS(fmt.Sprintf(
 				"document.getElementById('%s').classList.add('hidden')", escJS(panelID),
 			))).Render(
 				Span("text-base leading-none text-gray-400").
@@ -620,6 +620,7 @@ func (c *Collate[T]) renderSortButton(sf CollateSortField) *Node {
 
 	return Button(btnCls).
 		ID(btnID).
+		Attr("type", "button").
 		Attr("data-sort-field", sf.Field).
 		OnClick(JS(cycleJS)).
 		Render(
@@ -897,10 +898,7 @@ func (c *Collate[T]) renderFooter() *Node {
 
 	// Count
 	if c.totalItems > 0 {
-		showing := c.page * c.limit
-		if showing > c.totalItems {
-			showing = c.totalItems
-		}
+		showing := min(c.page*c.limit, c.totalItems)
 		countText := Span("text-sm text-gray-500 dark:text-gray-400").
 			Text(c.loc().ItemCount(showing, c.totalItems))
 		items = append(items, countText)
@@ -909,22 +907,22 @@ func (c *Collate[T]) renderFooter() *Node {
 	// Reset paging button
 	if c.page > 1 {
 		resetBtn := Button(
-			"inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-md cursor-pointer " +
-				"border border-gray-300 dark:border-gray-600 " +
-				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 " +
+			"inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-md cursor-pointer "+
+				"border border-gray-300 dark:border-gray-600 "+
+				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Text("×").OnClick(JS(c.resetPagingJS()))
+		).Attr("type", "button").Text("×").OnClick(JS(c.resetPagingJS()))
 		items = append(items, resetBtn)
 	}
 
 	// Load more button
 	if c.hasMore {
 		loadMoreBtn := Button(
-			"inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer " +
-				"border border-gray-300 dark:border-gray-600 " +
-				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
+			"inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer "+
+				"border border-gray-300 dark:border-gray-600 "+
+				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Text(c.loc().LoadMore).OnClick(JS(c.loadMoreJS()))
+		).Attr("type", "button").Text(c.loc().LoadMore).OnClick(JS(c.loadMoreJS()))
 		items = append(items, loadMoreBtn)
 	}
 
@@ -940,7 +938,7 @@ func (c *Collate[T]) searchEnterJS(searchID string) string {
 		return ""
 	}
 	return fmt.Sprintf(
-		"if(event.key==='Enter'){event.preventDefault();"+
+		"if(event.key==='Enter'){event.preventDefault();event.stopPropagation();"+
 			"__ws.call('%s',{operation:'search',search:document.getElementById('%s').value,"+
 			"page:1,limit:%d,order:'%s'})}",
 		escJS(c.action), escJS(searchID), c.limit, escJS(c.order),

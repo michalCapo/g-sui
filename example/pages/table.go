@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -265,13 +266,7 @@ func applyColumnFilters(p *Product, filters map[int]*activeFilter) bool {
 			default:
 				continue
 			}
-			found := false
-			for _, v := range f.Vals {
-				if v == val {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(f.Vals, val)
 			if !found {
 				return false
 			}

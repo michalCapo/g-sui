@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-"$PWD/tmp/cache"}"
+export GOCACHE="${GOCACHE:-"$PWD/tmp/go-build"}"
+export CCACHE_DIR="${CCACHE_DIR:-"$PWD/tmp/ccache"}"
+mkdir -p "$XDG_CACHE_HOME" "$GOCACHE" "$CCACHE_DIR"
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "error: '$1' is not installed or is not on PATH" >&2
+    case "$1" in
+      staticcheck)
+        echo "install: go install honnef.co/go/tools/cmd/staticcheck@latest" >&2
+        ;;
+      deadcode)
+        echo "install: go install golang.org/x/tools/cmd/deadcode@latest" >&2
+        ;;
+    esac
+    exit 127
+  fi
+}
+
+run() {
+  echo "+ $*"
+  "$@"
+}
+
+run_deadcode() {
+  local err
+  local output
+  local escaped_pkg
+  local failures=0
+  local list_output
+  local main_packages=()
+
+  list_output="$(mktemp -t g-sui-main-packages.XXXXXX)"
+  err="$(mktemp -t g-sui-go-list.XXXXXX)"
+  trap 'rm -f "$list_output" "$err"' RETURN
+
+  if ! go list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./... >"$list_output" 2>"$err"; then
+    cat "$err" >&2
+    return 1
+  fi
+
+  grep -v '^go: writing stat cache: ' "$err" >&2 || true
+  mapfile -t main_packages < <(sed '/^$/d' "$list_output")
+
+  if [ "${#main_packages[@]}" -eq 0 ]; then
+    echo "+ deadcode -test ./..."
+    echo "no main packages found; skipping deadcode"
+    return 0
+  fi
+
+  output="$(mktemp -t g-sui-deadcode.XXXXXX)"
+  trap 'rm -f "$list_output" "$err" "$output"' RETURN
+
+  for pkg in "${main_packages[@]}"; do
+    escaped_pkg="${pkg//./\\.}"
+    echo "+ deadcode -test -filter=^${escaped_pkg}$ $pkg"
+    deadcode -test -filter="^${escaped_pkg}$" "$pkg" >"$output"
+
+    if [ -s "$output" ]; then
+      cat "$output"
+      failures=1
+    fi
+  done
+
+  if [ "$failures" -ne 0 ]; then
+    echo "error: deadcode reported unreachable functions" >&2
+  fi
+
+  return "$failures"
+}
+
+require_command go
+require_command staticcheck
+require_command deadcode
+
+run go fix ./...
+run go vet ./...
+run staticcheck ./...
+run_deadcode
