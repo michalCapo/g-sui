@@ -21,7 +21,7 @@ func SkeletonTable() *Node {
 
 	headerCells := make([]*Node, 4)
 	widths := []string{"w-20", "w-28", "w-24", "w-16"}
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		headerCells[i] = Th("px-4 py-3").Render(bar(widths[i]))
 	}
 	header := Thead().Render(Tr("border-b border-gray-200 dark:border-gray-600").Render(headerCells...))
@@ -34,9 +34,9 @@ func SkeletonTable() *Node {
 		{"w-24", "w-16", "w-32", "w-12"},
 	}
 	rows := make([]*Node, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		cells := make([]*Node, 4)
-		for j := 0; j < 4; j++ {
+		for j := range 4 {
 			cells[j] = Td("px-4 py-3").Render(bar(rowWidths[i][j]))
 		}
 		rows[i] = Tr("border-b border-gray-100 dark:border-gray-700").Render(cells...)
@@ -52,7 +52,7 @@ func SkeletonTable() *Node {
 func SkeletonCards() *Node {
 	cards := make([]*Node, 6)
 	barWidths := []string{"w-3/4", "w-1/2", "w-2/3", "w-5/6", "w-3/5", "w-4/5"}
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		cards[i] = Div("bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-3").Render(
 			Div("h-32 bg-gray-200 dark:bg-gray-700 rounded"),
 			Div("h-4 bg-gray-200 dark:bg-gray-700 rounded "+barWidths[i]),
@@ -74,7 +74,7 @@ func SkeletonList() *Node {
 		{"w-3/5", "w-2/5"},
 	}
 	rows := make([]*Node, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		rows[i] = Div("flex items-center gap-4 py-3").Render(
 			Div("w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full flex-shrink-0"),
 			Div("flex-1 flex flex-col gap-2").Render(
@@ -103,7 +103,7 @@ func SkeletonComponent() *Node {
 func SkeletonPage() *Node {
 	sidebarItems := make([]*Node, 5)
 	sw := []string{"w-3/4", "w-1/2", "w-2/3", "w-4/5", "w-3/5"}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		sidebarItems[i] = Div("h-4 bg-gray-200 dark:bg-gray-700 rounded " + sw[i])
 	}
 
@@ -127,7 +127,7 @@ func SkeletonPage() *Node {
 func SkeletonForm() *Node {
 	labelWidths := []string{"w-20", "w-24", "w-16", "w-28"}
 	fields := make([]*Node, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		fields[i] = Div("flex flex-col gap-2").Render(
 			Div("h-3 bg-gray-200 dark:bg-gray-700 rounded "+labelWidths[i]),
 			Div("h-10 bg-gray-200 dark:bg-gray-700 rounded w-full"),
@@ -1307,13 +1307,7 @@ func stepHeight(size string) string {
 
 // Build compiles the step progress into a *Node.
 func (s *StepProgressBuilder) Build() *Node {
-	cur := s.current
-	if cur < 0 {
-		cur = 0
-	}
-	if cur > s.total {
-		cur = s.total
-	}
+	cur := min(max(s.current, 0), s.total)
 
 	pct := 0
 	if s.total > 0 {

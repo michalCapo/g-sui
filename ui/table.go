@@ -1,5 +1,7 @@
 package ui
 
+import "slices"
+
 import "fmt"
 
 // ---------------------------------------------------------------------------
@@ -84,11 +86,11 @@ func defaultTableLocale() *TableLocale {
 type FilterType string
 
 const (
-	FilterTypeText       FilterType = "text"
-	FilterTypeDate       FilterType = "date"
-	FilterTypeMonthYear  FilterType = "monthyear"
-	FilterTypeNumber     FilterType = "number"
-	FilterTypeSelect     FilterType = "select"
+	FilterTypeText      FilterType = "text"
+	FilterTypeDate      FilterType = "date"
+	FilterTypeMonthYear FilterType = "monthyear"
+	FilterTypeNumber    FilterType = "number"
+	FilterTypeSelect    FilterType = "select"
 )
 
 // FilterOperator defines the operator for text/number filters
@@ -227,11 +229,11 @@ type ColOpt[T any] struct {
 }
 
 const (
-	NumFilter        FilterType = FilterTypeNumber
-	TxtFilter        FilterType = FilterTypeText
-	DateFilter       FilterType = FilterTypeDate
-	MonthYearFilter  FilterType = FilterTypeMonthYear
-	SelectFilter     FilterType = FilterTypeSelect
+	NumFilter       FilterType = FilterTypeNumber
+	TxtFilter       FilterType = FilterTypeText
+	DateFilter      FilterType = FilterTypeDate
+	MonthYearFilter FilterType = FilterTypeMonthYear
+	SelectFilter    FilterType = FilterTypeSelect
 )
 
 // Col adds a column with header label and options including the render function.
@@ -898,12 +900,7 @@ func (dt *DataTable[T]) isSortable(colIdx int) bool {
 	if dt.getAction() == "" {
 		return false
 	}
-	for _, s := range dt.sortable {
-		if s == colIdx {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(dt.sortable, colIdx)
 }
 
 func (dt *DataTable[T]) hasFilter(colIdx int) bool {
@@ -1137,10 +1134,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 
 	// "X of Y" count + load more button (right aligned)
 	if dt.totalItems > 0 {
-		showing := dt.page * dt.pageSize
-		if showing > dt.totalItems {
-			showing = dt.totalItems
-		}
+		showing := min(dt.page*dt.pageSize, dt.totalItems)
 		countText := Span("text-sm text-gray-500 dark:text-gray-400").
 			Text(dt.loc().ItemCount(showing, dt.totalItems))
 		footerItems = append(footerItems, countText)

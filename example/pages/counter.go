@@ -48,10 +48,7 @@ func handleCounterDec(ctx *r.Context) string {
 		Count float64 `json:"count"`
 	}
 	ctx.Body(&data)
-	newCount := int(data.Count) - 1
-	if newCount < 0 {
-		newCount = 0
-	}
+	newCount := max(int(data.Count)-1, 0)
 	return counterWidget(data.ID, newCount).ToJSReplace(data.ID)
 }
 

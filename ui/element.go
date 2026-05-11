@@ -445,7 +445,7 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 	*counter++
 
 	parentIsSVG := len(inSVG) > 0 && inSVG[0]
-	useSVGNS := parentIsSVG || n.tag == "svg"
+	useSVGNS := parentIsSVG || svgTags[n.tag]
 
 	if useSVGNS {
 		fmt.Fprintf(b, "var %s=document.createElementNS('%s','%s');", varName, svgNS, escJS(n.tag))

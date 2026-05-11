@@ -45,7 +45,7 @@ func main() {
 	app.Title = "g-sui Component Showcase"
 	app.Description = "A server-rendered Go UI framework with live WebSocket updates, Tailwind CSS, and interactive components."
 
-	app.Listen(":1423")
+	app.Listen(":1424")
 }
 
 // ---------------------------------------------------------------------------
