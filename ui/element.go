@@ -413,26 +413,6 @@ func (n *Node) ToJSInner(targetID string) string {
 	return b.String()
 }
 
-// svgTags lists element names that belong to the SVG namespace.
-// When any of these is encountered (or is a descendant of one),
-// compile emits createElementNS instead of createElement.
-var svgTags = map[string]bool{
-	"svg": true, "g": true, "path": true, "circle": true, "ellipse": true,
-	"line": true, "polyline": true, "polygon": true, "rect": true, "text": true,
-	"tspan": true, "defs": true, "symbol": true, "use": true, "image": true,
-	"clipPath": true, "mask": true, "pattern": true, "linearGradient": true,
-	"radialGradient": true, "stop": true, "filter": true, "feBlend": true,
-	"feColorMatrix": true, "feComponentTransfer": true, "feComposite": true,
-	"feConvolveMatrix": true, "feDiffuseLighting": true, "feDisplacementMap": true,
-	"feFlood": true, "feGaussianBlur": true, "feImage": true, "feMerge": true,
-	"feMergeNode": true, "feMorphology": true, "feOffset": true,
-	"feSpecularLighting": true, "feTile": true, "feTurbulence": true,
-	"marker": true, "title": true, "desc": true, "metadata": true,
-	"foreignObject": true, "switch": true, "a": true, "animate": true,
-	"animateMotion": true, "animateTransform": true, "set": true,
-	"textPath": true,
-}
-
 const svgNS = "http://www.w3.org/2000/svg"
 
 // compile recursively emits JS statements to build a DOM element tree.
@@ -445,7 +425,11 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 	*counter++
 
 	parentIsSVG := len(inSVG) > 0 && inSVG[0]
-	useSVGNS := parentIsSVG || svgTags[n.tag]
+	// Only the <svg> root opens the SVG namespace; descendants inherit it via
+	// parentIsSVG. A tag-name lookup would wrongly namespace HTML elements that
+	// share a name with SVG (notably <a>, plus <title>, <text>, <image>,
+	// <switch>) when they are used outside an <svg>.
+	useSVGNS := parentIsSVG || n.tag == "svg"
 
 	if useSVGNS {
 		fmt.Fprintf(b, "var %s=document.createElementNS('%s','%s');", varName, svgNS, escJS(n.tag))
