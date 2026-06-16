@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"log"
@@ -68,6 +69,8 @@ type App struct {
 	// after the built-in Tailwind/Material Icons/WS script tags.
 	// Each entry is emitted as-is (e.g. "<style>body{margin:0}</style>",
 	// "<script src=\"...\"></script>", "<link ...>").
+	//
+	// This is a trusted raw API: never pass untrusted/user-controlled input to it.
 	HTMLHead []string
 }
 
@@ -100,6 +103,8 @@ func (app *App) Page(path string, handler PageHandler) {
 // CSS registers external stylesheets and/or inline CSS rules that apply
 // to every page in the application. The tags are injected into the HTML
 // <head> server-side, so they load immediately without JavaScript.
+//
+// This is a trusted raw API: never pass untrusted/user-controlled input to it.
 //
 //	app.CSS(
 //	    []string{"https://fonts.googleapis.com/css2?family=Oswald&display=swap"},
@@ -337,15 +342,15 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 	// Respond with minimal HTML shell
 	faviconTag := ""
 	if app.Favicon != "" {
-		faviconTag = fmt.Sprintf(`<link rel="icon" href="%s">`, app.Favicon)
+		faviconTag = fmt.Sprintf(`<link rel="icon" href="%s">`, html.EscapeString(app.Favicon))
 	}
 	titleTag := "<title>App</title>"
 	if app.Title != "" {
-		titleTag = fmt.Sprintf(`<title>%s</title>`, app.Title)
+		titleTag = fmt.Sprintf(`<title>%s</title>`, html.EscapeString(app.Title))
 	}
 	descTag := ""
 	if app.Description != "" {
-		descTag = fmt.Sprintf(`<meta name="description" content="%s">`, app.Description)
+		descTag = fmt.Sprintf(`<meta name="description" content="%s">`, html.EscapeString(app.Description))
 	}
 
 	// Build custom head HTML (app-wide + per-page)
@@ -741,6 +746,8 @@ func (ctx *Context) WsData() map[string]any {
 // actions) the same resources are injected into <head> via JS with
 // deduplication so they are not loaded twice.
 //
+// This is a trusted raw API: never pass untrusted/user-controlled input to it.
+//
 //	ctx.HeadCSS(
 //	    []string{"https://fonts.googleapis.com/css2?family=Oswald&display=swap"},
 //	    `.hero { font-family: 'Oswald', sans-serif; }`,
@@ -763,6 +770,8 @@ func (ctx *Context) HeadCSS(urls []string, css string) {
 // On a full page load the script is emitted as a <script> tag in <head>.
 // On SPA navigations the code is prepended to the WS response so it
 // executes before the DOM swap.
+//
+// This is a trusted raw API: never pass untrusted/user-controlled input to it.
 //
 // Use this for page-level setup (global functions, event listeners, etc.)
 // instead of the Div("").JS(`...`) pattern.

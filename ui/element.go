@@ -47,6 +47,8 @@ type Action struct {
 // JS creates a client-side-only Action that executes raw JavaScript
 // instead of calling the server via WebSocket.
 //
+// This is a trusted raw API: never pass untrusted/user-controlled input to it.
+//
 //	r.Button("...").OnClick(r.JS("history.back()"))
 func JS(code string) *Action {
 	return &Action{rawJS: code}
@@ -274,6 +276,8 @@ func (n *Node) On(event string, action *Action) *Node {
 }
 
 // JS sets raw JavaScript to execute after this node is appended to the DOM.
+//
+// This is a trusted raw API: never pass untrusted/user-controlled input to it.
 func (n *Node) JS(raw string) *Node { n.rawJS = raw; return n }
 
 // ---------------------------------------------------------------------------
@@ -639,12 +643,44 @@ func DragToScroll(id string) string {
 // Internal
 // ---------------------------------------------------------------------------
 
-// escJS escapes a string for safe embedding inside JS single-quoted strings.
+// escJS escapes a string for safe embedding inside JS single-quoted strings
+// that may themselves be embedded in an HTML <script> tag.
 func escJS(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `'`, `\'`)
-	s = strings.ReplaceAll(s, "\n", `\n`)
-	s = strings.ReplaceAll(s, "\r", `\r`)
-	s = strings.ReplaceAll(s, "\t", `\t`)
-	return s
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\'':
+			b.WriteString(`\'`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '<':
+			b.WriteString(`\u003c`)
+		case '>':
+			b.WriteString(`\u003e`)
+		case '&':
+			b.WriteString(`\u0026`)
+		case '=':
+			b.WriteString(`\u003d`)
+		case '\u2028':
+			b.WriteString(`\u2028`)
+		case '\u2029':
+			b.WriteString(`\u2029`)
+		default:
+			if r < 0x20 {
+				fmt.Fprintf(&b, `\u%04x`, r)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+
+	return b.String()
 }
