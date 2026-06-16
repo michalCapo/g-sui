@@ -146,6 +146,8 @@ func SkeletonForm() *Node {
 // Markdown converts a markdown string to HTML and renders it inside a Div.
 // Since the framework produces only document.createElement JS (no innerHTML
 // setter on nodes), this uses .JS() to set innerHTML after the node mounts.
+// Goldmark's default safe renderer omits raw HTML and unsafe links such as
+// javascript: URLs; do not enable unsafe markdown rendering for untrusted input.
 // The class parameter is applied to the container div.
 func Markdown(class, content string) *Node {
 	var buf bytes.Buffer

@@ -123,7 +123,7 @@ Creates the application instance. Holds page routes, action handlers, WebSocket 
 | `Favicon` | `string` | Path to favicon (adds `<link rel="icon">`) |
 | `Title` | `string` | Default document title |
 | `Description` | `string` | Meta description tag |
-| `HTMLHead` | `[]string` | Additional raw HTML injected into `<head>` |
+| `HTMLHead` | `[]string` | Additional raw HTML injected into `<head>`; trusted raw API, never pass untrusted input |
 
 ### Page Routes
 
@@ -301,7 +301,7 @@ app.CSS(
 )
 ```
 
-Registers external stylesheets and/or inline CSS rules that apply to every page. Tags are injected into the HTML `<head>` server-side, so they load immediately without JavaScript. Pass `nil` for `urls` if you only need inline CSS, or `""` for `css` if you only need external links.
+Registers external stylesheets and/or inline CSS rules that apply to every page. Tags are injected into the HTML `<head>` server-side, so they load immediately without JavaScript. Pass `nil` for `urls` if you only need inline CSS, or `""` for `css` if you only need external links. This is a trusted raw API; never pass untrusted input.
 
 ### HeadCSS (Per-Page via Context)
 
@@ -316,7 +316,7 @@ app.Page("/about", func(ctx *ui.Context) *ui.Node {
 })
 ```
 
-Registers external stylesheets and/or inline CSS rules for the current page only. On a full page load the tags are injected into the HTML `<head>` server-side (instant, no JS needed). On SPA navigations (WS actions) the same resources are injected into `<head>` via JS with deduplication so external links are not loaded twice. Pass `nil` for `urls` if you only need inline CSS, or `""` for `css` if you only need external links.
+Registers external stylesheets and/or inline CSS rules for the current page only. On a full page load the tags are injected into the HTML `<head>` server-side (instant, no JS needed). On SPA navigations (WS actions) the same resources are injected into `<head>` via JS with deduplication so external links are not loaded twice. Pass `nil` for `urls` if you only need inline CSS, or `""` for `css` if you only need external links. This is a trusted raw API; never pass untrusted input.
 
 ### JS (Per-Page via Context)
 
@@ -336,7 +336,7 @@ app.Page("/dashboard", func(ctx *ui.Context) *ui.Node {
 })
 ```
 
-Registers a JavaScript block that runs once when the page loads. On a full page load the script is emitted as a `<script>` tag in `<head>`. On SPA navigations the code is prepended to the WS response so it executes before the DOM swap. Use this for page-level setup (global functions, event listeners, etc.) instead of the `Div("").JS(...)` workaround.
+Registers a JavaScript block that runs once when the page loads. On a full page load the script is emitted as a `<script>` tag in `<head>`. On SPA navigations the code is prepended to the WS response so it executes before the DOM swap. Use this for page-level setup (global functions, event listeners, etc.) instead of the `Div("").JS(...)` workaround. This is a trusted raw API; never pass untrusted input.
 
 **When to use which:**
 
@@ -903,7 +903,7 @@ ui.SkeletonForm()        // 4 label+input pairs + submit button
 ui.Markdown("prose dark:prose-invert", markdownContent)
 ```
 
-Renders markdown to HTML using goldmark. Uses `.JS()` to set innerHTML after mount.
+Renders markdown to HTML using goldmark. Uses `.JS()` to set innerHTML after mount. Goldmark's default safe renderer omits raw HTML and unsafe links such as `javascript:` URLs; do not enable unsafe markdown rendering for untrusted input.
 
 ### Icon
 
