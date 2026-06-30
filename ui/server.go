@@ -673,6 +673,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 
 		// Build context with current push context
 		ctx := &Context{
+			Request:    ws.Request(),
 			PathParams: make(map[string]string),
 			Query:      make(map[string]string),
 			wsConn:     ws,
