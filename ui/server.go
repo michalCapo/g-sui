@@ -3,6 +3,8 @@ package ui
 import (
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -10,6 +12,8 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -20,20 +24,14 @@ import (
 // goroutines stop when the client navigates away or reports a missing
 // target element.
 type connState struct {
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx     context.Context
+	cancel  context.CancelFunc
+	writeMu sync.Mutex
 }
 
 // ---------------------------------------------------------------------------
 // App: routes, actions, server
 // ---------------------------------------------------------------------------
-
-// httpRoute stores a deferred HTTP handler registration (method + pattern).
-type httpRoute struct {
-	method  string
-	pattern string
-	handler http.HandlerFunc
-}
 
 // LayoutHandler builds a shared layout wrapping every page. The returned
 // *Node tree must contain exactly one element with ID("__content__") where
@@ -50,8 +48,8 @@ type App struct {
 	clients    map[*websocket.Conn]bool
 	connStates map[*websocket.Conn]*connState
 	mux        *http.ServeMux
-	httpRoutes []httpRoute
 	layout     LayoutHandler
+	setupOnce  sync.Once
 
 	// Favicon is the URL path for the site favicon (e.g. "/assets/favicon.svg").
 	// When set, a <link rel="icon"> tag is emitted in the HTML shell.
@@ -72,6 +70,12 @@ type App struct {
 	//
 	// This is a trusted raw API: never pass untrusted/user-controlled input to it.
 	HTMLHead []string
+
+	// AllowedOrigins adds browser WebSocket origins allowed to connect to /__ws.
+	// By default, only same-origin requests are accepted; requests without an
+	// Origin header are allowed for non-browser clients. Use "*" to disable
+	// origin validation entirely.
+	AllowedOrigins []string
 }
 
 // PageHandler builds the initial DOM for a GET route.
@@ -138,23 +142,17 @@ func (app *App) Action(name string, handler ActionHandler) {
 // GET registers a standard HTTP GET handler on the internal mux.
 // Use this for REST API endpoints that return JSON, files, etc.
 func (app *App) GET(path string, handler http.HandlerFunc) {
-	app.mu.Lock()
-	app.httpRoutes = append(app.httpRoutes, httpRoute{"GET", path, handler})
-	app.mu.Unlock()
+	app.mux.HandleFunc("GET "+path, handler)
 }
 
 // POST registers a standard HTTP POST handler on the internal mux.
 func (app *App) POST(path string, handler http.HandlerFunc) {
-	app.mu.Lock()
-	app.httpRoutes = append(app.httpRoutes, httpRoute{"POST", path, handler})
-	app.mu.Unlock()
+	app.mux.HandleFunc("POST "+path, handler)
 }
 
 // DELETE registers a standard HTTP DELETE handler on the internal mux.
 func (app *App) DELETE(path string, handler http.HandlerFunc) {
-	app.mu.Lock()
-	app.httpRoutes = append(app.httpRoutes, httpRoute{"DELETE", path, handler})
-	app.mu.Unlock()
+	app.mux.HandleFunc("DELETE "+path, handler)
 }
 
 // Assets serves static files from an embedded or on-disk filesystem.
@@ -205,6 +203,10 @@ func (app *App) Listen(addr string) error {
 // ---------------------------------------------------------------------------
 
 func (app *App) setup() {
+	app.setupOnce.Do(app.setupRoutes)
+}
+
+func (app *App) setupRoutes() {
 	// Built-in __nav action: handles popstate (browser back/forward).
 	// Looks up the page handler for the URL and replaces content.
 	// If a layout is registered, only the __content__ container is replaced
@@ -220,8 +222,28 @@ func (app *App) setup() {
 		}
 		ctx.Body(&req)
 
+		u, err := url.Parse(req.URL)
+		if err != nil || req.URL == "" {
+			return ""
+		}
+
+		// Patch the request so page handlers see the navigated URL instead of
+		// the WebSocket upgrade path (/__ws). Server-side logic that keys on
+		// the current path (active nav state, breadcrumbs) depends on this.
+		if ctx.Request != nil {
+			r2 := ctx.Request.Clone(ctx.Request.Context())
+			r2.URL.Path = u.Path
+			r2.URL.RawQuery = u.RawQuery
+			ctx.Request = r2
+		}
+		for k, v := range u.Query() {
+			if len(v) > 0 {
+				ctx.Query[k] = v[0]
+			}
+		}
+
 		app.mu.RLock()
-		handler, ok := app.pages[req.URL]
+		handler, ok := app.pages[u.Path]
 		layoutFn := app.layout
 		app.mu.RUnlock()
 
@@ -254,14 +276,7 @@ func (app *App) setup() {
 	app.mux.HandleFunc("GET /__ws.js", app.serveWSClient)
 
 	// WebSocket endpoint
-	app.mux.Handle("/__ws", websocket.Handler(app.handleWS))
-
-	// Register user-defined HTTP routes (GET/POST/DELETE) before the
-	// catch-all page handler so they take precedence.
-	for _, rt := range app.httpRoutes {
-		pattern := rt.method + " " + rt.pattern
-		app.mux.HandleFunc(pattern, rt.handler)
-	}
+	app.mux.Handle("/__ws", websocket.Server{Handshake: app.wsHandshake, Handler: app.handleWS})
 
 	// Page routes (catch-all)
 	app.mux.HandleFunc("/", app.handlePage)
@@ -300,6 +315,7 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 		Request:    r,
 		PathParams: make(map[string]string),
 		Query:      make(map[string]string),
+		app:        app,
 	}
 
 	// Parse query params
@@ -384,7 +400,8 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<script>%s</script>
+<script>%s
+%s</script>
 
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" async></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" media="print" onload="this.media='all'">
@@ -394,7 +411,7 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 @theme{--font-sans:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;}
 </style>
 <style>%s</style>
-<script src="/__ws.js" defer></script>
+<script src="/__ws.js?v=%s" defer></script>
 %s
 </head>
 <body>
@@ -402,7 +419,7 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 %s
 </script>
 </body>
-</html>`, faviconTag, titleTag, descTag, themeInitJS, darkOverrideCSS, customHead, jsBody)
+</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, darkOverrideCSS, wsClientVersion, customHead, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -424,6 +441,21 @@ func (app *App) serveWSClient(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(wsClientJS))
 }
 
+// wsClientVersion is a content hash of the embedded client script, appended
+// to the /__ws.js URL so browsers refetch it when the client code changes
+// despite the long-lived Cache-Control header.
+var wsClientVersion = func() string {
+	h := sha256.Sum256([]byte(wsClientJS))
+	return hex.EncodeToString(h[:4])
+}()
+
+// wsStubJS installs a queuing stub for __ws synchronously in <head>. The real
+// client (/__ws.js) loads with defer and therefore runs AFTER the inline body
+// script, so page-load JS (Node.JS blocks, ctx.HeadJS) that calls __ws would
+// otherwise hit "__ws is not defined". The stub queues those calls; the real
+// client replays and replaces it when it initializes.
+const wsStubJS = `window.__ws||(window.__ws={__q:[],call:function(){this.__q.push(['call',arguments])},callSilent:function(){this.__q.push(['callSilent',arguments])},notfound:function(){this.__q.push(['notfound',arguments])}});`
+
 // themeInitJS runs synchronously in <head> before the body renders to
 // prevent FOUC. It reads the stored theme from localStorage, applies the
 // "dark" class on <html>, and exposes setTheme(mode) / toggleTheme() globals.
@@ -442,23 +474,16 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',func
 // These use .dark selectors without !important so explicit dark: variants win.
 // Also applies a local font stack to avoid late webfont swaps and CLS.
 const darkOverrideCSS = `html.dark{color-scheme:dark}
-.dark body{color:#e5e7eb}
-.dark .bg-white,.dark .bg-gray-50,.dark .bg-gray-100,.dark .bg-gray-200{background-color:#111827}
-.dark .text-black,.dark .text-gray-900,.dark .text-gray-800,.dark .text-gray-700,.dark .text-gray-600,.dark .text-gray-500{color:#e5e7eb}
-.dark .text-gray-400,.dark .text-gray-300{color:#d1d5db}
-.dark .border-gray-100,.dark .border-gray-200,.dark .border-gray-300{border-color:#374151}
-.dark input,.dark select,.dark textarea{color:#e5e7eb!important;background-color:#1f2937!important}
-.dark input::placeholder,.dark textarea::placeholder{color:#9ca3af!important}
-.dark .hover\:bg-gray-200:hover{background-color:#374151}
-.dark .hover\:bg-gray-100:hover{background-color:#1f2937}
-.dark .hover\:bg-gray-50:hover{background-color:#1f2937}
+.dark body{color:#e5e7eb;background-color:#0b1120}
+.dark input::placeholder,.dark textarea::placeholder{color:#9ca3af}
 body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}`
 
 // wsClientJS is the entire client-side framework.
 // It connects to the WS endpoint, sends action calls, executes
 // whatever JS string the server sends back, and shows an offline
 // overlay when the WebSocket disconnects.
-const wsClientJS = `var __offline=(function(){
+const wsClientJS = `var __wsPre=window.__ws;
+var __offline=(function(){
   var el=null;
   function show(){
     if(document.getElementById('__offline__')){el=document.getElementById('__offline__');return;}
@@ -486,9 +511,8 @@ const wsClientJS = `var __offline=(function(){
   return{show:show,hide:hide};
 })();
 var __ws=(function(){
-  var ws,q=[],ready=false,pending=0,loaderEl=null,loaderTimer=0,hadClose=false;
+  var ws,q=[],ready=false,seq=0,inflight={},loaderEl=null,loaderTimer=0,hadClose=false,backoff=500;
   function showLoader(){
-    pending++;
     if(loaderEl||loaderTimer)return;
     loaderTimer=setTimeout(function(){
       loaderTimer=0;
@@ -509,29 +533,28 @@ var __ws=(function(){
     },120);
   }
   function hideLoader(){
-    pending--;
-    if(pending>0)return;
-    pending=0;
+    if(Object.keys(inflight).length)return;
     if(loaderTimer){clearTimeout(loaderTimer);loaderTimer=0;}
     if(loaderEl){loaderEl.style.opacity='0';var el=loaderEl;loaderEl=null;setTimeout(function(){try{if(el&&el.parentNode)el.parentNode.removeChild(el)}catch(_){}},160);}
   }
   function connect(){
     ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/__ws');
     ws.onopen=function(){
-      ready=true;
+      ready=true;backoff=500;
       __offline.hide();
       q.forEach(function(m){ws.send(m)});q=[];
       if(hadClose){hadClose=false;try{location.reload();return;}catch(_){}}
     };
-    ws.onmessage=function(e){hideLoader();try{new Function(e.data)()}catch(err){console.error('ws exec error:',err,e.data)}};
-    ws.onclose=function(){ready=false;pending=0;hideLoader();__offline.show();hadClose=true;setTimeout(connect,1500)};
+    ws.onmessage=function(e){var m;try{m=JSON.parse(e.data)}catch(_){}if(m&&typeof m==='object'&&m.__r){if(inflight[m.id]){delete inflight[m.id];hideLoader()}if(m.js){try{new Function(m.js)()}catch(err){console.error('ws exec error:',err,m.js)}}document.querySelectorAll('button.gsui-busy').forEach(function(b){b.disabled=false;b.classList.remove('gsui-busy','opacity-60','cursor-wait')})}else{try{new Function(e.data)()}catch(err){console.error('ws exec error:',err,e.data)}}try{window.dispatchEvent(new Event('gsui:updated'))}catch(_){}};
+    ws.onclose=function(){ready=false;inflight={};hideLoader();document.querySelectorAll('button.gsui-busy').forEach(function(b){b.disabled=false;b.classList.remove('gsui-busy','opacity-60','cursor-wait')});__offline.show();hadClose=true;var d=Math.min(10000,backoff)*(0.75+Math.random()*0.5);backoff=Math.min(10000,backoff*2);setTimeout(connect,d)};
     ws.onerror=function(){ws.close()};
   }
   connect();
   window.addEventListener('popstate',function(){
-    var msg=JSON.stringify({act:'__nav',data:{url:location.pathname}});
+    var id=++seq,msg=JSON.stringify({act:'__nav',data:{url:location.pathname+location.search},id:id});
+    inflight[id]=true;
     showLoader();
-    if(ready)ws.send(msg);else q.push(msg);
+    if(ready)ws.send(msg);else queue(msg);
   });
   function collectValue(id,d){
     var el=document.getElementById(id);
@@ -562,35 +585,34 @@ var __ws=(function(){
     var type=(t.getAttribute('type')||'text').toLowerCase();
     // Skip non-text input types
     if(type==='checkbox'||type==='radio'||type==='file'||type==='range'||type==='color'||type==='hidden'||type==='submit'||type==='reset'||type==='button'||type==='image')return;
-    // Walk up to find a container with a <button>
-    var p=t.parentElement;
-    while(p&&p!==document.body){
-      var btn=p.querySelector('button');
-      if(btn){e.preventDefault();btn.click();return;}
-      p=p.parentElement;
-    }
+    var form=t.form||t.closest('form'),btn;
+    if(form){btn=form.querySelector('button[type=submit]')||form.querySelector('button:not([type])')||form.querySelector('button');if(!btn&&form.id)btn=document.querySelector('button[form="'+form.id+'"]')}else{var p=t.parentElement;while(p&&p!==document.body){btn=p.querySelector('button');if(btn)break;p=p.parentElement}}
+    if(btn){e.preventDefault();btn.click()}
   });
+  function queue(msg){if(q.length>=100){console.warn('gsui: WebSocket queue full; dropping message');return}q.push(msg)}
   return{
     call:function(act,data,collect){
       var d=Object.assign({},data||{});
       if(collect&&collect.length){
         collect.forEach(function(id){collectValue(id,d)});
       }
-      var msg=JSON.stringify({act:act,data:d});
+      var id=++seq,msg=JSON.stringify({act:act,data:d,id:id});
+      inflight[id]=true;
       showLoader();
-      if(ready)ws.send(msg);else q.push(msg);
+      if(ready)ws.send(msg);else queue(msg);
     },
     callSilent:function(act,data){
       var d=Object.assign({},data||{});
       var msg=JSON.stringify({act:act,data:d});
-      if(ready)ws.send(msg);else q.push(msg);
+      if(ready)ws.send(msg);else queue(msg);
     },
     notfound:function(id){
       var msg=JSON.stringify({act:'__notfound',data:{id:id}});
-      if(ready)ws.send(msg);else q.push(msg);
+      if(ready)ws.send(msg);else queue(msg);
     }
   };
-})();`
+})();
+if(__wsPre&&__wsPre.__q){__wsPre.__q.forEach(function(it){try{__ws[it[0]].apply(__ws,it[1])}catch(e){console.error('gsui: queued ws call failed:',e)}})}`
 
 // ---------------------------------------------------------------------------
 // WebSocket handler
@@ -600,6 +622,56 @@ var __ws=(function(){
 type wsMessage struct {
 	Act  string         `json:"act"`
 	Data map[string]any `json:"data"`
+	ID   int64          `json:"id"`
+}
+
+// wsHandshake accepts same-origin browser requests, configured origins, and
+// non-browser clients that do not send Origin.
+func (app *App) wsHandshake(_ *websocket.Config, r *http.Request) error {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return nil
+	}
+	app.mu.RLock()
+	allowed := append([]string(nil), app.AllowedOrigins...)
+	app.mu.RUnlock()
+	for _, v := range allowed {
+		if v == "*" || v == origin {
+			return nil
+		}
+	}
+	u, err := url.Parse(origin)
+	if err == nil && u.Scheme != "" && strings.EqualFold(u.Host, r.Host) {
+		return nil
+	}
+	return fmt.Errorf("origin %q is not allowed", origin)
+}
+
+// send serializes outbound frames for a connection shared by handler replies,
+// Push calls, and broadcasts.
+func (app *App) send(ws *websocket.Conn, s string) error {
+	app.mu.RLock()
+	st, ok := app.connStates[ws]
+	app.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("connection is closed")
+	}
+	st.writeMu.Lock()
+	defer st.writeMu.Unlock()
+	return websocket.Message.Send(ws, s)
+}
+
+func wsReply(id int64, js string) string {
+	b, err := json.Marshal(struct {
+		Reply int64  `json:"__r"`
+		ID    int64  `json:"id"`
+		JS    string `json:"js"`
+	}{Reply: 1, ID: id, JS: js})
+	if err != nil {
+		log.Printf("gsui: marshal WebSocket reply: %v", err)
+		return `{"__r":1,"id":0,"js":""}`
+	}
+	return string(b)
 }
 
 // cancelConn cancels the push context for a connection and creates a fresh
@@ -607,10 +679,13 @@ type wsMessage struct {
 func (app *App) cancelConn(ws *websocket.Conn) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
+	ctx, cancel := context.WithCancel(context.Background())
 	if st, ok := app.connStates[ws]; ok {
 		st.cancel()
+		st.ctx = ctx
+		st.cancel = cancel
+		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
 	app.connStates[ws] = &connState{ctx: ctx, cancel: cancel}
 }
 
@@ -648,7 +723,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		err := websocket.Message.Receive(ws, &raw)
 		if err != nil {
 			if err != io.EOF {
-				log.Printf("rework ws: read error: %v", err)
+				log.Printf("gsui: ws read error: %v", err)
 			}
 			return
 		}
@@ -656,7 +731,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		// Parse the incoming message
 		var msg wsMessage
 		if err := json.Unmarshal([]byte(raw), &msg); err != nil {
-			log.Printf("rework ws: invalid message: %s", raw)
+			log.Printf("gsui: invalid WebSocket message: %s", raw)
 			continue
 		}
 
@@ -667,7 +742,13 @@ func (app *App) handleWS(ws *websocket.Conn) {
 
 		if !ok {
 			errJS := Notify("error", fmt.Sprintf("Unknown action: %s", msg.Act))
-			websocket.Message.Send(ws, errJS)
+			if msg.ID != 0 {
+				errJS = wsReply(msg.ID, errJS)
+			}
+			if err := app.send(ws, errJS); err != nil {
+				log.Printf("gsui: ws send error: %v", err)
+				return
+			}
 			continue
 		}
 
@@ -686,8 +767,8 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		jsResponse := func() (resp string) {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("rework ws: panic in action %q: %v", msg.Act, r)
-					resp = Notify("error", fmt.Sprintf("Server error: %v", r))
+					log.Printf("gsui: panic in action %q: %v\n%s", msg.Act, r, debug.Stack())
+					resp = Notify("error", "Server error")
 				}
 			}()
 			return handler(ctx)
@@ -707,10 +788,13 @@ func (app *App) handleWS(ws *websocket.Conn) {
 			jsResponse = prefix
 		}
 
-		// Send the JS back to the client for immediate execution
+		// Tracked requests always receive an envelope, including empty JS.
+		if msg.ID != 0 {
+			jsResponse = wsReply(msg.ID, jsResponse)
+		}
 		if jsResponse != "" {
-			if err := websocket.Message.Send(ws, jsResponse); err != nil {
-				log.Printf("rework ws: send error: %v", err)
+			if err := app.send(ws, jsResponse); err != nil {
+				log.Printf("gsui: ws send error: %v", err)
 				return
 			}
 		}
@@ -883,15 +967,16 @@ func (ctx *Context) Push(js string) error {
 			return fmt.Errorf("push cancelled: %w", live.Err())
 		}
 	}
-	return websocket.Message.Send(ctx.wsConn, js)
+	if ctx.app == nil {
+		return fmt.Errorf("no app context")
+	}
+	return ctx.app.send(ctx.wsConn, js)
 }
 
 // Broadcast sends a JS string to ALL connected WebSocket clients.
 func (ctx *Context) Broadcast(js string) {
-	ctx.app.mu.RLock()
-	defer ctx.app.mu.RUnlock()
-	for conn := range ctx.app.clients {
-		websocket.Message.Send(conn, js)
+	if ctx.app != nil {
+		ctx.app.Broadcast(js)
 	}
 }
 
@@ -900,9 +985,15 @@ func (ctx *Context) Broadcast(js string) {
 // without needing a Context.
 func (app *App) Broadcast(js string) {
 	app.mu.RLock()
-	defer app.mu.RUnlock()
+	clients := make([]*websocket.Conn, 0, len(app.clients))
 	for conn := range app.clients {
-		websocket.Message.Send(conn, js)
+		clients = append(clients, conn)
+	}
+	app.mu.RUnlock()
+	for _, conn := range clients {
+		if err := app.send(conn, js); err != nil {
+			log.Printf("gsui: broadcast send error: %v", err)
+		}
 	}
 }
 

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -34,6 +36,46 @@ func TestHelpersEscapeScriptBreakoutForScriptContext(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			assertNoRawScriptBreakout(t, js, scriptBreakoutPayload)
 		})
+	}
+}
+
+func TestNotifyEscapesQuotesAndScriptBreakout(t *testing.T) {
+	js := Notify("info", `</script>'quoted'`)
+	assertNoRawScriptBreakout(t, js, "</script>")
+	expect(t, js, `\'quoted\'`)
+}
+
+func TestWebSocketOriginHandshake(t *testing.T) {
+	app := NewApp()
+	request := func(origin string) *http.Request {
+		r := httptest.NewRequest("GET", "http://example.test/__ws", nil)
+		r.Host = "example.test"
+		r.Header.Set("Origin", origin)
+		return r
+	}
+	if err := app.wsHandshake(nil, request("https://example.test")); err != nil {
+		t.Fatalf("same origin rejected: %v", err)
+	}
+	if err := app.wsHandshake(nil, request("https://other.test")); err == nil {
+		t.Fatal("cross origin accepted")
+	}
+	app.AllowedOrigins = []string{"https://other.test"}
+	if err := app.wsHandshake(nil, request("https://other.test")); err != nil {
+		t.Fatalf("allowed origin rejected: %v", err)
+	}
+}
+
+func TestWebSocketReplyEnvelope(t *testing.T) {
+	var got struct {
+		Reply int64  `json:"__r"`
+		ID    int64  `json:"id"`
+		JS    string `json:"js"`
+	}
+	if err := json.Unmarshal([]byte(wsReply(7, "x()")), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Reply != 1 || got.ID != 7 || got.JS != "x()" {
+		t.Fatalf("unexpected envelope: %#v", got)
 	}
 }
 

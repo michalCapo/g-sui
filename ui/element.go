@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -268,6 +269,9 @@ func (n *Node) OnSubmit(action *Action) *Node { return n.On("submit", action) }
 
 // On attaches a named event to a server action.
 func (n *Node) On(event string, action *Action) *Node {
+	if action == nil {
+		return n
+	}
 	if n.events == nil {
 		n.events = make(map[string]*Action)
 	}
@@ -468,6 +472,9 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 
 	// Events
 	for event, action := range n.events {
+		if action == nil {
+			continue
+		}
 		if action.rawJS != "" {
 			// Client-side only: raw JS, no WS call
 			fmt.Fprintf(b,
@@ -475,17 +482,45 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 				varName, escJS(event), action.rawJS,
 			)
 		} else if len(action.Collect) > 0 {
-			collectJSON, _ := json.Marshal(action.Collect)
-			dataJSON, _ := json.Marshal(action.Data)
+			collectJSON, err := json.Marshal(action.Collect)
+			if err != nil {
+				log.Printf("gsui: marshal action collect: %v", err)
+				collectJSON = []byte("[]")
+			}
+			dataJSON, err := json.Marshal(action.Data)
+			if err != nil {
+				log.Printf("gsui: marshal action data: %v", err)
+				dataJSON = []byte("{}")
+			}
+			prevent := ""
+			busy := ""
+			if event == "click" || event == "submit" {
+				prevent = "event.preventDefault();"
+			}
+			if event == "click" {
+				busy = "var b=event.currentTarget;if(b&&b.tagName==='BUTTON'&&!b.disabled){b.disabled=true;b.classList.add('gsui-busy','opacity-60','cursor-wait')}"
+			}
 			fmt.Fprintf(b,
-				"%s.addEventListener('%s',function(event){event.preventDefault();__ws.call('%s',%s,%s)});",
-				varName, escJS(event), escJS(action.Name), string(dataJSON), string(collectJSON),
+				"%s.addEventListener('%s',function(event){%s%s__ws.call('%s',%s,%s)});",
+				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON), string(collectJSON),
 			)
 		} else {
-			dataJSON, _ := json.Marshal(action.Data)
+			dataJSON, err := json.Marshal(action.Data)
+			if err != nil {
+				log.Printf("gsui: marshal action data: %v", err)
+				dataJSON = []byte("{}")
+			}
+			prevent := ""
+			busy := ""
+			if event == "click" || event == "submit" {
+				prevent = "event.preventDefault();"
+			}
+			if event == "click" {
+				busy = "var b=event.currentTarget;if(b&&b.tagName==='BUTTON'&&!b.disabled){b.disabled=true;b.classList.add('gsui-busy','opacity-60','cursor-wait')}"
+			}
 			fmt.Fprintf(b,
-				"%s.addEventListener('%s',function(event){event.preventDefault();__ws.call('%s',%s)});",
-				varName, escJS(event), escJS(action.Name), string(dataJSON),
+				"%s.addEventListener('%s',function(event){%s%s__ws.call('%s',%s)});",
+				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON),
 			)
 		}
 	}
@@ -523,7 +558,7 @@ func Notify(variant, message string) string {
 			`document.body.appendChild(box);}`+
 			// Create notification element
 			`var n=document.createElement('div');`+
-			`n.style.cssText='display:flex;align-items:center;gap:10px;padding:12px 16px;margin:8px;border-radius:12px;min-height:44px;min-width:340px;max-width:340px;box-shadow:0 6px 18px rgba(0,0,0,0.08);border:1px solid;font-weight:600;font-family:Inter,system-ui,sans-serif;font-size:14px;opacity:0;transform:translateX(20px);transition:opacity 200ms,transform 200ms;pointer-events:auto';`+
+			`n.style.cssText='display:flex;align-items:center;gap:10px;padding:12px 16px;margin:8px;border-radius:12px;min-height:44px;width:calc(100vw - 32px);max-width:380px;box-shadow:0 6px 18px rgba(0,0,0,0.08);border:1px solid;font-weight:600;font-family:inherit;font-size:14px;opacity:0;transform:translateX(20px);transition:opacity 200ms,transform 200ms;pointer-events:auto';`+
 			// Variant-specific colors (dark-mode aware)
 			`var v='%s',accent='#4f46e5',timeout=5000,dk=document.documentElement.classList.contains('dark');`+
 			`if(v==='success'){accent='#16a34a';if(dk){n.style.background='#052e16';n.style.color='#86efac';n.style.borderColor='#14532d'}else{n.style.background='#dcfce7';n.style.color='#166534';n.style.borderColor='#bbf7d0'}}`+
@@ -534,7 +569,7 @@ func Notify(variant, message string) string {
 			`var dot=document.createElement('span');dot.style.cssText='width:10px;height:10px;border-radius:9999px;flex-shrink:0;background:'+accent;`+
 			// Message text
 			`var t=document.createElement('span');t.style.flex='1';t.textContent='%s';`+
-			`n.appendChild(dot);n.appendChild(t);`+
+			`n.appendChild(dot);n.appendChild(t);var close=document.createElement('button');close.textContent='×';close.setAttribute('aria-label','Dismiss notification');close.style.cssText='border:0;background:transparent;color:inherit;font-size:20px;line-height:1;cursor:pointer;border-radius:6px';close.className='focus:outline-none focus-visible:ring-2 focus-visible:ring-current';close.onclick=function(){if(n.parentNode)n.parentNode.removeChild(n)};n.appendChild(close);`+
 			// Reload button for error-reload
 			`if(v==='error-reload'){var btn=document.createElement('button');btn.textContent='Reload';`+
 			`btn.style.cssText='background:#991b1b;color:#fff;border:none;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px';`+
@@ -553,7 +588,7 @@ func Notify(variant, message string) string {
 // Redirect returns JS that navigates to a new URL (full page reload).
 // The body is hidden for 200ms before navigating for a smooth transition.
 func Redirect(url string) string {
-	return fmt.Sprintf("setTimeout(function(){window.location.href='%s'},10);", escJS(url))
+	return fmt.Sprintf("document.body.style.visibility='hidden';setTimeout(function(){window.location.href='%s'},200);", escJS(url))
 }
 
 // SetLocation returns JS that updates the browser URL without a page reload
@@ -611,9 +646,15 @@ func Hide(id string) string {
 
 // Download returns JS that triggers a file download.
 func Download(filename, mimeType, base64Data string) string {
+	base64Data = strings.Map(func(r rune) rune {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '+' || r == '/' || r == '=' {
+			return r
+		}
+		return -1
+	}, base64Data)
 	return fmt.Sprintf(
 		"(function(){var a=document.createElement('a');a.href='data:%s;base64,%s';a.download='%s';document.body.appendChild(a);a.click();a.remove()})();",
-		escJS(mimeType), base64Data, escJS(filename),
+		escJS(mimeType), escJS(base64Data), escJS(filename),
 	)
 }
 

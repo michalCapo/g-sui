@@ -246,7 +246,7 @@ func Icon(name string, class ...string) *Node {
 	if len(class) > 0 && class[0] != "" {
 		cls += " " + class[0]
 	}
-	return I(cls).Text(name)
+	return I(cls).Attr("aria-hidden", "true").Text(name)
 }
 
 // IconText renders a flex row containing a Material icon and text label.
@@ -489,7 +489,8 @@ func (a *AlertBuilder) Build() *Node {
 			)
 		}
 		container.Render(
-			Button("text-lg leading-none opacity-50 hover:opacity-100 cursor-pointer flex-shrink-0 -mt-1").
+			Button("text-lg leading-none opacity-50 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-current rounded cursor-pointer flex-shrink-0 -mt-1").
+				Attr("aria-label", "Dismiss").
 				Text("\u00d7").
 				OnClick(JS(dismissJS)),
 		)
@@ -721,7 +722,7 @@ func (b *ButtonBuilder) BtnClass(cls string) *ButtonBuilder { b.class = cls; ret
 
 // Build produces the button Node.
 func (b *ButtonBuilder) Build() *Node {
-	baseCls := "inline-flex items-center justify-center gap-2 rounded-lg font-medium cursor-pointer transition-colors"
+	baseCls := "inline-flex items-center justify-center gap-2 rounded-lg font-medium cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900"
 	cls := fmt.Sprintf("%s %s %s", baseCls, b.size, b.color)
 
 	if b.disabled {
@@ -733,7 +734,12 @@ func (b *ButtonBuilder) Build() *Node {
 
 	var node *Node
 	if b.href != "" {
-		node = A(cls).Attr("href", b.href)
+		node = A(cls)
+		if b.disabled {
+			node.Attr("aria-disabled", "true")
+		} else {
+			node.Attr("href", b.href)
+		}
 	} else {
 		node = Button(cls)
 		if b.submit {
@@ -921,6 +927,9 @@ type ConfirmOpt struct {
 
 func ConfirmDialog(title, message string, confirmAction *Action, opts ...ConfirmOpt) *Node {
 	overlayID := Target()
+	titleID := Target()
+	messageID := Target()
+	cancelID := Target()
 	loc := &ConfirmLocale{Cancel: "Cancel", Confirm: "Confirm"}
 	var cancel *Action
 	if len(opts) > 0 {
@@ -935,20 +944,24 @@ func ConfirmDialog(title, message string, confirmAction *Action, opts ...Confirm
 		cancel = JS(RemoveEl(overlayID))
 	}
 
-	overlay := Div("fixed inset-0 z-[10000] flex items-center justify-center bg-black/50").ID(overlayID)
+	overlay := Div("fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4").ID(overlayID)
+	overlay.Attr("role", "dialog").Attr("aria-modal", "true").Attr("aria-labelledby", titleID).Attr("aria-describedby", messageID)
+	overlay.OnClick(JS(fmt.Sprintf("if(event.target===event.currentTarget){document.getElementById('%s').remove()}", escJS(overlayID))))
 
 	inner := Div("bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-6 max-w-md w-full").Render(
-		H3("text-lg font-semibold text-gray-900 dark:text-white").Text(title),
-		P("text-sm text-gray-600 dark:text-gray-400 mt-2").Text(message),
+		H3("text-lg font-semibold text-gray-900 dark:text-white").ID(titleID).Text(title),
+		P("text-sm text-gray-600 dark:text-gray-400 mt-2").ID(messageID).Text(message),
 		Div("flex justify-end gap-3 mt-6").Render(
 			Button("px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer").
-				Text(loc.Cancel).OnClick(cancel),
+				ID(cancelID).Text(loc.Cancel).OnClick(cancel),
 			Button("px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 cursor-pointer").
 				Text(loc.Confirm).OnClick(confirmAction),
 		),
 	)
 
-	return overlay.Render(inner)
+	overlay.Render(inner)
+	overlay.JS(fmt.Sprintf(`(function(){var o=document.getElementById('%s'),c=document.getElementById('%s');if(!o)return;if(c)c.focus();o.addEventListener('keydown',function(e){if(e.key==='Escape'){o.remove();return}if(e.key==='Tab'){var f=o.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');if(!f.length)return;var a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}}})})();`, escJS(overlayID), escJS(cancelID)))
+	return overlay
 }
 
 // ---------------------------------------------------------------------------
@@ -1039,18 +1052,30 @@ func (d *DropdownBuilder) Build() *Node {
 
 	wrapper := Div(wrapCls).ID(wrapperID)
 
+	d.trigger.Attr("aria-haspopup", "menu").Attr("aria-expanded", "false")
 	d.trigger.OnClick(JS(fmt.Sprintf(
-		"var m=document.getElementById('%s');m.classList.toggle('hidden');",
+		// Open with Escape/outside-click dismissal. Selecting a menu item also
+		// closes the menu: the capture-phase document listener sees the click
+		// before the item handler runs, hides the menu, and the item's own
+		// action still fires because the element stays in the DOM.
+		"var m=document.getElementById('%s'),b=this;"+
+			"if(m.classList.contains('hidden')){m.classList.remove('hidden');b.setAttribute('aria-expanded','true');"+
+			"var close=function(e){if(e.type==='keydown'&&e.key!=='Escape')return;"+
+			"if(e.type==='click'&&b.contains(e.target))return;"+
+			"m.classList.add('hidden');b.setAttribute('aria-expanded','false');"+
+			"document.removeEventListener('keydown',close,true);document.removeEventListener('click',close,true)};"+
+			"document.addEventListener('keydown',close,true);document.addEventListener('click',close,true)"+
+			"}else{m.classList.add('hidden');b.setAttribute('aria-expanded','false')}",
 		escJS(menuID),
 	)))
 	wrapper.Render(d.trigger)
 
 	menuCls := "absolute z-50 min-w-[12rem] bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-1.5 hidden " + posClass
-	menu := Div(menuCls).ID(menuID)
+	menu := Div(menuCls).ID(menuID).Attr("role", "menu")
 
 	for _, item := range d.items {
 		if item.divider {
-			menu.Render(Div("my-1 border-t border-gray-100 dark:border-gray-800"))
+			menu.Render(Div("my-1 border-t border-gray-100 dark:border-gray-800").Attr("role", "separator"))
 			continue
 		}
 		if item.header {
@@ -1065,7 +1090,7 @@ func (d *DropdownBuilder) Build() *Node {
 			btnCls = "w-full text-left px-3 py-2 text-sm flex items-center gap-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950 cursor-pointer"
 		}
 
-		btn := Button(btnCls)
+		btn := Button(btnCls).Attr("role", "menuitem")
 		if item.icon != "" {
 			btn.Render(Span("material-icons-round text-base").Text(item.icon))
 		}
@@ -1578,6 +1603,7 @@ func (t *TooltipBuilder) Wrap(trigger *Node) *Node {
 	wrapperID := Target()
 	tooltipID := Target()
 
+	trigger.Attr("aria-describedby", tooltipID)
 	wrapper := Div("relative inline-block group").ID(wrapperID)
 	wrapper.Render(trigger)
 
@@ -1611,7 +1637,7 @@ func (t *TooltipBuilder) Wrap(trigger *Node) *Node {
 
 	baseCls := "absolute z-[100] px-2.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap pointer-events-none"
 	if t.delay == 0 {
-		baseCls += " opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150"
+		baseCls += " opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all duration-150"
 	} else {
 		baseCls += " opacity-0 invisible transition-all duration-150"
 	}
@@ -1621,7 +1647,7 @@ func (t *TooltipBuilder) Wrap(trigger *Node) *Node {
 		tooltipCls += " " + t.class
 	}
 
-	tooltip := Div(tooltipCls).ID(tooltipID).Text(t.content)
+	tooltip := Div(tooltipCls).ID(tooltipID).Attr("role", "tooltip").Text(t.content)
 	tooltip.Render(tooltipArrow(t.position, t.variant))
 	wrapper.Render(tooltip)
 
@@ -1636,14 +1662,14 @@ func (t *TooltipBuilder) Wrap(trigger *Node) *Node {
 				`tip.classList.remove('opacity-0','invisible');`+
 				`tip.classList.add('opacity-100','visible');`+
 				`},%d);`+
-				`});`+
+				`});w.addEventListener('focusin',function(){timer=setTimeout(function(){tip.classList.remove('opacity-0','invisible')},%d)});`+
 				`w.addEventListener('mouseleave',function(){`+
 				`if(timer){clearTimeout(timer);timer=null}`+
 				`tip.classList.remove('opacity-100','visible');`+
 				`tip.classList.add('opacity-0','invisible');`+
-				`});`+
+				`});w.addEventListener('focusout',function(){clearTimeout(timer);tip.classList.add('opacity-0','invisible')});`+
 				`})();`,
-			escJS(wrapperID), escJS(tooltipID), t.delay,
+			escJS(wrapperID), escJS(tooltipID), t.delay, t.delay,
 		))
 	}
 

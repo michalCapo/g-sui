@@ -1,6 +1,9 @@
 package ui
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ---------------------------------------------------------------------------
 // Collate locale
@@ -144,10 +147,78 @@ func (c *Collate[T]) Locale(l *CollateLocale) *Collate[T] {
 
 // loc returns the effective locale for this component.
 func (c *Collate[T]) loc() *CollateLocale {
-	if c.locale != nil {
-		return c.locale
+	d := defaultCollateLocale()
+	if c.locale == nil {
+		return d
 	}
-	return defaultCollateLocale()
+	l := *c.locale
+	if l.From == "" {
+		l.From = d.From
+	}
+	if l.To == "" {
+		l.To = d.To
+	}
+	if l.Today == "" {
+		l.Today = d.Today
+	}
+	if l.ThisWeek == "" {
+		l.ThisWeek = d.ThisWeek
+	}
+	if l.ThisMonth == "" {
+		l.ThisMonth = d.ThisMonth
+	}
+	if l.ThisQuarter == "" {
+		l.ThisQuarter = d.ThisQuarter
+	}
+	if l.ThisYear == "" {
+		l.ThisYear = d.ThisYear
+	}
+	if l.LastMonth == "" {
+		l.LastMonth = d.LastMonth
+	}
+	if l.LastYear == "" {
+		l.LastYear = d.LastYear
+	}
+	if l.Search == "" {
+		l.Search = d.Search
+	}
+	if l.Apply == "" {
+		l.Apply = d.Apply
+	}
+	if l.Reset == "" {
+		l.Reset = d.Reset
+	}
+	if l.Excel == "" {
+		l.Excel = d.Excel
+	}
+	if l.PDF == "" {
+		l.PDF = d.PDF
+	}
+	if l.Filter == "" {
+		l.Filter = d.Filter
+	}
+	if l.LoadMore == "" {
+		l.LoadMore = d.LoadMore
+	}
+	if l.NoData == "" {
+		l.NoData = d.NoData
+	}
+	if l.AllOption == "" {
+		l.AllOption = d.AllOption
+	}
+	if l.FiltersAndSorting == "" {
+		l.FiltersAndSorting = d.FiltersAndSorting
+	}
+	if l.Filters == "" {
+		l.Filters = d.Filters
+	}
+	if l.SortBy == "" {
+		l.SortBy = d.SortBy
+	}
+	if l.ItemCount == nil {
+		l.ItemCount = d.ItemCount
+	}
+	return &l
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +414,7 @@ func (c *Collate[T]) buildRows(data []*T) []*Node {
 
 			// Build toggle JS for detail row
 			toggleJS := fmt.Sprintf(
-				"(function(){"+
+				"(function(){if(event.target.closest('button,a,input,select,textarea,label'))return;"+
 					"var d=document.getElementById('%s');"+
 					"var inner=d.querySelector('.collate-detail-inner');"+
 					"var chevron=d.previousElementSibling.querySelector('[data-detail-chevron]');"+
@@ -410,7 +481,7 @@ func (c *Collate[T]) renderHeader() *Node {
 	// Search input
 	searchID := c.id + "-search"
 	searchIcon := Span("text-gray-400 dark:text-gray-500 text-lg leading-none absolute left-3 top-1/2 -translate-y-1/2").
-		Style("font-family", "Material Icons Round").
+		Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 		Text("search")
 	searchInput := ISearch(
 		"w-64 border border-gray-300 dark:border-gray-600 rounded-full pl-10 pr-4 py-2 text-sm "+
@@ -435,17 +506,17 @@ func (c *Collate[T]) renderHeader() *Node {
 		"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 		"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
 
-	pdfBtn := Button(exportBtnCls).Attr("type", "button").OnClick(JS(c.exportPdfJS())).Render(
+	pdfBtn := Button(exportBtnCls).Attr("type", "button").Attr("aria-label", "Export PDF").OnClick(JS(c.exportPdfJS())).Render(
 		Span("text-base leading-none").
-			Style("font-family", "Material Icons Round").
+			Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 			Text("picture_as_pdf"),
 		Span().Text(c.loc().PDF),
 	)
 	items = append(items, pdfBtn)
 
-	exportBtn := Button(exportBtnCls).Attr("type", "button").OnClick(JS(c.exportJS())).Render(
+	exportBtn := Button(exportBtnCls).Attr("type", "button").Attr("aria-label", "Export Excel").OnClick(JS(c.exportJS())).Render(
 		Span("text-base leading-none").
-			Style("font-family", "Material Icons Round").
+			Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 			Text("grid_on"),
 		Span().Text(c.loc().Excel),
 	)
@@ -459,7 +530,7 @@ func (c *Collate[T]) renderHeader() *Node {
 		btnParts := make([]*Node, 0, 3)
 		btnParts = append(btnParts,
 			Span("text-base leading-none").
-				Style("font-family", "Material Icons Round").
+				Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 				Text("tune"),
 		)
 		btnParts = append(btnParts, Span().Text(c.loc().Filter))
@@ -477,8 +548,16 @@ func (c *Collate[T]) renderHeader() *Node {
 				"border border-gray-300 dark:border-gray-600 "+
 				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Attr("type", "button").OnClick(JS(fmt.Sprintf(
-			"var p=document.getElementById('%s');p.classList.toggle('hidden')",
+		).Attr("type", "button").Attr("aria-label", "Open filters").OnClick(JS(fmt.Sprintf(
+			// Open with Escape/outside-click dismissal; clicks on the trigger are
+			// ignored by the document listener so this handler performs the toggle.
+			"var p=document.getElementById('%s'),b=this;"+
+				"if(p.classList.contains('hidden')){p.classList.remove('hidden');"+
+				"var close=function(e){if(e.type==='keydown'&&e.key!=='Escape')return;"+
+				"if(e.type==='click'&&(p.contains(e.target)||b.contains(e.target)))return;"+
+				"p.classList.add('hidden');document.removeEventListener('keydown',close,true);document.removeEventListener('click',close,true)};"+
+				"document.addEventListener('keydown',close,true);document.addEventListener('click',close,true)"+
+				"}else{p.classList.add('hidden')}",
 			escJS(panelID),
 		))).Render(btnParts...)
 
@@ -514,11 +593,11 @@ func (c *Collate[T]) renderFilterPanel() *Node {
 			Button(
 				"w-8 h-8 rounded-full flex items-center justify-center "+
 					"hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors",
-			).Attr("type", "button").OnClick(JS(fmt.Sprintf(
+			).Attr("type", "button").Attr("aria-label", "Close filters").OnClick(JS(fmt.Sprintf(
 				"document.getElementById('%s').classList.add('hidden')", escJS(panelID),
 			))).Render(
 				Span("text-base leading-none text-gray-400").
-					Style("font-family", "Material Icons Round").
+					Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 					Text("close"),
 			),
 		),
@@ -540,7 +619,7 @@ func (c *Collate[T]) renderFilterPanel() *Node {
 	return Div(
 		"hidden absolute right-0 top-full mt-2 z-50 " +
 			"bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 " +
-			"shadow-2xl p-4 w-96",
+			"shadow-2xl p-4 w-[calc(100vw-2rem)] max-w-sm max-h-[80vh] overflow-y-auto",
 	).ID(panelID).
 		OnClick(JS("event.stopPropagation()")).
 		Render(parts...)
@@ -567,9 +646,10 @@ func (c *Collate[T]) renderSortButton(sf CollateSortField) *Node {
 	direction := c.parseSortDirection(sf.Field)
 
 	iconName := "sort"
-	if direction == "asc" {
+	switch direction {
+	case "asc":
 		iconName = "arrow_upward"
-	} else if direction == "desc" {
+	case "desc":
 		iconName = "arrow_downward"
 	}
 
@@ -694,9 +774,30 @@ func (c *Collate[T]) renderFilterControl(ff CollateFilterField) *Node {
 		return c.renderCollateDateFilter(ff, current)
 	case CollateSelect:
 		return c.renderCollateSelectFilter(ff, current)
+	case CollateMultiCheck:
+		return c.renderCollateMultiCheckFilter(ff, current)
 	default:
 		return c.renderBoolFilter(ff, current)
 	}
+}
+
+func (c *Collate[T]) renderCollateMultiCheckFilter(ff CollateFilterField, current *CollateFilterValue) *Node {
+	selected := map[string]bool{}
+	if current != nil {
+		for v := range strings.SplitSeq(current.Value, ",") {
+			selected[v] = true
+		}
+	}
+	items := make([]*Node, 0, len(ff.Options))
+	for i, opt := range ff.Options {
+		id := fmt.Sprintf("%s-filter-%s-%d", c.id, ff.Field, i)
+		chk := ICheckbox("accent-gray-900 dark:accent-gray-300").ID(id).Attr("value", opt.Value).Attr("data-filter-field", ff.Field).Attr("data-filter-type", "multicheck")
+		if selected[opt.Value] {
+			chk.Attr("checked", "checked")
+		}
+		items = append(items, Label("flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer").Attr("for", id).Render(chk, Span().Text(opt.Label)))
+	}
+	return Div("flex flex-col gap-1").Render(append([]*Node{Label("text-xs font-medium text-gray-600 dark:text-gray-400").Text(ff.Label)}, items...)...)
 }
 
 func (c *Collate[T]) renderBoolFilter(ff CollateFilterField, current *CollateFilterValue) *Node {
@@ -911,7 +1012,7 @@ func (c *Collate[T]) renderFooter() *Node {
 				"border border-gray-300 dark:border-gray-600 "+
 				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Attr("type", "button").Text("×").OnClick(JS(c.resetPagingJS()))
+		).Attr("type", "button").Attr("aria-label", "Reset pagination").Text("×").OnClick(JS(c.resetPagingJS()))
 		items = append(items, resetBtn)
 	}
 
@@ -990,6 +1091,7 @@ func (c *Collate[T]) applyJS() string {
 			`panel.querySelectorAll('[data-filter-type="select"]').forEach(function(el){`+
 			`if(el.value)filters.push({field:el.getAttribute('data-filter-field'),type:'select',value:el.value})`+
 			`});`+
+			`var multi={};panel.querySelectorAll('[data-filter-type="multicheck"]:checked').forEach(function(el){var f=el.getAttribute('data-filter-field');(multi[f]||(multi[f]=[])).push(el.value)});Object.keys(multi).forEach(function(f){filters.push({field:f,type:'multicheck',value:multi[f].join(',')})});`+
 			`panel.classList.add('hidden');`+
 			`__ws.call('%s',{operation:'filter',search:search,page:1,limit:%d,order:order,filters:filters})`+
 			`})()`,

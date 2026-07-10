@@ -1,8 +1,10 @@
 package ui
 
-import "slices"
-
-import "fmt"
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
 
 // ---------------------------------------------------------------------------
 // DataTable locale
@@ -208,10 +210,105 @@ func (dt *DataTable[T]) Locale(l *TableLocale) *DataTable[T] {
 
 // loc returns the effective locale for this table.
 func (dt *DataTable[T]) loc() *TableLocale {
-	if dt.locale != nil {
-		return dt.locale
+	d := defaultTableLocale()
+	if dt.locale == nil {
+		return d
 	}
-	return defaultTableLocale()
+	l := *dt.locale
+	if l.From == "" {
+		l.From = d.From
+	}
+	if l.To == "" {
+		l.To = d.To
+	}
+	if l.Today == "" {
+		l.Today = d.Today
+	}
+	if l.ThisWeek == "" {
+		l.ThisWeek = d.ThisWeek
+	}
+	if l.ThisMonth == "" {
+		l.ThisMonth = d.ThisMonth
+	}
+	if l.ThisQuarter == "" {
+		l.ThisQuarter = d.ThisQuarter
+	}
+	if l.ThisYear == "" {
+		l.ThisYear = d.ThisYear
+	}
+	if l.LastMonth == "" {
+		l.LastMonth = d.LastMonth
+	}
+	if l.LastYear == "" {
+		l.LastYear = d.LastYear
+	}
+	if l.Search == "" {
+		l.Search = d.Search
+	}
+	if l.Apply == "" {
+		l.Apply = d.Apply
+	}
+	if l.Cancel == "" {
+		l.Cancel = d.Cancel
+	}
+	if l.Reset == "" {
+		l.Reset = d.Reset
+	}
+	if l.Excel == "" {
+		l.Excel = d.Excel
+	}
+	if l.PDF == "" {
+		l.PDF = d.PDF
+	}
+	if l.LoadMore == "" {
+		l.LoadMore = d.LoadMore
+	}
+	if l.NoData == "" {
+		l.NoData = d.NoData
+	}
+	if l.SearchText == "" {
+		l.SearchText = d.SearchText
+	}
+	if l.SelectAll == "" {
+		l.SelectAll = d.SelectAll
+	}
+	if l.ClearSelect == "" {
+		l.ClearSelect = d.ClearSelect
+	}
+	if l.Value == "" {
+		l.Value = d.Value
+	}
+	if l.Contains == "" {
+		l.Contains = d.Contains
+	}
+	if l.StartsWith == "" {
+		l.StartsWith = d.StartsWith
+	}
+	if l.Equals == "" {
+		l.Equals = d.Equals
+	}
+	if l.Range == "" {
+		l.Range = d.Range
+	}
+	if l.GreaterOrEq == "" {
+		l.GreaterOrEq = d.GreaterOrEq
+	}
+	if l.LessOrEq == "" {
+		l.LessOrEq = d.LessOrEq
+	}
+	if l.GreaterThan == "" {
+		l.GreaterThan = d.GreaterThan
+	}
+	if l.LessThan == "" {
+		l.LessThan = d.LessThan
+	}
+	if l.NumEquals == "" {
+		l.NumEquals = d.NumEquals
+	}
+	if l.ItemCount == nil {
+		l.ItemCount = d.ItemCount
+	}
+	return &l
 }
 
 // ---------------------------------------------------------------------------
@@ -498,7 +595,7 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 	// Search input with magnifying glass icon
 	searchID := dt.id + "-search"
 	searchIcon := Span("text-gray-400 dark:text-gray-500 text-lg leading-none absolute left-3 top-1/2 -translate-y-1/2").
-		Style("font-family", "Material Icons Round").
+		Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 		Text("search")
 	searchInput := ISearch(
 		"w-64 border border-gray-300 dark:border-gray-600 rounded-full pl-10 pr-4 py-2 text-sm "+
@@ -562,6 +659,7 @@ func (dt *DataTable[T]) renderFilterBadge(badge FilterBadge) *Node {
 			"ml-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer "+
 				"focus:outline-none text-base leading-none",
 		).Attr("type", "button").
+			Attr("aria-label", "Remove filter").
 			OnClick(JS(badge.OnRemove)).
 			Text("×"),
 	)
@@ -738,6 +836,11 @@ func (dt *DataTable[T]) renderTable(data []*T) *Node {
 				// Sort click on the whole th
 				th.OnClick(JS(dt.sortClickJS(i)))
 				th.Class(" cursor-pointer select-none")
+				ariaSort := "none"
+				if dt.sortCol == i {
+					ariaSort = map[string]string{"asc": "ascending", "desc": "descending"}[dt.sortDir]
+				}
+				th.Attr("aria-sort", ariaSort)
 			} else {
 				headerParts = append(headerParts, Span().Text(h.label))
 			}
@@ -836,7 +939,7 @@ func (dt *DataTable[T]) buildRows(data []*T) []*Node {
 		if hasDetail {
 			detailID := fmt.Sprintf("%s-detail-%d", dt.id, dt.rowOffset+i)
 			toggleJS := fmt.Sprintf(
-				"(function(){"+
+				"(function(){if(event.target.closest('button,a,input,select,textarea,label'))return;"+
 					"var d=document.getElementById('%s');"+
 					"var inner=d.querySelector('.dt-detail-inner');"+
 					"if(d.style.display==='none'||!d.style.display){"+
@@ -919,18 +1022,21 @@ func (dt *DataTable[T]) renderFilterIcon(colIdx int) *Node {
 
 	// Filter icon (tune/sliders) - click toggles popup, stops propagation to prevent sort
 	icon := Span("text-2xl leading-none "+iconColor+" cursor-pointer hover:text-lime-500 dark:hover:text-lime-400 transition-colors").
-		Style("font-family", "Material Icons Round").
+		Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 		Text("tune")
 
 	btn := Button("inline-flex items-center focus:outline-none ml-0.5").
 		Attr("type", "button").
+		Attr("aria-label", "Filter column").Attr("aria-haspopup", "dialog").
 		OnClick(JS(fmt.Sprintf(
-			"event.stopPropagation();var p=document.getElementById('%s');"+
+			"event.stopPropagation();var p=document.getElementById('%s'),b=this;"+
 				"if(p.style.display==='none'||!p.style.display){"+
 				"document.querySelectorAll('[id^=\"%s-filter-popup-\"]').forEach(function(el){el.style.display='none'});"+
-				"var r=this.getBoundingClientRect();"+
+				"var r=b.getBoundingClientRect();"+
 				"p.style.left=r.left+'px';p.style.top=(r.bottom+4)+'px';"+
-				"p.style.display='block'}else{p.style.display='none'}",
+				// Close on Escape or a click outside the popup. Clicks on the trigger
+				// button are ignored here so its own handler performs the toggle.
+				"p.style.display='block';var close=function(e){if(e.type==='keydown'&&e.key!=='Escape')return;if(e.type==='click'&&(p.contains(e.target)||b.contains(e.target)))return;p.style.display='none';document.removeEventListener('keydown',close,true);document.removeEventListener('click',close,true)};document.addEventListener('keydown',close,true);document.addEventListener('click',close,true)}else{p.style.display='none'}",
 			escJS(popupID), escJS(dt.id),
 		)))
 
@@ -951,7 +1057,7 @@ func (dt *DataTable[T]) renderFilterPopupInline(colIdx int) *Node {
 	popup := Div("fixed z-50 bg-white dark:bg-gray-800 "+
 		"rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2.5 w-[200px]").
 		ID(popupID).
-		Style("display", "none")
+		Style("display", "none").Attr("role", "dialog")
 
 	// Header label
 	header := Div("text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2").
@@ -972,6 +1078,7 @@ func (dt *DataTable[T]) renderFilterPopupInline(colIdx int) *Node {
 	default:
 		content = renderTextFilter(l, colIdx, currentValue)
 	}
+	scopeTableFilterIDs(content, dt.id, colIdx)
 
 	// Action buttons: [Apply]  Cancel
 	actions := Div("flex items-center gap-2 mt-2.5").Render(
@@ -994,6 +1101,30 @@ func (dt *DataTable[T]) renderFilterPopupInline(colIdx int) *Node {
 	return popup.Render(header, content, actions)
 }
 
+// scopeTableFilterIDs makes controls unique when multiple DataTables share a
+// page. It also updates the small client-only helpers attached to controls.
+func scopeTableFilterIDs(node *Node, tableID string, colIdx int) {
+	if node == nil {
+		return
+	}
+	old := fmt.Sprintf("filter-%d-", colIdx)
+	newPrefix := tableID + "-" + old
+	if after, ok := strings.CutPrefix(node.id, old); ok {
+		node.id = newPrefix + after
+	}
+	if node.rawJS != "" {
+		node.rawJS = strings.ReplaceAll(node.rawJS, old, newPrefix)
+	}
+	for _, action := range node.events {
+		if action != nil && action.rawJS != "" {
+			action.rawJS = strings.ReplaceAll(action.rawJS, old, newPrefix)
+		}
+	}
+	for _, child := range node.children {
+		scopeTableFilterIDs(child, tableID, colIdx)
+	}
+}
+
 func (dt *DataTable[T]) applyFilterJS(colIdx int) string {
 	action := dt.getAction()
 	if action == "" {
@@ -1010,51 +1141,51 @@ func (dt *DataTable[T]) applyFilterJS(colIdx int) string {
 	case FilterTypeDate:
 		return fmt.Sprintf(
 			"event.stopPropagation();"+
-				"var f=document.getElementById('filter-%d-from').value;"+
-				"var t=document.getElementById('filter-%d-to').value;"+
+				"var f=document.getElementById('%s').querySelector('[id$=\"filter-%d-from\"]').value;"+
+				"var t=document.getElementById('%s').querySelector('[id$=\"filter-%d-to\"]').value;"+
 				"document.getElementById('%s').style.display='none';"+
 				"__ws.call('%s',{operation:'filter',col:%d,type:'date',from:f,to:t,search:'%s',page:1,pageSize:%d,sort:%d,dir:'%s'})",
-			colIdx, colIdx, escJS(popupID),
+			escJS(popupID), colIdx, escJS(popupID), colIdx, escJS(popupID),
 			escJS(action), colIdx, escJS(dt.searchValue), dt.pageSize, dt.sortCol, escJS(dt.sortDir),
 		)
 	case FilterTypeMonthYear:
 		return fmt.Sprintf(
 			"event.stopPropagation();"+
-				"var f=document.getElementById('filter-%d-from').value;"+
-				"var t=document.getElementById('filter-%d-to').value;"+
+				"var f=document.getElementById('%s').querySelector('[id$=\"filter-%d-from\"]').value;"+
+				"var t=document.getElementById('%s').querySelector('[id$=\"filter-%d-to\"]').value;"+
 				"document.getElementById('%s').style.display='none';"+
 				"__ws.call('%s',{operation:'filter',col:%d,type:'monthyear',from:f,to:t,search:'%s',page:1,pageSize:%d,sort:%d,dir:'%s'})",
-			colIdx, colIdx, escJS(popupID),
+			escJS(popupID), colIdx, escJS(popupID), colIdx, escJS(popupID),
 			escJS(action), colIdx, escJS(dt.searchValue), dt.pageSize, dt.sortCol, escJS(dt.sortDir),
 		)
 	case FilterTypeNumber:
 		return fmt.Sprintf(
 			"event.stopPropagation();"+
-				"var op=document.getElementById('filter-%d-op').value;"+
-				"var f=document.getElementById('filter-%d-from').value;"+
-				"var t=document.getElementById('filter-%d-to').value;"+
+				"var op=document.getElementById('%s').querySelector('[id$=\"filter-%d-op\"]').value;"+
+				"var f=document.getElementById('%s').querySelector('[id$=\"filter-%d-from\"]').value;"+
+				"var t=document.getElementById('%s').querySelector('[id$=\"filter-%d-to\"]').value;"+
 				"document.getElementById('%s').style.display='none';"+
 				"__ws.call('%s',{operation:'filter',col:%d,type:'number',op:op,from:f,to:t,search:'%s',page:1,pageSize:%d,sort:%d,dir:'%s'})",
-			colIdx, colIdx, colIdx, escJS(popupID),
+			escJS(popupID), colIdx, escJS(popupID), colIdx, escJS(popupID), colIdx, escJS(popupID),
 			escJS(action), colIdx, escJS(dt.searchValue), dt.pageSize, dt.sortCol, escJS(dt.sortDir),
 		)
 	case FilterTypeSelect:
 		return fmt.Sprintf(
 			"event.stopPropagation();"+
-				"var vals=[];document.querySelectorAll('[id^=\"filter-%d-opt-\"]').forEach(function(c){if(c.checked)vals.push(c.getAttribute('data-val'))});"+
+				"var vals=[];document.getElementById('%s').querySelectorAll('[id*=\"filter-%d-opt-\"]').forEach(function(c){if(c.checked)vals.push(c.getAttribute('data-val'))});"+
 				"document.getElementById('%s').style.display='none';"+
 				"__ws.call('%s',{operation:'filter',col:%d,type:'select',vals:vals,search:'%s',page:1,pageSize:%d,sort:%d,dir:'%s'})",
-			colIdx, escJS(popupID),
+			escJS(popupID), colIdx, escJS(popupID),
 			escJS(action), colIdx, escJS(dt.searchValue), dt.pageSize, dt.sortCol, escJS(dt.sortDir),
 		)
 	default: // text
 		return fmt.Sprintf(
 			"event.stopPropagation();"+
-				"var op=document.getElementById('filter-%d-op').value;"+
-				"var v=document.getElementById('filter-%d-val').value;"+
+				"var op=document.getElementById('%s').querySelector('[id$=\"filter-%d-op\"]').value;"+
+				"var v=document.getElementById('%s').querySelector('[id$=\"filter-%d-val\"]').value;"+
 				"document.getElementById('%s').style.display='none';"+
 				"__ws.call('%s',{operation:'filter',col:%d,type:'text',op:op,val:v,search:'%s',page:1,pageSize:%d,sort:%d,dir:'%s'})",
-			colIdx, colIdx, escJS(popupID),
+			escJS(popupID), colIdx, escJS(popupID), colIdx, escJS(popupID),
 			escJS(action), colIdx, escJS(dt.searchValue), dt.pageSize, dt.sortCol, escJS(dt.sortDir),
 		)
 	}
@@ -1069,8 +1200,8 @@ func (dt *DataTable[T]) sortIndicator(colIdx int) *Node {
 		// Active asc: green up arrow
 		return Span("text-lime-500 dark:text-lime-400 text-lg ml-0.5").Text("\u2191")
 	}
-	// Inactive: no visible arrow (empty span for spacing)
-	return Span()
+	// Inactive but sortable: neutral glyph so users can tell the column is clickable
+	return Span("text-gray-300 dark:text-gray-600 text-lg ml-0.5 select-none").Text("⇅")
 }
 
 func (dt *DataTable[T]) sortClickJS(colIdx int) string {
@@ -1112,17 +1243,17 @@ func (dt *DataTable[T]) renderFooter() *Node {
 			"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 			"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
 
-		pdfBtn := Button(exportBtnCls).OnClick(JS(dt.exportPdfJS())).Render(
+		pdfBtn := Button(exportBtnCls).Attr("aria-label", "Export PDF").OnClick(JS(dt.exportPdfJS())).Render(
 			Span("text-base leading-none").
-				Style("font-family", "Material Icons Round").
+				Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 				Text("picture_as_pdf"),
 			Span().Text(dt.loc().PDF),
 		)
 		footerItems = append(footerItems, pdfBtn)
 
-		exportBtn := Button(exportBtnCls).OnClick(JS(dt.exportJS())).Render(
+		exportBtn := Button(exportBtnCls).Attr("aria-label", "Export Excel").OnClick(JS(dt.exportJS())).Render(
 			Span("text-base leading-none").
-				Style("font-family", "Material Icons Round").
+				Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 				Text("grid_on"),
 			Span().Text(dt.loc().Excel),
 		)
@@ -1147,7 +1278,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 				"border border-gray-300 dark:border-gray-600 " +
 				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 " +
 				"hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors",
-		).Text("×").OnClick(JS(dt.resetPagingJS()))
+		).Attr("aria-label", "Reset pagination").Text("×").OnClick(JS(dt.resetPagingJS()))
 		footerItems = append(footerItems, resetBtn)
 	}
 

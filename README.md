@@ -8,6 +8,8 @@ g-sui compiles Go node trees into pure JavaScript. The browser receives raw JS t
 
 Full API documentation: [`docs/documentation.md`](docs/documentation.md)
 
+WebSocket connections are same-origin by default; set `App.AllowedOrigins` for additional trusted origins (or `"*"` to opt out). Tracked calls use reply envelopes so loading state clears even when an action returns no JavaScript.
+
 ## Install
 
 ```bash

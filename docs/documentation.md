@@ -116,6 +116,8 @@ app := ui.NewApp()
 
 Creates the application instance. Holds page routes, action handlers, WebSocket clients, and an HTTP mux.
 
+`App.AllowedOrigins` permits additional exact WebSocket origins. Same-origin and non-browser requests without `Origin` are allowed by default; use `"*"` only when intentionally disabling origin validation. Client calls use an internal reply envelope, so the loader clears even for empty action responses; Push and Broadcast messages do not affect it.
+
 #### App Fields
 
 | Field | Type | Description |
@@ -1065,6 +1067,10 @@ app.Action("contact.submit", func(ctx *ui.Context) string {
 ```
 
 `FormErrors` methods:
+
+Use `form.ShowErrors(errs)` to fill the error nodes created by `Build`, set `aria-invalid`, and focus the first invalid field after `Validate` returns server-side errors.
+
+Pressing Enter in a text input submits its owning form's submit button first; buttons outside the form are considered only when no form exists. Toasts include a dismiss button. Dark mode styles only the document baseline, so explicit Tailwind `dark:` classes remain authoritative.
 - `HasErrors() bool` -- true if any field has an error
 - `Get(name string) string` -- error message for a field
 

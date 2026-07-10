@@ -469,6 +469,14 @@ func TestNonSVGStillUsesCreateElement(t *testing.T) {
 	notExpect(t, js, "createElementNS")
 }
 
+func TestFormShowErrorsUsesFieldErrorIDs(t *testing.T) {
+	f := NewForm("contact").Text("Email", "email").Required().Render().Checkbox("Terms", "terms").Required().Render()
+	js := f.ShowErrors(FormErrors{"email": "already registered"})
+	expect(t, js, "err-contact-email")
+	expect(t, js, "err-contact-terms")
+	expect(t, js, "already registered")
+}
+
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------

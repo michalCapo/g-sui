@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/go-pdf/fpdf"
 	r "github.com/michalCapo/g-sui/ui"
@@ -45,8 +46,10 @@ var allEmployees = []*Employee{
 	{ID: 20, Name: "Adam Gregor", Department: "Engineering", Salary: 4000, HireDate: "2026-01-03", Active: true, Role: "Developer"},
 }
 
-// collateFilters stores active filters (global for demo, per-session in real app)
+// Global demo state is mutex-protected. Production applications must scope
+// filters to a user/session rather than sharing them across connections.
 var collateFilters = map[string]*r.CollateFilterValue{}
+var collateFiltersMu sync.Mutex
 
 func CollatePage(ctx *r.Context) *r.Node {
 	limit := 8
@@ -211,6 +214,8 @@ type CollateDataRequest struct {
 }
 
 func handleCollateData(ctx *r.Context) string {
+	collateFiltersMu.Lock()
+	defer collateFiltersMu.Unlock()
 	var req CollateDataRequest
 	ctx.Body(&req)
 

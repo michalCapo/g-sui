@@ -3,8 +3,10 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // ---------------------------------------------------------------------------
@@ -90,7 +92,7 @@ type formButton struct {
 func NewForm(id string) *FormBuilder {
 	return &FormBuilder{
 		id:         id,
-		fieldClass: "w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100",
+		fieldClass: "w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 dark:disabled:bg-gray-700",
 		errClass:   "text-xs text-red-600 mt-1 hidden",
 		class:      "flex flex-col gap-4",
 	}
@@ -300,7 +302,7 @@ func (f *FormBuilder) Build() *Node {
 		for i, btn := range f.buttons {
 			cls := btn.class
 			if cls == "" {
-				cls = "px-4 py-2 rounded bg-blue-600 text-white cursor-pointer hover:bg-blue-700 text-sm"
+				cls = "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
 			}
 			btns[i] = Button(cls).
 				Attr("type", "button").
@@ -404,6 +406,9 @@ func (f *FormBuilder) renderInput(fld *Field) *Node {
 		input = IText(cls)
 	}
 	f.formAttr(input.ID(f.fieldID(fld)).Attr("name", fld.Name))
+	if fld.Required {
+		input.Attr("aria-required", "true")
+	}
 	if fld.Placeholder != "" {
 		input.Attr("placeholder", fld.Placeholder)
 	}
@@ -429,7 +434,8 @@ func (f *FormBuilder) renderInput(fld *Field) *Node {
 		input,
 	}
 	if errMsg != "" {
-		children = append(children, Div(f.errClass).ID(f.errID(fld)).Text(errMsg))
+		input.Attr("aria-describedby", f.errID(fld))
+		children = append(children, Div(f.errClass).ID(f.errID(fld)).Attr("role", "alert").Text(errMsg))
 	}
 	return Div(wrapCls).Render(children...)
 }
@@ -438,6 +444,9 @@ func (f *FormBuilder) renderTextarea(fld *Field) *Node {
 	cls := f.inputClass(fld)
 	ta := Textarea(cls).ID(f.fieldID(fld)).Attr("name", fld.Name).Attr("rows", "3")
 	f.formAttr(ta)
+	if fld.Required {
+		ta.Attr("aria-required", "true")
+	}
 	if fld.Placeholder != "" {
 		ta.Attr("placeholder", fld.Placeholder)
 	}
@@ -460,7 +469,8 @@ func (f *FormBuilder) renderTextarea(fld *Field) *Node {
 		ta,
 	}
 	if errMsg != "" {
-		children = append(children, Div(f.errClass).ID(f.errID(fld)).Text(errMsg))
+		ta.Attr("aria-describedby", f.errID(fld))
+		children = append(children, Div(f.errClass).ID(f.errID(fld)).Attr("role", "alert").Text(errMsg))
 	}
 	return Div(wrapCls).Render(children...)
 }
@@ -471,10 +481,19 @@ func (f *FormBuilder) renderCheckbox(fld *Field) *Node {
 	if fld.Checked {
 		cb.Attr("checked", "true")
 	}
-	return Label("flex items-center gap-2 text-sm cursor-pointer").Attr("for", f.fieldID(fld)).Render(
-		cb,
-		Span().Text(fld.Label),
-	)
+	if fld.Required {
+		cb.Attr("aria-required", "true")
+	}
+	errMsg := fld.ErrMsg
+	if errMsg == "" && fld.Required {
+		errMsg = fld.Label + " is required"
+	}
+	children := []*Node{Label("flex items-center gap-2 text-sm cursor-pointer").Attr("for", f.fieldID(fld)).Render(cb, Span().Text(fld.Label))}
+	if errMsg != "" {
+		cb.Attr("aria-describedby", f.errID(fld))
+		children = append(children, Div(f.errClass).ID(f.errID(fld)).Attr("role", "alert").Text(errMsg))
+	}
+	return Div("flex flex-col gap-1").Render(children...)
 }
 
 func (f *FormBuilder) renderSelect(fld *Field) *Node {
@@ -489,6 +508,9 @@ func (f *FormBuilder) renderSelect(fld *Field) *Node {
 	}
 	sel := Select(cls).ID(f.fieldID(fld)).Attr("name", fld.Name).Render(opts...)
 	f.formAttr(sel)
+	if fld.Required {
+		sel.Attr("aria-required", "true")
+	}
 
 	wrapCls := fld.WrapClass
 	if wrapCls == "" {
@@ -505,7 +527,8 @@ func (f *FormBuilder) renderSelect(fld *Field) *Node {
 		sel,
 	}
 	if errMsg != "" {
-		children = append(children, Div(f.errClass).ID(f.errID(fld)).Text(errMsg))
+		sel.Attr("aria-describedby", f.errID(fld))
+		children = append(children, Div(f.errClass).ID(f.errID(fld)).Attr("role", "alert").Text(errMsg))
 	}
 	return Div(wrapCls).Render(children...)
 }
@@ -514,11 +537,15 @@ func (f *FormBuilder) renderSelect(fld *Field) *Node {
 // Radio names are scoped with the form ID to prevent cross-form collisions.
 func (f *FormBuilder) renderRadioInline(fld *Field) *Node {
 	rName := f.radioName(fld)
+	labelID := f.fieldID(fld) + "-label"
 	radios := make([]*Node, len(fld.Options))
 	for i, o := range fld.Options {
 		radio := f.formAttr(IRadio("w-4 h-4").Attr("name", rName).Attr("value", o.Value))
 		if i == 0 {
 			radio.ID(f.fieldID(fld))
+			if fld.Required {
+				radio.Attr("aria-required", "true")
+			}
 		}
 		if fld.Value == o.Value {
 			radio.Attr("checked", "true")
@@ -540,11 +567,11 @@ func (f *FormBuilder) renderRadioInline(fld *Field) *Node {
 	}
 
 	children := []*Node{
-		Label("text-sm font-medium text-gray-700 dark:text-gray-300").Text(fld.Label + f.reqSuffix(fld)),
-		Div("flex gap-4").Render(radios...),
+		Label("text-sm font-medium text-gray-700 dark:text-gray-300").ID(labelID).Text(fld.Label + f.reqSuffix(fld)),
+		Div("flex gap-4").Attr("role", "group").Attr("aria-labelledby", labelID).Render(radios...),
 	}
 	if errMsg != "" {
-		children = append(children, Div(f.errClass).ID(f.errID(fld)).Text(errMsg))
+		children = append(children, Div(f.errClass).ID(f.errID(fld)).Attr("role", "alert").Text(errMsg))
 	}
 	return Div(wrapCls).Render(children...)
 }
@@ -553,11 +580,15 @@ func (f *FormBuilder) renderRadioInline(fld *Field) *Node {
 // Radio names are scoped with the form ID.
 func (f *FormBuilder) renderRadioButton(fld *Field) *Node {
 	rName := f.radioName(fld)
+	labelID := f.fieldID(fld) + "-label"
 	cards := make([]*Node, len(fld.Options))
 	for i, o := range fld.Options {
 		radio := f.formAttr(IRadio("w-4 h-4").Attr("name", rName).Attr("value", o.Value))
 		if i == 0 {
 			radio.ID(f.fieldID(fld))
+			if fld.Required {
+				radio.Attr("aria-required", "true")
+			}
 		}
 		if fld.Value == o.Value {
 			radio.Attr("checked", "true")
@@ -579,11 +610,11 @@ func (f *FormBuilder) renderRadioButton(fld *Field) *Node {
 	}
 
 	children := []*Node{
-		Label("text-sm font-medium text-gray-700 dark:text-gray-300").Text(fld.Label + f.reqSuffix(fld)),
-		Div("flex gap-2").Render(cards...),
+		Label("text-sm font-medium text-gray-700 dark:text-gray-300").ID(labelID).Text(fld.Label + f.reqSuffix(fld)),
+		Div("flex gap-2").Attr("role", "group").Attr("aria-labelledby", labelID).Render(cards...),
 	}
 	if errMsg != "" {
-		children = append(children, Div(f.errClass).ID(f.errID(fld)).Text(errMsg))
+		children = append(children, Div(f.errClass).ID(f.errID(fld)).Attr("role", "alert").Text(errMsg))
 	}
 	return Div(wrapCls).Render(children...)
 }
@@ -592,11 +623,15 @@ func (f *FormBuilder) renderRadioButton(fld *Field) *Node {
 // Radio names are scoped with the form ID.
 func (f *FormBuilder) renderRadioCard(fld *Field) *Node {
 	rName := f.radioName(fld)
+	labelID := f.fieldID(fld) + "-label"
 	cards := make([]*Node, len(fld.Options))
 	for i, o := range fld.Options {
 		radio := f.formAttr(IRadio("peer hidden").Attr("name", rName).Attr("value", o.Value))
 		if i == 0 {
 			radio.ID(f.fieldID(fld))
+			if fld.Required {
+				radio.Attr("aria-required", "true")
+			}
 		}
 		if fld.Value == o.Value {
 			radio.Attr("checked", "true")
@@ -618,11 +653,11 @@ func (f *FormBuilder) renderRadioCard(fld *Field) *Node {
 	}
 
 	children := []*Node{
-		Label("text-sm font-medium text-gray-700 dark:text-gray-300").Text(fld.Label + f.reqSuffix(fld)),
-		Div("flex gap-3").Render(cards...),
+		Label("text-sm font-medium text-gray-700 dark:text-gray-300").ID(labelID).Text(fld.Label + f.reqSuffix(fld)),
+		Div("flex gap-3").Attr("role", "group").Attr("aria-labelledby", labelID).Render(cards...),
 	}
 	if errMsg != "" {
-		children = append(children, Div(f.errClass).ID(f.errID(fld)).Text(errMsg))
+		children = append(children, Div(f.errClass).ID(f.errID(fld)).Attr("role", "alert").Text(errMsg))
 	}
 	return Div(wrapCls).Render(children...)
 }
@@ -650,7 +685,7 @@ func (f *FormBuilder) buildValidateJS(actionValue string) string {
 	b.WriteString("var ok=true;")
 
 	// Helper functions
-	b.WriteString("function err(id,show){var e=document.getElementById(id);if(e){e.classList.toggle('hidden',!show)}}")
+	b.WriteString("var first=null;function err(id,show,fieldID){var e=document.getElementById(id),inp=document.getElementById(fieldID);if(e)e.classList.toggle('hidden',!show);if(inp){if(show){inp.setAttribute('aria-invalid','true');if(!first)first=inp}else inp.removeAttribute('aria-invalid')}}")
 	b.WriteString("function val(id){var e=document.getElementById(id);if(!e)return '';if(e.tagName.toLowerCase()==='textarea')return e.value.trim();return e.value.trim()}")
 	// radioVal uses the scoped name (formID-fieldName) to query only radios
 	// belonging to this form, preventing cross-form interference.
@@ -662,7 +697,7 @@ func (f *FormBuilder) buildValidateJS(actionValue string) string {
 	for i := range f.fields {
 		fld := &f.fields[i]
 		if fld.Required || fld.Pattern != "" {
-			fmt.Fprintf(&b, "err('%s',false);", escJS(f.errID(fld)))
+			fmt.Fprintf(&b, "err('%s',false,'%s');", escJS(f.errID(fld)), escJS(f.fieldID(fld)))
 		}
 	}
 
@@ -680,29 +715,29 @@ func (f *FormBuilder) buildValidateJS(actionValue string) string {
 		switch fld.Type {
 		case FieldRadio, FieldRadioBtn, FieldRadioCard:
 			if fld.Required {
-				fmt.Fprintf(&b, "if(!radioVal('%s')){err('%s',true);ok=false}", escJS(rName), escJS(errID))
+				fmt.Fprintf(&b, "if(!radioVal('%s')){err('%s',true,'%s');ok=false}", escJS(rName), escJS(errID), escJS(fieldID))
 			}
 		case FieldSelect:
 			if fld.Required {
-				fmt.Fprintf(&b, "if(!selVal('%s')){err('%s',true);ok=false}", escJS(fieldID), escJS(errID))
+				fmt.Fprintf(&b, "if(!selVal('%s')){err('%s',true,'%s');ok=false}", escJS(fieldID), escJS(errID), escJS(fieldID))
 			}
 		case FieldCheckbox:
 			if fld.Required {
-				fmt.Fprintf(&b, "if(!checkVal('%s')){err('%s',true);ok=false}", escJS(fieldID), escJS(errID))
+				fmt.Fprintf(&b, "if(!checkVal('%s')){err('%s',true,'%s');ok=false}", escJS(fieldID), escJS(errID), escJS(fieldID))
 			}
 		default:
 			if fld.Required {
-				fmt.Fprintf(&b, "if(!val('%s')){err('%s',true);ok=false}", escJS(fieldID), escJS(errID))
+				fmt.Fprintf(&b, "if(!val('%s')){err('%s',true,'%s');ok=false}", escJS(fieldID), escJS(errID), escJS(fieldID))
 			}
 			if fld.Pattern != "" {
 				patternJSON, _ := json.Marshal(fld.Pattern)
-				fmt.Fprintf(&b, "if(val('%s')&&!new RegExp(%s).test(val('%s'))){err('%s',true);ok=false}",
-					escJS(fieldID), string(patternJSON), escJS(fieldID), escJS(errID))
+				fmt.Fprintf(&b, "if(val('%s')&&!new RegExp(%s).test(val('%s'))){err('%s',true,'%s');ok=false}",
+					escJS(fieldID), string(patternJSON), escJS(fieldID), escJS(errID), escJS(fieldID))
 			}
 		}
 	}
 
-	b.WriteString("if(!ok)return;")
+	b.WriteString("if(!ok){if(first){first.focus();first.scrollIntoView({block:'center',behavior:'smooth'})}return;}")
 
 	// Phase 3: collect all values into data object.
 	// Keys use the original field Name (not the scoped radio name) so the
@@ -728,7 +763,10 @@ func (f *FormBuilder) buildValidateJS(actionValue string) string {
 		}
 	}
 
-	// Phase 4: call WS action
+	// Phase 4: disable the clicked submit button until the server replies
+	// (the WS client re-enables gsui-busy buttons on the next message),
+	// then call the WS action.
+	b.WriteString("var sb=event.currentTarget;if(sb&&sb.tagName==='BUTTON'&&!sb.disabled){sb.disabled=true;sb.classList.add('gsui-busy','opacity-60','cursor-wait')}")
 	fmt.Fprintf(&b, "__ws.call('%s',d);", escJS(f.actionName))
 	b.WriteString("})()")
 
@@ -747,6 +785,28 @@ func (fe FormErrors) HasErrors() bool { return len(fe) > 0 }
 
 // Get returns the error for a specific field name, or empty string.
 func (fe FormErrors) Get(name string) string { return fe[name] }
+
+// ShowErrors returns JS that displays server-side validation errors in the
+// per-field error elements produced by Build.
+//
+//	errs := form.Validate(ctx.WsData())
+//	return form.ShowErrors(errs)
+func (f *FormBuilder) ShowErrors(errs FormErrors) string {
+	var b strings.Builder
+	b.WriteString("(function(){var first=null;")
+	for i := range f.fields {
+		fld := &f.fields[i]
+		errID, fieldID := escJS(f.errID(fld)), escJS(f.fieldID(fld))
+		msg, has := errs[fld.Name]
+		if has {
+			fmt.Fprintf(&b, "var e=document.getElementById('%s'),i=document.getElementById('%s');if(e){e.textContent='%s';e.classList.remove('hidden')}if(i){i.setAttribute('aria-invalid','true');if(!first)first=i};", errID, fieldID, escJS(msg))
+		} else {
+			fmt.Fprintf(&b, "var e=document.getElementById('%s'),i=document.getElementById('%s');if(e){e.textContent='';e.classList.add('hidden')}if(i)i.removeAttribute('aria-invalid');", errID, fieldID)
+		}
+	}
+	b.WriteString("if(first){first.focus();first.scrollIntoView({block:'center',behavior:'smooth'})}})();")
+	return b.String()
+}
 
 // Validate checks the data map against the form's field definitions.
 // It returns a FormErrors map (empty if all valid).
@@ -801,9 +861,14 @@ func (f *FormBuilder) errMsg(fld *Field) string {
 }
 
 // matchPattern matches a regex pattern against a string value.
+var invalidFormPatterns sync.Map
+
 func matchPattern(pattern, value string) bool {
 	matched, err := regexp.MatchString("^(?:"+pattern+")$", value)
 	if err != nil {
+		if _, loaded := invalidFormPatterns.LoadOrStore(pattern, struct{}{}); !loaded {
+			log.Printf("gsui: invalid form validation pattern %q: %v", pattern, err)
+		}
 		return false
 	}
 	return matched

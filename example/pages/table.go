@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/go-pdf/fpdf"
 	r "github.com/michalCapo/g-sui/ui"
@@ -142,8 +143,10 @@ type activeFilter struct {
 	To   string
 }
 
-// Global active filters state (per-session in real app, global here for demo)
+// Global demo state is mutex-protected. Production applications must scope
+// filters to a user/session rather than sharing them across connections.
 var activeFilters = map[int]*activeFilter{}
+var activeFiltersMu sync.Mutex
 
 func filterProducts(search string, filters map[int]*activeFilter) []*Product {
 	filtered := make([]*Product, 0, len(allProducts))
@@ -320,6 +323,8 @@ func sortProducts(data []*Product, col int, dir string) {
 }
 
 func handleTableData(ctx *r.Context) string {
+	activeFiltersMu.Lock()
+	defer activeFiltersMu.Unlock()
 	var req TableDataRequest
 	ctx.Body(&req)
 
