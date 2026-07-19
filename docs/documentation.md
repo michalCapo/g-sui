@@ -1383,9 +1383,12 @@ g-sui includes built-in dark mode with three states: System, Light, Dark.
 
 ### How It Works
 
-1. A synchronous `<head>` script reads `localStorage("theme")` and applies the `dark` class on `<html>` before render (prevents FOUC)
-2. CSS overrides in `<style>` provide dark mode fallbacks for common Tailwind classes
-3. `ThemeSwitcher` component provides a UI toggle
+1. A synchronous `<head>` script reads `localStorage("theme")` and applies the `dark` class on `<html>` before render
+2. The HTML shell keeps the body hidden until the initial DOM, stylesheets, Tailwind-generated CSS, and active fonts are ready to paint
+3. CSS overrides in `<style>` provide dark mode fallbacks for common Tailwind classes
+4. `ThemeSwitcher` component provides a UI toggle
+
+The readiness gate reveals on the next paint boundary with a 160 ms ease-out fade and dispatches `gsui:ready`. The fade is disabled when the user prefers reduced motion. The gate does not wait for images. A four-second fail-safe prevents a stalled third-party resource from leaving the page blank indefinitely.
 
 ### Theme Switcher
 

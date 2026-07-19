@@ -53,7 +53,6 @@ func main() {
 // ---------------------------------------------------------------------------
 
 func layout(ctx *r.Context, content *r.Node) *r.Node {
-	ctx.HeadJS(`(function(o){o.style.visibility='hidden';setTimeout(function(){o.style.visibility='visible'},250)})(document.body||document.documentElement);`)
 	// Keep the nav highlight in sync with the URL: SPA navigation only swaps
 	// the content area, so the server-rendered active state goes stale. This
 	// re-applies it on every pushState (menu clicks) and popstate (back/forward).

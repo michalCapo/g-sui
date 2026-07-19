@@ -166,7 +166,7 @@ go func() {
 ui.ThemeSwitcher()  // System -> Light -> Dark toggle
 ```
 
-Uses Tailwind `dark:` variants. Theme is persisted in localStorage and applied before render to prevent FOUC.
+Uses Tailwind `dark:` variants. Theme is persisted in localStorage and applied before render. The application stays hidden until its initial DOM, stylesheets, and active fonts are ready, preventing unstyled content and light-background flashes. It then fades in over 160 ms with a reduced-motion fallback. A four-second fail-safe reveals the page if a third-party resource stalls.
 
 ## Localization
 

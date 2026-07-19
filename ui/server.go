@@ -390,7 +390,7 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintf(writer, `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="gsui-booting">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -403,23 +403,24 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 <script>%s
 %s</script>
 
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" async></script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" media="print" onload="this.media='all'">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" data-gsui-style-engine async onload="this.dataset.gsuiLoaded='true'" onerror="this.dataset.gsuiLoaded='error'"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" media="print" onload="this.media='all';this.dataset.gsuiLoaded='true'" onerror="this.dataset.gsuiLoaded='error'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"></noscript>
 <style type="text/tailwindcss">
 @custom-variant dark (&:where(.dark, .dark *));
 @theme{--font-sans:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;}
 </style>
 <style>%s</style>
-<script src="/__ws.js?v=%s" defer></script>
 %s
+<script src="/__ws.js?v=%s" defer></script>
+<script>%s</script>
 </head>
 <body>
 <script>
 %s
 </script>
 </body>
-</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, darkOverrideCSS, wsClientVersion, customHead, jsBody)
+</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, darkOverrideCSS, customHead, wsClientVersion, bootInitJS, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -469,11 +470,48 @@ apply(localStorage.getItem('theme')||'system');
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){var s=localStorage.getItem('theme')||'';if(!s||s==='system')apply('system')});
 })();`
 
+// bootInitJS keeps the application hidden until its initial DOM, stylesheets,
+// Tailwind-generated CSS, and active web fonts are ready to paint. Waiting on
+// these resources instead of window.load avoids holding the UI for images. The
+// timeout is a fail-safe for stalled third-party resources.
+const bootInitJS = `(function(){
+if(window.__gsuiBootInit)return;window.__gsuiBootInit=true;
+var d=document.documentElement,done=false,preparing=false,pending=0,domReady=document.readyState!=='loading',timer;
+function paintReveal(){
+ if(done)return;done=true;clearTimeout(timer);
+ requestAnimationFrame(function(){requestAnimationFrame(function(){
+  d.classList.remove('gsui-booting');d.classList.add('gsui-ready','gsui-revealing');
+  setTimeout(function(){d.classList.remove('gsui-revealing')},180);
+  try{window.dispatchEvent(new Event('gsui:ready'))}catch(_){}
+ })});
+}
+function prepareReveal(){
+ if(preparing||done)return;preparing=true;
+ if(document.fonts&&document.fonts.ready){document.fonts.ready.then(paintReveal,paintReveal)}else{paintReveal()}
+}
+function check(){if(domReady&&pending===0)prepareReveal()}
+function waitFor(el){
+ if(el.dataset.gsuiLoaded==='true'||el.dataset.gsuiLoaded==='error'||(el.tagName==='LINK'&&el.sheet))return;
+ pending++;
+ var settled=false;
+ function settle(){if(settled)return;settled=true;pending--;check()}
+ el.addEventListener('load',settle,{once:true});el.addEventListener('error',settle,{once:true});
+}
+document.querySelectorAll('link[rel~="stylesheet"],script[data-gsui-style-engine]').forEach(waitFor);
+if(!domReady){document.addEventListener('DOMContentLoaded',function(){domReady=true;check()},{once:true})}
+check();
+timer=setTimeout(paintReveal,4000);
+})();`
+
 // darkOverrideCSS provides fallback dark mode overrides for elements that
 // may not carry explicit dark: Tailwind classes (e.g. plain body, form UA styles).
 // These use .dark selectors without !important so explicit dark: variants win.
 // Also applies a local font stack to avoid late webfont swaps and CLS.
-const darkOverrideCSS = `html.dark{color-scheme:dark}
+const darkOverrideCSS = `html{background-color:#fff}
+html.dark{color-scheme:dark;background-color:#0b1120}
+html.gsui-booting body{visibility:hidden;opacity:0}
+html.gsui-revealing body{visibility:visible;transition:opacity 160ms cubic-bezier(.22,1,.36,1)}
+@media (prefers-reduced-motion:reduce){html.gsui-revealing body{transition:none}}
 .dark body{color:#e5e7eb;background-color:#0b1120}
 .dark input::placeholder,.dark textarea::placeholder{color:#9ca3af}
 body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}`
