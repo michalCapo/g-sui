@@ -158,9 +158,24 @@ func TestAppShellGatesInitialPaintUntilStylesAreReady(t *testing.T) {
 	expect(t, body, `transition:opacity 160ms cubic-bezier(.22,1,.36,1)`)
 	expect(t, body, `@media (prefers-reduced-motion:reduce)`)
 	expect(t, body, `document.fonts.ready.then(paintReveal,paintReveal)`)
-	expect(t, body, `d.classList.remove('gsui-booting')`)
+	expect(t, body, `d.classList.remove('gsui-booting','gsui-loading-dark')`)
 	expect(t, body, `window.dispatchEvent(new Event('gsui:ready'))`)
 	expect(t, body, `timer=setTimeout(paintReveal,4000)`)
+}
+
+func TestLoadingReturnsReusableHeadMarkup(t *testing.T) {
+	head := Loading()
+
+	expect(t, head, `<style>html{background-color:var(--gsui-loading-bg,#fff)}`)
+	expect(t, head, `<script>(function(){`)
+	expect(t, head, `d.classList.add('gsui-booting')`)
+	expect(t, head, `d.classList.add('gsui-loading-dark')`)
+	expect(t, head, `script[src*="@tailwindcss/browser"]`)
+	expect(t, head, `performance.getEntriesByName(el.src)`)
+	expect(t, head, `document.fonts.ready.then(paintReveal,paintReveal)`)
+	if got := NewApp().Loading(); got != head {
+		t.Fatal("app.Loading() differs from ui.Loading()")
+	}
 }
 
 func TestMarkdownOmitsRawHTMLAndEscapesScriptBreakout(t *testing.T) {

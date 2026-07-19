@@ -1390,6 +1390,34 @@ g-sui includes built-in dark mode with three states: System, Light, Dark.
 
 The readiness gate reveals on the next paint boundary with a 160 ms ease-out fade and dispatches `gsui:ready`. The fade is disabled when the user prefers reduced motion. The gate does not wait for images. A four-second fail-safe prevents a stalled third-party resource from leaving the page blank indefinitely.
 
+### Custom HTML and `app.GET`
+
+`app.GET` registers a raw `http.HandlerFunc`, so g-sui cannot modify HTML written directly by that handler. Insert `ui.Loading()` near the end of the custom `<head>`, after external stylesheets and Tailwind:
+
+```go
+fmt.Fprintf(w, `<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" async></script>
+%s
+</head>
+<body>...</body>
+</html>`, ui.Loading())
+```
+
+When the `*ui.App` is available, `app.Loading()` returns the same markup. The helper adds the loading class itself, so custom shells do not need to modify their `<html>` tag. It detects active or already-cached Tailwind browser scripts automatically, waits for stylesheet links and active fonts, and uses the dark loading background when the OS prefers dark mode.
+
+Custom loading colors can be declared before the helper:
+
+```html
+<style>
+:root {
+  --gsui-loading-bg: #f6f3ec;
+  --gsui-loading-bg-dark: #111513;
+}
+</style>
+```
+
 ### Theme Switcher
 
 ```go

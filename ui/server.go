@@ -413,14 +413,14 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 <style>%s</style>
 %s
 <script src="/__ws.js?v=%s" defer></script>
-<script>%s</script>
+%s
 </head>
 <body>
 <script>
 %s
 </script>
 </body>
-</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, darkOverrideCSS, customHead, wsClientVersion, bootInitJS, jsBody)
+</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, darkOverrideCSS, customHead, wsClientVersion, Loading(), jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -470,6 +470,28 @@ apply(localStorage.getItem('theme')||'system');
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){var s=localStorage.getItem('theme')||'';if(!s||s==='system')apply('system')});
 })();`
 
+// Loading returns trusted, static HTML markup that prevents a flash of
+// unstyled content in custom HTML responses, including pages served by GET.
+// Insert it near the end of <head>, after external styles and style engines.
+// The returned markup waits for the initial DOM, stylesheets, Tailwind CSS,
+// and active web fonts, then reveals the page with a short ease-out fade.
+//
+// For an application-specific loading background, define these CSS variables
+// before the returned markup:
+//
+//	--gsui-loading-bg: #fff;
+//	--gsui-loading-bg-dark: #0b1120;
+//
+// This function returns raw HTML and must only be inserted into trusted page
+// templates. It contains no application or user-controlled data.
+func Loading() string {
+	return "<style>" + loadingCSS + "</style>\n<script>" + bootInitJS + "</script>"
+}
+
+// Loading is the App method form of the package-level Loading helper.
+// It is convenient for custom HTML handlers registered with app.GET.
+func (app *App) Loading() string { return Loading() }
+
 // bootInitJS keeps the application hidden until its initial DOM, stylesheets,
 // Tailwind-generated CSS, and active web fonts are ready to paint. Waiting on
 // these resources instead of window.load avoids holding the UI for images. The
@@ -477,10 +499,13 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',func
 const bootInitJS = `(function(){
 if(window.__gsuiBootInit)return;window.__gsuiBootInit=true;
 var d=document.documentElement,done=false,preparing=false,pending=0,domReady=document.readyState!=='loading',timer;
+d.classList.add('gsui-booting');
+var scheme=d.style.colorScheme;try{if(!scheme)scheme=getComputedStyle(d).colorScheme}catch(_){}
+if(d.classList.contains('dark')||(scheme!=='light'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('gsui-loading-dark');
 function paintReveal(){
  if(done)return;done=true;clearTimeout(timer);
  requestAnimationFrame(function(){requestAnimationFrame(function(){
-  d.classList.remove('gsui-booting');d.classList.add('gsui-ready','gsui-revealing');
+  d.classList.remove('gsui-booting','gsui-loading-dark');d.classList.add('gsui-ready','gsui-revealing');
   setTimeout(function(){d.classList.remove('gsui-revealing')},180);
   try{window.dispatchEvent(new Event('gsui:ready'))}catch(_){}
  })});
@@ -491,28 +516,30 @@ function prepareReveal(){
 }
 function check(){if(domReady&&pending===0)prepareReveal()}
 function waitFor(el){
- if(el.dataset.gsuiLoaded==='true'||el.dataset.gsuiLoaded==='error'||(el.tagName==='LINK'&&el.sheet))return;
+ var fetched=el.tagName==='SCRIPT'&&el.src&&window.performance&&performance.getEntriesByName&&performance.getEntriesByName(el.src).length>0;
+ if(el.dataset.gsuiLoaded==='true'||el.dataset.gsuiLoaded==='error'||(el.tagName==='LINK'&&el.sheet)||fetched)return;
  pending++;
  var settled=false;
  function settle(){if(settled)return;settled=true;pending--;check()}
  el.addEventListener('load',settle,{once:true});el.addEventListener('error',settle,{once:true});
 }
-document.querySelectorAll('link[rel~="stylesheet"],script[data-gsui-style-engine]').forEach(waitFor);
+document.querySelectorAll('link[rel~="stylesheet"],script[data-gsui-style-engine],script[src*="@tailwindcss/browser"]').forEach(waitFor);
 if(!domReady){document.addEventListener('DOMContentLoaded',function(){domReady=true;check()},{once:true})}
 check();
 timer=setTimeout(paintReveal,4000);
 })();`
 
+const loadingCSS = `html{background-color:var(--gsui-loading-bg,#fff)}
+html.dark,html.gsui-loading-dark{color-scheme:dark;background-color:var(--gsui-loading-bg-dark,#0b1120)}
+html.gsui-booting body{visibility:hidden;opacity:0}
+html.gsui-revealing body{visibility:visible;transition:opacity 160ms cubic-bezier(.22,1,.36,1)}
+@media (prefers-reduced-motion:reduce){html.gsui-revealing body{transition:none}}`
+
 // darkOverrideCSS provides fallback dark mode overrides for elements that
 // may not carry explicit dark: Tailwind classes (e.g. plain body, form UA styles).
 // These use .dark selectors without !important so explicit dark: variants win.
 // Also applies a local font stack to avoid late webfont swaps and CLS.
-const darkOverrideCSS = `html{background-color:#fff}
-html.dark{color-scheme:dark;background-color:#0b1120}
-html.gsui-booting body{visibility:hidden;opacity:0}
-html.gsui-revealing body{visibility:visible;transition:opacity 160ms cubic-bezier(.22,1,.36,1)}
-@media (prefers-reduced-motion:reduce){html.gsui-revealing body{transition:none}}
-.dark body{color:#e5e7eb;background-color:#0b1120}
+const darkOverrideCSS = `.dark body{color:#e5e7eb;background-color:#0b1120}
 .dark input::placeholder,.dark textarea::placeholder{color:#9ca3af}
 body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}`
 
