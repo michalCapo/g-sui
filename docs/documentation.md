@@ -135,7 +135,23 @@ app.Page("/path", func(ctx *ui.Context) *ui.Node {
 })
 ```
 
-Registers a GET route. The handler returns a `*Node` tree that compiles to JS and is served inside a minimal HTML shell with Tailwind CSS, Material Icons, and the WebSocket client.
+Registers a GET route using Go's `http.ServeMux` pattern syntax. The handler returns a `*Node` tree that compiles to JS and is served inside the standard HTML shell with Tailwind CSS, Material Icons, the WebSocket client, and the initial loading gate.
+
+Named path wildcards are available through both `ctx.Request.PathValue` and `ctx.PathParams`:
+
+```go
+app.Page("/dp/{token}", func(ctx *ui.Context) *ui.Node {
+    token := ctx.Request.PathValue("token")
+    // Equivalent: token := ctx.PathParams["token"]
+    return ui.Div().Text(token)
+})
+
+app.Page("/files/{path...}", func(ctx *ui.Context) *ui.Node {
+    return ui.Div().Text(ctx.Request.PathValue("path"))
+})
+```
+
+Static routes remain exact matches, including `/` and routes ending in `/`. Use an explicit `{name...}` wildcard for a subtree. Static routes take precedence over wildcard routes according to `http.ServeMux` matching rules. Path values are also populated during built-in WebSocket navigation.
 
 ### Action Handlers
 
@@ -1390,34 +1406,6 @@ g-sui includes built-in dark mode with three states: System, Light, Dark.
 
 The readiness gate reveals on the next paint boundary with a 160 ms ease-out fade and dispatches `gsui:ready`. The fade is disabled when the user prefers reduced motion. The gate does not wait for images. A four-second fail-safe prevents a stalled third-party resource from leaving the page blank indefinitely.
 
-### Custom HTML and `app.GET`
-
-`app.GET` registers a raw `http.HandlerFunc`, so g-sui cannot modify HTML written directly by that handler. Insert `ui.Loading()` near the end of the custom `<head>`, after external stylesheets and Tailwind:
-
-```go
-fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en">
-<head>
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" async></script>
-%s
-</head>
-<body>...</body>
-</html>`, ui.Loading())
-```
-
-When the `*ui.App` is available, `app.Loading()` returns the same markup. The helper adds the loading class itself, so custom shells do not need to modify their `<html>` tag. It detects active or already-cached Tailwind browser scripts automatically, waits for stylesheet links and active fonts, and uses the dark loading background when the OS prefers dark mode.
-
-Custom loading colors can be declared before the helper:
-
-```html
-<style>
-:root {
-  --gsui-loading-bg: #f6f3ec;
-  --gsui-loading-bg-dark: #111513;
-}
-</style>
-```
-
 ### Theme Switcher
 
 ```go
@@ -1770,7 +1758,7 @@ go get github.com/michalCapo/g-sui@v1.001
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `Page` | `(path string, handler PageHandler)` | Register GET page route |
+| `Page` | `(pattern string, handler PageHandler)` | Register GET page route using `http.ServeMux` patterns and path values |
 | `Action` | `(name string, handler ActionHandler)` | Register WS action handler |
 | `Layout` | `(handler LayoutHandler)` | Set global layout (uses `__content__` ID) |
 | `CSS` | `(urls []string, css string)` | Global stylesheets/inline CSS in `<head>` |

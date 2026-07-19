@@ -43,11 +43,11 @@ type LayoutHandler func(ctx *Context) *Node
 // for the initial render. Actions return raw JS strings for DOM mutations.
 type App struct {
 	mu         sync.RWMutex
-	pages      map[string]PageHandler
 	actions    map[string]ActionHandler
 	clients    map[*websocket.Conn]bool
 	connStates map[*websocket.Conn]*connState
 	mux        *http.ServeMux
+	pageMux    *http.ServeMux
 	layout     LayoutHandler
 	setupOnce  sync.Once
 
@@ -88,20 +88,32 @@ type ActionHandler func(ctx *Context) string
 // NewApp creates a new application instance.
 func NewApp() *App {
 	return &App{
-		pages:      make(map[string]PageHandler),
 		actions:    make(map[string]ActionHandler),
 		clients:    make(map[*websocket.Conn]bool),
 		connStates: make(map[*websocket.Conn]*connState),
 		mux:        http.NewServeMux(),
+		pageMux:    http.NewServeMux(),
 	}
 }
 
-// Page registers a GET route. The handler returns a *Node tree which is
-// compiled to JS and served inside a minimal HTML shell.
-func (app *App) Page(path string, handler PageHandler) {
-	app.mu.Lock()
-	app.pages[path] = handler
-	app.mu.Unlock()
+// Page registers a GET route using Go's http.ServeMux pattern syntax. Named
+// wildcards are available through ctx.Request.PathValue and ctx.PathParams.
+// The handler returns a *Node tree which is compiled to JS and served inside
+// the standard HTML shell.
+//
+//	app.Page("/dp/{token}", func(ctx *ui.Context) *ui.Node {
+//		token := ctx.Request.PathValue("token")
+//		return ui.Div().Text(token)
+//	})
+func (app *App) Page(pattern string, handler PageHandler) {
+	serveMuxPattern := pattern
+	// Preserve the historical exact-match behavior of static routes ending in
+	// a slash. ServeMux otherwise treats them as subtree routes. Callers that
+	// want a subtree can register an explicit {name...} wildcard.
+	if strings.HasSuffix(serveMuxPattern, "/") && !strings.Contains(serveMuxPattern, "{") {
+		serveMuxPattern += "{$}"
+	}
+	app.pageMux.Handle("GET "+serveMuxPattern, pageRoute{app: app, handler: handler})
 }
 
 // CSS registers external stylesheets and/or inline CSS rules that apply
@@ -236,20 +248,24 @@ func (app *App) setupRoutes() {
 			r2.URL.RawQuery = u.RawQuery
 			ctx.Request = r2
 		}
+		ctx.Query = make(map[string]string)
 		for k, v := range u.Query() {
 			if len(v) > 0 {
 				ctx.Query[k] = v[0]
 			}
 		}
 
-		app.mu.RLock()
-		handler, ok := app.pages[u.Path]
-		layoutFn := app.layout
-		app.mu.RUnlock()
+		handler, matchedRequest, ok := app.matchPage(ctx.Request)
 
 		if !ok {
 			return ""
 		}
+		ctx.Request = matchedRequest
+		ctx.PathParams = requestPathParams(matchedRequest)
+
+		app.mu.RLock()
+		layoutFn := app.layout
+		app.mu.RUnlock()
 
 		pageNode := handler(ctx)
 		if pageNode == nil {
@@ -278,8 +294,9 @@ func (app *App) setupRoutes() {
 	// WebSocket endpoint
 	app.mux.Handle("/__ws", websocket.Server{Handshake: app.wsHandshake, Handler: app.handleWS})
 
-	// Page routes (catch-all)
-	app.mux.HandleFunc("/", app.handlePage)
+	// Page routes (catch-all). The nested mux provides ServeMux pattern
+	// matching and populates Request.PathValue for Page handlers.
+	app.mux.Handle("/", app.pageMux)
 }
 
 // ---------------------------------------------------------------------------
@@ -301,19 +318,83 @@ func injectContent(node, pageNode *Node) bool {
 	return false
 }
 
-func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
-	app.mu.RLock()
-	handler, ok := app.pages[r.URL.Path]
-	app.mu.RUnlock()
+// pageRoute renders normally for HTTP requests. matchPage adds pageMatch to
+// the request context to resolve a route without rendering it, which is used
+// by WebSocket navigation.
+type pageRoute struct {
+	app     *App
+	handler PageHandler
+}
 
-	if !ok {
-		http.NotFound(w, r)
+func (route pageRoute) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if match, ok := r.Context().Value(pageMatchContextKey{}).(*pageMatch); ok {
+		match.handler = route.handler
+		match.request = r.WithContext(match.requestContext)
 		return
 	}
+	route.app.renderPage(w, r, route.handler)
+}
+
+type pageMatchContextKey struct{}
+
+type pageMatch struct {
+	handler        PageHandler
+	request        *http.Request
+	requestContext context.Context
+}
+
+// discardResponseWriter absorbs redirects and not-found responses produced by
+// ServeMux while matchPage probes for a matching Page route.
+type discardResponseWriter struct {
+	header http.Header
+}
+
+func (w *discardResponseWriter) Header() http.Header         { return w.header }
+func (w *discardResponseWriter) WriteHeader(_ int)           {}
+func (w *discardResponseWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+func (app *App) matchPage(r *http.Request) (PageHandler, *http.Request, bool) {
+	if r == nil {
+		return nil, nil, false
+	}
+	match := &pageMatch{requestContext: r.Context()}
+	r2 := r.WithContext(context.WithValue(r.Context(), pageMatchContextKey{}, match))
+	app.pageMux.ServeHTTP(&discardResponseWriter{header: make(http.Header)}, r2)
+	if match.handler == nil || match.request == nil {
+		return nil, nil, false
+	}
+	return match.handler, match.request, true
+}
+
+func requestPathParams(r *http.Request) map[string]string {
+	params := make(map[string]string)
+	if r == nil || r.Pattern == "" {
+		return params
+	}
+	pattern := r.Pattern
+	if i := strings.IndexByte(pattern, ' '); i >= 0 {
+		pattern = pattern[i+1:]
+	}
+	if i := strings.IndexByte(pattern, '/'); i >= 0 {
+		pattern = pattern[i:]
+	}
+	for _, segment := range strings.Split(pattern, "/") {
+		if len(segment) < 3 || segment[0] != '{' || segment[len(segment)-1] != '}' {
+			continue
+		}
+		name := strings.TrimSuffix(segment[1:len(segment)-1], "...")
+		if name != "" && name != "$" {
+			params[name] = r.PathValue(name)
+		}
+	}
+	return params
+}
+
+func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageHandler) {
 
 	ctx := &Context{
 		Request:    r,
-		PathParams: make(map[string]string),
+		PathParams: requestPathParams(r),
 		Query:      make(map[string]string),
 		app:        app,
 	}
@@ -413,14 +494,15 @@ func (app *App) handlePage(w http.ResponseWriter, r *http.Request) {
 <style>%s</style>
 %s
 <script src="/__ws.js?v=%s" defer></script>
-%s
+<style>%s</style>
+<script>%s</script>
 </head>
 <body>
 <script>
 %s
 </script>
 </body>
-</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, darkOverrideCSS, customHead, wsClientVersion, Loading(), jsBody)
+</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -469,28 +551,6 @@ window.setTheme=set;window.toggleTheme=function(){set(d.classList.contains('dark
 apply(localStorage.getItem('theme')||'system');
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){var s=localStorage.getItem('theme')||'';if(!s||s==='system')apply('system')});
 })();`
-
-// Loading returns trusted, static HTML markup that prevents a flash of
-// unstyled content in custom HTML responses, including pages served by GET.
-// Insert it near the end of <head>, after external styles and style engines.
-// The returned markup waits for the initial DOM, stylesheets, Tailwind CSS,
-// and active web fonts, then reveals the page with a short ease-out fade.
-//
-// For an application-specific loading background, define these CSS variables
-// before the returned markup:
-//
-//	--gsui-loading-bg: #fff;
-//	--gsui-loading-bg-dark: #0b1120;
-//
-// This function returns raw HTML and must only be inserted into trusted page
-// templates. It contains no application or user-controlled data.
-func Loading() string {
-	return "<style>" + loadingCSS + "</style>\n<script>" + bootInitJS + "</script>"
-}
-
-// Loading is the App method form of the package-level Loading helper.
-// It is convenient for custom HTML handlers registered with app.GET.
-func (app *App) Loading() string { return Loading() }
 
 // bootInitJS keeps the application hidden until its initial DOM, stylesheets,
 // Tailwind-generated CSS, and active web fonts are ready to paint. Waiting on

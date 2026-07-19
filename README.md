@@ -168,18 +168,6 @@ ui.ThemeSwitcher()  // System -> Light -> Dark toggle
 
 Uses Tailwind `dark:` variants. Theme is persisted in localStorage and applied before render. The application stays hidden until its initial DOM, stylesheets, and active fonts are ready, preventing unstyled content and light-background flashes. It then fades in over 160 ms with a reduced-motion fallback. A four-second fail-safe reveals the page if a third-party resource stalls.
 
-For a custom HTML response served through `app.GET`, insert `ui.Loading()` near the end of `<head>`, after stylesheet and Tailwind script tags. `app.Loading()` is an equivalent method form:
-
-```go
-fmt.Fprintf(w, `<!DOCTYPE html>
-<html><head>
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" async></script>
-%s
-</head><body>...</body></html>`, app.Loading())
-```
-
-The helper detects Tailwind browser scripts automatically. Set `--gsui-loading-bg` and `--gsui-loading-bg-dark` before the helper markup to customize the blank loading surface.
-
 ## Localization
 
 Components use English text by default. Pass a locale struct only when you need non-English:

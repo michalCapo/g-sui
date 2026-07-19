@@ -2,6 +2,8 @@ package pages
 
 import (
 	"fmt"
+	"net/url"
+	"sort"
 	"strings"
 
 	r "github.com/michalCapo/g-sui/ui"
@@ -17,7 +19,7 @@ func RoutesExample(ctx *r.Context) *r.Node {
 
 	return r.Div("flex flex-col gap-8").Render(
 		r.Div("text-3xl font-bold").Text("Route Parameters"),
-		r.Div("text-gray-600").Text("Demonstrates parameterized routes concept."),
+		r.Div("text-gray-600").Text("Demonstrates real parameterized app.Page routes."),
 
 		// Overview
 		r.Div("bg-white rounded-lg shadow p-6").Render(
@@ -33,7 +35,7 @@ func RoutesExample(ctx *r.Context) *r.Node {
 				),
 				r.Div("flex items-center gap-2").Render(
 					r.Span().Text("Access path params via: "),
-					codeSnippet("ctx.PathParams[\"id\"]"),
+					codeSnippet("ctx.Request.PathValue(\"id\")"),
 				),
 				r.Div("flex items-center gap-2").Render(
 					r.Span().Text("Query params via: "),
@@ -48,9 +50,9 @@ func RoutesExample(ctx *r.Context) *r.Node {
 			r.Div("bg-white rounded-lg shadow p-6").Render(
 				r.Div("text-sm text-gray-600 mb-3").Text("Click to view user details:"),
 				r.Div("flex flex-wrap gap-2").Render(
-					routeBtn("View User 123", "routes.user", map[string]any{"id": "123"}, "bg-blue-600 text-white hover:bg-blue-700"),
-					routeBtn("View User 456", "routes.user", map[string]any{"id": "456"}, "bg-blue-600 text-white hover:bg-blue-700"),
-					routeBtn("View User alice", "routes.user", map[string]any{"id": "alice"}, "bg-blue-600 text-white hover:bg-blue-700"),
+					routeLink("View User 123", "/routes/user/123", "bg-blue-600 text-white hover:bg-blue-700"),
+					routeLink("View User 456", "/routes/user/456", "bg-blue-600 text-white hover:bg-blue-700"),
+					routeLink("View User alice", "/routes/user/alice", "bg-blue-600 text-white hover:bg-blue-700"),
 				),
 				r.Div("text-xs text-gray-500 mt-2").Render(
 					r.Span().Text("Route pattern: "),
@@ -65,9 +67,9 @@ func RoutesExample(ctx *r.Context) *r.Node {
 			r.Div("bg-white rounded-lg shadow p-6").Render(
 				r.Div("text-sm text-gray-600 mb-3").Text("Navigate to routes with multiple parameters:"),
 				r.Div("flex flex-wrap gap-2").Render(
-					routeBtn("User 123, Post 1", "routes.userpost", map[string]any{"userId": "123", "postId": "1"}, "bg-green-600 text-white hover:bg-green-700"),
-					routeBtn("User 456, Post 42", "routes.userpost", map[string]any{"userId": "456", "postId": "42"}, "bg-green-600 text-white hover:bg-green-700"),
-					routeBtn("User alice, Post my-first-post", "routes.userpost", map[string]any{"userId": "alice", "postId": "my-first-post"}, "bg-green-600 text-white hover:bg-green-700"),
+					routeLink("User 123, Post 1", "/routes/user/123/post/1", "bg-green-600 text-white hover:bg-green-700"),
+					routeLink("User 456, Post 42", "/routes/user/456/post/42", "bg-green-600 text-white hover:bg-green-700"),
+					routeLink("User alice, Post my-first-post", "/routes/user/alice/post/my-first-post", "bg-green-600 text-white hover:bg-green-700"),
 				),
 				r.Div("text-xs text-gray-500 mt-2").Render(
 					r.Span().Text("Route pattern: "),
@@ -82,8 +84,8 @@ func RoutesExample(ctx *r.Context) *r.Node {
 			r.Div("bg-white rounded-lg shadow p-6").Render(
 				r.Div("text-sm text-gray-600 mb-3").Text("Routes can have parameters at any level:"),
 				r.Div("flex flex-wrap gap-2").Render(
-					routeBtn("Electronics > Laptop", "routes.product", map[string]any{"category": "electronics", "product": "laptop"}, "bg-purple-600 text-white hover:bg-purple-700"),
-					routeBtn("Books > Novel", "routes.product", map[string]any{"category": "books", "product": "novel"}, "bg-purple-600 text-white hover:bg-purple-700"),
+					routeLink("Electronics > Laptop", "/routes/category/electronics/product/laptop", "bg-purple-600 text-white hover:bg-purple-700"),
+					routeLink("Books > Novel", "/routes/category/books/product/novel", "bg-purple-600 text-white hover:bg-purple-700"),
 				),
 				r.Div("text-xs text-gray-500 mt-2").Render(
 					r.Span().Text("Route pattern: "),
@@ -98,9 +100,9 @@ func RoutesExample(ctx *r.Context) *r.Node {
 			r.Div("bg-white rounded-lg shadow p-6").Render(
 				r.Div("text-sm text-gray-600 mb-3").Text("Query parameters are passed after a ? in the URL:"),
 				r.Div("flex flex-wrap gap-2").Render(
-					routeBtn("name=Smith, age=30", "routes.search", map[string]any{"name": "Smith", "age": "30"}, "bg-yellow-600 text-white hover:bg-yellow-700"),
-					routeBtn("name=Johnson, city=NYC", "routes.search", map[string]any{"name": "Johnson", "city": "NYC"}, "bg-yellow-600 text-white hover:bg-yellow-700"),
-					routeBtn("q=g-sui, type=tutorial", "routes.search", map[string]any{"q": "g-sui", "type": "tutorial"}, "bg-yellow-600 text-white hover:bg-yellow-700"),
+					routeLink("name=Smith, age=30", "/routes/search?name=Smith&age=30", "bg-yellow-600 text-white hover:bg-yellow-700"),
+					routeLink("name=Johnson, city=NYC", "/routes/search?name=Johnson&city=NYC", "bg-yellow-600 text-white hover:bg-yellow-700"),
+					routeLink("q=g-sui, type=tutorial", "/routes/search?q=g-sui&type=tutorial", "bg-yellow-600 text-white hover:bg-yellow-700"),
 				),
 				r.Div("text-xs text-gray-500 mt-2").Render(
 					r.Span().Text("Accessed via: "),
@@ -115,34 +117,25 @@ func RoutesExample(ctx *r.Context) *r.Node {
 			r.Div("bg-white rounded-lg shadow p-6").Render(
 				r.Div("text-sm text-gray-600 mb-3").Text("Combine path parameters with query parameters:"),
 				r.Div("flex flex-wrap gap-2").Render(
-					routeBtn("User 123: tab=profile", "routes.user", map[string]any{"id": "123", "tab": "profile", "view": "detailed"}, "bg-indigo-600 text-white hover:bg-indigo-700"),
-					routeBtn("User 456: tab=settings", "routes.user", map[string]any{"id": "456", "tab": "settings"}, "bg-indigo-600 text-white hover:bg-indigo-700"),
-					routeBtn("User alice: sort=name", "routes.user", map[string]any{"id": "alice", "sort": "name", "order": "asc"}, "bg-indigo-600 text-white hover:bg-indigo-700"),
+					routeLink("User 123: tab=profile", "/routes/user/123?tab=profile&view=detailed", "bg-indigo-600 text-white hover:bg-indigo-700"),
+					routeLink("User 456: tab=settings", "/routes/user/456?tab=settings", "bg-indigo-600 text-white hover:bg-indigo-700"),
+					routeLink("User alice: sort=name", "/routes/user/alice?sort=name&order=asc", "bg-indigo-600 text-white hover:bg-indigo-700"),
 				),
 				r.Div("text-xs text-gray-500 mt-2").Render(
-					r.Span().Text("Path params + query params combined in data payload"),
+					r.Span().Text("Path values and ctx.Query are populated from the URL"),
 				),
 			),
 		),
 	)
 }
 
-func routeBtn(label, action string, data map[string]any, cls string) *r.Node {
-	return r.Button("px-4 py-2 rounded cursor-pointer text-sm " + cls).
-		Text(label).
-		OnClick(&r.Action{Name: action, Data: data})
+func routeLink(label, href, cls string) *r.Node {
+	return r.A("inline-block px-4 py-2 rounded text-sm "+cls).
+		Attr("href", href).
+		Text(label)
 }
 
-// ---------------------------------------------------------------------------
-// Route action handlers
-// ---------------------------------------------------------------------------
-
-func HandleRoutesUser(ctx *r.Context) string {
-	var data map[string]any
-	ctx.Body(&data)
-
-	id, _ := data["id"].(string)
-
+func routesUserDetail(id string, query map[string]string) *r.Node {
 	users := map[string]map[string]string{
 		"123":   {"name": "John Doe", "email": "john@example.com", "role": "Admin"},
 		"456":   {"name": "Jane Smith", "email": "jane@example.com", "role": "User"},
@@ -159,11 +152,10 @@ func HandleRoutesUser(ctx *r.Context) string {
 		role = user["role"]
 	}
 
-	// Check for query params in the data payload
-	tab, _ := data["tab"].(string)
-	view, _ := data["view"].(string)
-	sort, _ := data["sort"].(string)
-	order, _ := data["order"].(string)
+	tab := query["tab"]
+	view := query["view"]
+	sort := query["sort"]
+	order := query["order"]
 
 	var querySection *r.Node
 	if tab != "" || view != "" || sort != "" || order != "" {
@@ -188,9 +180,8 @@ func HandleRoutesUser(ctx *r.Context) string {
 
 	detail := r.Div("flex flex-col gap-6").Render(
 		r.Div("flex items-center gap-4").Render(
-			r.Button("px-4 py-2 bg-gray-600 text-white rounded cursor-pointer hover:bg-gray-700 text-sm").
-				Text("Back").
-				OnClick(&r.Action{Name: "nav.routes"}),
+			r.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").
+				Attr("href", "/routes").Text("Back"),
 			r.Div("text-2xl font-bold").Text("User: "+name),
 		),
 		r.Div("bg-white rounded-lg shadow p-6").Render(
@@ -204,31 +195,25 @@ func HandleRoutesUser(ctx *r.Context) string {
 			querySection,
 			r.Div("text-xs text-gray-500 mt-4 p-3 bg-blue-50 rounded").Render(
 				r.Strong().Text("Code: "),
-				r.Code("bg-white px-1 rounded").Text(`data["id"]`),
+				r.Code("bg-white px-1 rounded").Text(`ctx.Request.PathValue("id")`),
 				r.Span().Text(" for path params, "),
-				r.Code("bg-white px-1 rounded").Text(`data["tab"]`),
+				r.Code("bg-white px-1 rounded").Text(`ctx.Query["tab"]`),
 				r.Span().Text(" for query params"),
 			),
 		),
 	)
 
-	return detail.ToJSInner(ContentID)
+	return detail
 }
 
-func HandleRoutesUserPost(ctx *r.Context) string {
-	var data struct {
-		UserID string `json:"userId"`
-		PostID string `json:"postId"`
-	}
-	ctx.Body(&data)
-
+func routesUserPostDetail(userID, postID string) *r.Node {
 	posts := map[string]map[string]string{
 		"1":             {"title": "Getting Started with g-sui", "content": "This is a comprehensive guide to building server-rendered UIs with g-sui."},
 		"42":            {"title": "Advanced Routing Patterns", "content": "Learn how to use parameterized routes effectively in your applications."},
 		"my-first-post": {"title": "My First Post", "content": "This is a blog post with a slug-based ID instead of numeric."},
 	}
 
-	post, exists := posts[data.PostID]
+	post, exists := posts[postID]
 	if !exists {
 		post = map[string]string{
 			"title":   "Post Not Found",
@@ -238,40 +223,33 @@ func HandleRoutesUserPost(ctx *r.Context) string {
 
 	detail := r.Div("flex flex-col gap-6").Render(
 		r.Div("flex items-center gap-4").Render(
-			r.Button("px-4 py-2 bg-gray-600 text-white rounded cursor-pointer hover:bg-gray-700 text-sm").
-				Text("Back").
-				OnClick(&r.Action{Name: "nav.routes"}),
+			r.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").
+				Attr("href", "/routes").Text("Back"),
 			r.Div("text-2xl font-bold").Text("Post Details"),
 		),
 		r.Div("bg-white rounded-lg shadow p-6 flex flex-col gap-4").Render(
 			r.Div("flex flex-col gap-2").Render(
 				r.Div("text-sm font-bold text-gray-500 uppercase").Text("Route Parameters"),
 				r.Div("grid grid-cols-2 gap-2").Render(
-					r.Div("text-sm font-mono bg-gray-100 px-3 py-2 rounded").Text("userId: "+data.UserID),
-					r.Div("text-sm font-mono bg-gray-100 px-3 py-2 rounded").Text("postId: "+data.PostID),
+					r.Div("text-sm font-mono bg-gray-100 px-3 py-2 rounded").Text("userId: "+userID),
+					r.Div("text-sm font-mono bg-gray-100 px-3 py-2 rounded").Text("postId: "+postID),
 				),
 			),
 			infoBox("Title", post["title"]),
 			infoBox("Content", post["content"]),
 			r.Div("flex items-center gap-2").Render(
 				r.Div("text-sm font-bold text-gray-500").Text("Author:"),
-				r.Button("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded cursor-pointer text-sm").
-					Text("User "+data.UserID).
-					OnClick(&r.Action{Name: "routes.user", Data: map[string]any{"id": data.UserID}}),
+				r.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded text-sm").
+					Attr("href", "/routes/user/"+url.PathEscape(userID)).
+					Text("User "+userID),
 			),
 		),
 	)
 
-	return detail.ToJSInner(ContentID)
+	return detail
 }
 
-func HandleRoutesProduct(ctx *r.Context) string {
-	var data struct {
-		Category string `json:"category"`
-		Product  string `json:"product"`
-	}
-	ctx.Body(&data)
-
+func routesProductDetail(category, product string) *r.Node {
 	products := map[string]map[string]map[string]string{
 		"electronics": {
 			"laptop": {"name": "Gaming Laptop", "price": "$1,299", "description": "High-performance gaming laptop with RTX graphics."},
@@ -282,8 +260,8 @@ func HandleRoutesProduct(ctx *r.Context) string {
 	}
 
 	var prod map[string]string
-	if cat, ok := products[data.Category]; ok {
-		if p, ok := cat[data.Product]; ok {
+	if cat, ok := products[category]; ok {
+		if p, ok := cat[product]; ok {
 			prod = p
 		}
 	}
@@ -293,17 +271,16 @@ func HandleRoutesProduct(ctx *r.Context) string {
 
 	detail := r.Div("flex flex-col gap-6").Render(
 		r.Div("flex items-center gap-4").Render(
-			r.Button("px-4 py-2 bg-gray-600 text-white rounded cursor-pointer hover:bg-gray-700 text-sm").
-				Text("Back").
-				OnClick(&r.Action{Name: "nav.routes"}),
+			r.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").
+				Attr("href", "/routes").Text("Back"),
 			r.Div("text-2xl font-bold").Text("Product Details"),
 		),
 		r.Div("bg-white rounded-lg shadow p-6 flex flex-col gap-4").Render(
 			r.Div("flex flex-col gap-2").Render(
 				r.Div("text-sm font-bold text-gray-500 uppercase").Text("Route Parameters"),
 				r.Div("grid grid-cols-2 gap-2").Render(
-					r.Div("text-sm font-mono bg-gray-100 px-3 py-2 rounded").Text("category: "+data.Category),
-					r.Div("text-sm font-mono bg-gray-100 px-3 py-2 rounded").Text("product: "+data.Product),
+					r.Div("text-sm font-mono bg-gray-100 px-3 py-2 rounded").Text("category: "+category),
+					r.Div("text-sm font-mono bg-gray-100 px-3 py-2 rounded").Text("product: "+product),
 				),
 			),
 			infoBox("Product Name", prod["name"]),
@@ -315,29 +292,27 @@ func HandleRoutesProduct(ctx *r.Context) string {
 		),
 	)
 
-	return detail.ToJSInner(ContentID)
+	return detail
 }
 
-func HandleRoutesSearch(ctx *r.Context) string {
-	var data map[string]any
-	ctx.Body(&data)
-
+func routesSearchDetail(query map[string]string) *r.Node {
 	// Build extracted params display
 	paramNames := []string{"name", "age", "city", "q", "type"}
 	params := make([]*r.Node, 0)
 	for _, key := range paramNames {
-		if val, ok := data[key].(string); ok && val != "" {
+		if val := query[key]; val != "" {
 			params = append(params, paramBadge(key, val, "bg-gray-100 text-gray-700"))
 		}
 	}
 
 	// Build all params display
 	var allParts []string
-	for key, val := range data {
-		if s, ok := val.(string); ok && s != "" {
-			allParts = append(allParts, fmt.Sprintf("%s=%s", key, s))
+	for key, val := range query {
+		if val != "" {
+			allParts = append(allParts, fmt.Sprintf("%s=%s", key, val))
 		}
 	}
+	sort.Strings(allParts)
 	allParamsText := "No query parameters"
 	if len(allParts) > 0 {
 		allParamsText = strings.Join(allParts, ", ")
@@ -345,9 +320,8 @@ func HandleRoutesSearch(ctx *r.Context) string {
 
 	detail := r.Div("flex flex-col gap-6").Render(
 		r.Div("flex items-center gap-4").Render(
-			r.Button("px-4 py-2 bg-gray-600 text-white rounded cursor-pointer hover:bg-gray-700 text-sm").
-				Text("Back").
-				OnClick(&r.Action{Name: "nav.routes"}),
+			r.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").
+				Attr("href", "/routes").Text("Back"),
 			r.Div("text-2xl font-bold").Text("Search Results"),
 		),
 		r.Div("bg-white rounded-lg shadow p-6 flex flex-col gap-4").Render(
@@ -357,19 +331,19 @@ func HandleRoutesSearch(ctx *r.Context) string {
 			r.Div("text-xs font-mono bg-gray-100 px-3 py-2 rounded").Text(allParamsText),
 			r.Div("text-xs text-gray-500 mt-4 p-3 bg-yellow-50 rounded").Render(
 				r.Strong().Text("Code: "),
-				r.Code("bg-white px-1 rounded").Text(`data["name"]`),
+				r.Code("bg-white px-1 rounded").Text(`ctx.Query["name"]`),
 			),
 		),
 		r.Div("flex flex-col gap-2").Render(
 			r.Div("text-sm font-bold").Text("Try different queries:"),
 			r.Div("flex flex-wrap gap-2").Render(
-				routeBtn("name=Smith, age=30", "routes.search", map[string]any{"name": "Smith", "age": "30"}, "border-2 border-yellow-600 text-yellow-600 hover:bg-yellow-50"),
-				routeBtn("name=Johnson, city=NYC", "routes.search", map[string]any{"name": "Johnson", "city": "NYC"}, "border-2 border-yellow-600 text-yellow-600 hover:bg-yellow-50"),
+				routeLink("name=Smith, age=30", "/routes/search?name=Smith&age=30", "border-2 border-yellow-600 text-yellow-600 hover:bg-yellow-50"),
+				routeLink("name=Johnson, city=NYC", "/routes/search?name=Johnson&city=NYC", "border-2 border-yellow-600 text-yellow-600 hover:bg-yellow-50"),
 			),
 		),
 	)
 
-	return detail.ToJSInner(ContentID)
+	return detail
 }
 
 // ---------------------------------------------------------------------------
@@ -401,9 +375,23 @@ func NavTo(url string, content func() *r.Node) r.ActionHandler {
 
 func RegisterRoutes(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
 	app.Page("/routes", func(ctx *r.Context) *r.Node { return layout(ctx, RoutesExample(ctx)) })
+	app.Page("/routes/user/{id}", func(ctx *r.Context) *r.Node {
+		return layout(ctx, routesUserDetail(ctx.Request.PathValue("id"), ctx.Query))
+	})
+	app.Page("/routes/user/{userId}/post/{postId}", func(ctx *r.Context) *r.Node {
+		return layout(ctx, routesUserPostDetail(
+			ctx.Request.PathValue("userId"),
+			ctx.Request.PathValue("postId"),
+		))
+	})
+	app.Page("/routes/category/{category}/product/{product}", func(ctx *r.Context) *r.Node {
+		return layout(ctx, routesProductDetail(
+			ctx.Request.PathValue("category"),
+			ctx.Request.PathValue("product"),
+		))
+	})
+	app.Page("/routes/search", func(ctx *r.Context) *r.Node {
+		return layout(ctx, routesSearchDetail(ctx.Query))
+	})
 	app.Action("nav.routes", NavTo("/routes", func() *r.Node { return RoutesExample(nil) }))
-	app.Action("routes.user", HandleRoutesUser)
-	app.Action("routes.userpost", HandleRoutesUserPost)
-	app.Action("routes.product", HandleRoutesProduct)
-	app.Action("routes.search", HandleRoutesSearch)
 }
