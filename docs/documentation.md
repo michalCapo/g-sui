@@ -58,7 +58,7 @@ g-sui compiles Go node trees into **pure JavaScript** strings. The browser recei
 │  __ws client auto-connects               │
 │  Executes JS received from server        │
 │  Sends action calls as JSON              │
-│  Offline overlay + auto-reconnect        │
+│  Offline badge + auto-reconnect          │
 └──────────────────────────────────────────┘
 ```
 
@@ -1622,8 +1622,65 @@ ui.NewStepProgress(2, 5).
 ### Client-Side
 
 - **WebSocket-only**: No form submissions or XHR -- all interaction goes through the WS protocol
-- **Auto-reconnect**: Dropped connections are automatically retried with an offline overlay
+- **Auto-reconnect**: Dropped connections are retried with exponential backoff (see [Connection resilience](#connection-resilience))
 - **Not-found handling**: Missing DOM targets cancel Push goroutines and notify the server
+
+### Connection resilience
+
+Brief disconnects are invisible. The client keeps the page fully usable while the socket is down, so long-running in-page work (large file uploads, multi-step forms) survives a hiccup.
+
+| Behavior | Detail |
+| --- | --- |
+| Keep-alive ping | Every `App.KeepAliveMs` (default 25000, `-1` disables). Prevents proxies and load balancers from dropping idle sockets, the usual cause of "offline" during a slow upload. |
+| Offline badge | Appears only after the outage outlives `App.OfflineGraceMs` (default 3000, `-1` never shows). It is a small non-blocking badge -- it never dims the page or swallows clicks. |
+| Reconnect reload | The page reloads after reconnect only when the outage lasted at least `App.ReconnectReloadAfterMs` (default 15000, `-1` never reloads) **and** no hold is active. |
+| Holds | `window.__ws.hold()` registers critical work and returns a release function. While any hold is active a reconnect never reloads the page. |
+| Fast retry | Reconnect is attempted immediately on the browser `online` event and when a hidden tab becomes visible again, instead of waiting out the backoff. |
+| Queued calls | Actions invoked while offline are queued (up to 100) and flushed on reconnect. The blocking loader is suppressed while disconnected. |
+| Subscriptions | `window.__ws.subscribe(act, data)` re-sends the call on every reconnect, so server-side `Push` loops are re-armed. Identical registrations are deduplicated, and the call is never queued (that would deliver it twice on reconnect). `__ws.unsubscribe(act)` drops one. |
+| Server restart | Every connection starts with the server announcing its instance id. Element ids (`ui.Target()`) are random per process, so a page rendered by an earlier process can never be patched by a new one: the client detects the change and reloads, deferring the reload while a hold is active. Set `App.InstanceID` to a shared build id when running multiple replicas, otherwise reconnecting to a different replica reloads too. |
+| Subscription lifetime | A subscription belongs to the page that registered it. `popstate` and `SetLocation`/`Response.Navigate` drop the previous page's subscriptions, so a reconnect never re-arms a `Push` loop whose target element is gone. (That matters: a push to a missing element makes the client send `__notfound`, which cancels *every* push loop on that connection.) |
+
+**Migration note.** A dropped connection cancels the push context server-side, so any goroutine feeding a live region dies with it. Previously the reload-on-reconnect restarted those loops as a side effect. Now that short outages no longer reload, actions that start a `Push` loop must be invoked with `__ws.subscribe('clock.start')` instead of `__ws.callSilent('clock.start')` -- otherwise the live region freezes after the first blip. One-shot actions stay on `callSilent`; they are never replayed.
+
+```go
+app := ui.NewApp()
+app.OfflineGraceMs = 5000          // tolerate 5s blips silently
+app.ReconnectReloadAfterMs = -1    // never reload after reconnect
+```
+
+Set these before serving traffic. They are plain exported fields, so assigning them while requests are in flight is a data race; the values are read once per page render.
+
+Wrap in-page work that must not be interrupted:
+
+```js
+const release = window.__ws.hold();
+try {
+  await uploadLargeFile(file);   // reconnects will not reload the page
+} finally {
+  release();
+}
+```
+
+After a reconnect that did not reload, the client dispatches `gsui:reconnected` with `detail.downMs` so the page can resync itself:
+
+```js
+window.addEventListener('gsui:reconnected', e => {
+  if (e.detail.downMs > 60000) __ws.call('refreshData', {});
+});
+```
+
+Other client helpers: `__ws.connected()`, `__ws.offline()`, `__ws.holds()`, `__ws.reconnect()`. All of these -- including `hold()` -- are available on the pre-client stub, so they are safe to call from `Node.JS` blocks and `ctx.HeadJS` that run before `/__ws.js` loads.
+
+A hold defers a reload rather than cancelling it: when the last hold is released, the pending reload runs. The client dispatches `gsui:reloadpending` with `detail.reason` (`"server-restart"` or `"long-outage"`) at the moment the reload is postponed, so the page can warn the user or finish up. Always release holds in a `finally` block -- a leaked hold postpones the reload for the lifetime of the page.
+
+When the server process changes (a restart or a deploy), the client dispatches `gsui:serverchanged` with `detail.was`/`detail.now` before reloading:
+
+```js
+window.addEventListener('gsui:serverchanged', () => showToast('Updating…'));
+```
+
+With `ReconnectReloadAfterMs = -1` no reload ever happens, including after a restart. The page then stays connected but unpatchable -- responses target ids the new process never generated -- so handle `gsui:serverchanged` yourself if you disable reloads.
 
 ---
 

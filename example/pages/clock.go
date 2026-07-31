@@ -15,7 +15,9 @@ func Clock(ctx *r.Context) *r.Node {
 		r.Div("text-2xl font-bold").Text("Live Clock (WS patches)"),
 		r.Div("text-gray-600").Text("Updates via WebSocket patches every second."),
 		r.Div("font-mono text-3xl bg-white p-4 border rounded").ID("live-clock").Text(timeStr).
-			JS("__ws.callSilent('clock.start')"),
+			// subscribe (not callSilent) so the push loop is re-armed after a
+			// reconnect, which no longer reloads the page.
+			JS("__ws.subscribe('clock.start')"),
 	)
 }
 

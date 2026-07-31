@@ -50,7 +50,7 @@ ActionHandler → JS string       ←→  WebSocket (__ws)
 - **Server-centric** -- all DOM trees built in Go, compiled to JavaScript
 - **WebSocket-only interactivity** -- click/submit events call server handlers, responses are JS strings
 - **Partial updates** -- replace, append, prepend, or innerHTML specific DOM targets
-- **No client framework** -- the client is a ~120-line WS connector with offline overlay and auto-reconnect
+- **No client framework** -- the client is a small WS connector with keep-alive, silent reconnect, and a non-blocking offline badge
 - **Tailwind CSS** -- loaded via browser CDN (`@tailwindcss/browser@4`)
 - **Dark mode** -- built-in theme system (System/Light/Dark) with `ThemeSwitcher` component
 - **Localization** -- per-component locale structs; English by default, override only what you need
@@ -193,7 +193,7 @@ Each component has its own locale type (`TableLocale`, `CollateLocale`, `Confirm
 - **textContent** -- `Text()` uses `textContent`, not `innerHTML`, preventing XSS
 - **Panic recovery** -- server panics surface as error toasts
 - **WebSocket-only** -- no form submissions or XHR
-- **Auto-reconnect** -- offline overlay with automatic retry
+- **Auto-reconnect** -- keep-alive ping, backoff retry, offline badge only after a grace window, and no page reload while `__ws.hold()` guards in-progress work; a restarted server is detected and the stale page resyncs
 
 ## License
 

@@ -594,8 +594,11 @@ func Redirect(url string) string {
 // SetLocation returns JS that updates the browser URL without a page reload
 // using history.pushState. Use this in WS actions to keep the address bar
 // in sync with the visible content.
+// It also drops the previous page's WebSocket subscriptions (see
+// __ws.subscribe) so a later reconnect does not re-arm Push loops that target
+// elements the navigation removed.
 func SetLocation(url string) string {
-	return fmt.Sprintf("history.pushState(null,'','%s');", escJS(url))
+	return fmt.Sprintf("history.pushState(null,'','%s');if(window.__ws&&__ws.pageChanged)__ws.pageChanged();", escJS(url))
 }
 
 // Back returns JS that navigates back in browser history (history.back()).

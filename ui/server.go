@@ -71,6 +71,40 @@ type App struct {
 	// This is a trusted raw API: never pass untrusted/user-controlled input to it.
 	HTMLHead []string
 
+	// OfflineGraceMs is how long the WebSocket may stay down before the
+	// "Offline" indicator appears. Short blips (tab wake-ups, proxy hiccups,
+	// congested links during a large upload) reconnect silently within the
+	// grace window and the user never sees anything. Default 3000.
+	// Use -1 to never show the indicator.
+	OfflineGraceMs int
+
+	// ReconnectReloadAfterMs controls the page reload that happens after the
+	// socket comes back. The reload only runs when the outage lasted at least
+	// this long AND no client-side hold is active (see __ws.hold()). Shorter
+	// outages resync silently: queued messages are flushed and a
+	// "gsui:reconnected" event is dispatched so the page can refresh itself
+	// without losing in-page state such as an upload in progress.
+	// Default 15000. Use -1 to never reload.
+	ReconnectReloadAfterMs int
+
+	// KeepAliveMs is the interval of the client-side ping that keeps idle
+	// WebSockets alive through proxies and load balancers that close silent
+	// connections (the common cause of "offline" during long uploads).
+	// Default 25000. Use -1 to disable.
+	KeepAliveMs int
+
+	// InstanceID identifies the process rendering pages. Element ids
+	// (ui.Target()) are random per process, so a page rendered by one process
+	// cannot be patched by another: the client compares this value with the one
+	// announced on every connection and reloads when it changes, which is what
+	// makes a server restart recover instead of leaving a dead-looking UI.
+	//
+	// Defaults to a random per-process id, which is correct for a single
+	// server. Run several replicas behind a load balancer and every reconnect
+	// to a different replica would reload; set the same value (a build or
+	// release id) on all of them so only a real deploy triggers a reload.
+	InstanceID string
+
 	// AllowedOrigins adds browser WebSocket origins allowed to connect to /__ws.
 	// By default, only same-origin requests are accepted; requests without an
 	// Origin header are allowed for non-browser clients. Use "*" to disable
@@ -288,6 +322,11 @@ func (app *App) setupRoutes() {
 		return ""
 	})
 
+	// Built-in __ping action: keep-alive traffic from the client so idle
+	// connections are not dropped by proxies. Sent without an id, so the
+	// empty response is never written back.
+	app.Action("__ping", func(_ *Context) string { return "" })
+
 	// Serve the tiny WS client script
 	app.mux.HandleFunc("GET /__ws.js", app.serveWSClient)
 
@@ -482,6 +521,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <script>%s
+%s
 %s</script>
 
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" data-gsui-style-engine async onload="this.dataset.gsuiLoaded='true'" onerror="this.dataset.gsuiLoaded='error'"></script>
@@ -502,7 +542,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 %s
 </script>
 </body>
-</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
+</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -532,12 +572,62 @@ var wsClientVersion = func() string {
 	return hex.EncodeToString(h[:4])
 }()
 
+// serverInstanceID identifies this server process. Target() IDs are random per
+// process, so a DOM rendered by one process cannot be patched by another: after
+// a restart every generated id in the loaded page is unknown to the new
+// process and its responses silently patch nothing. The client compares the id
+// baked into the page with the one announced on each connection and reloads
+// when they differ, which is the only way to resync a stale DOM.
+var serverInstanceID = Target()
+
+// instance returns the configured instance id, or this process's random one.
+func (app *App) instance() string {
+	app.mu.RLock()
+	id := app.InstanceID
+	app.mu.RUnlock()
+	if id == "" {
+		return serverInstanceID
+	}
+	return id
+}
+
+// helloFrame is the first frame sent on every connection. It is JSON so the
+// client can tell it apart from executable JS.
+func (app *App) helloFrame() string {
+	return fmt.Sprintf(`{"__hello":%q}`, app.instance())
+}
+
+// wsConfigJS emits the connection-resilience settings read by the client
+// script. It is inlined in <head> (the client script itself stays static and
+// long-cached). Zero values fall back to the documented defaults.
+func (app *App) wsConfigJS() string {
+	app.mu.RLock()
+	grace, reloadAfter, keepAlive := app.OfflineGraceMs, app.ReconnectReloadAfterMs, app.KeepAliveMs
+	app.mu.RUnlock()
+
+	if grace == 0 {
+		grace = 3000
+	}
+	if reloadAfter == 0 {
+		reloadAfter = 15000
+	}
+	if keepAlive == 0 {
+		keepAlive = 25000
+	}
+	return fmt.Sprintf(`window.__gsuiCfg={grace:%d,reloadAfter:%d,keepAlive:%d,inst:'%s'};`, grace, reloadAfter, keepAlive, escJS(app.instance()))
+}
+
 // wsStubJS installs a queuing stub for __ws synchronously in <head>. The real
 // client (/__ws.js) loads with defer and therefore runs AFTER the inline body
 // script, so page-load JS (Node.JS blocks, ctx.HeadJS) that calls __ws would
 // otherwise hit "__ws is not defined". The stub queues those calls; the real
 // client replays and replaces it when it initializes.
-const wsStubJS = `window.__ws||(window.__ws={__q:[],call:function(){this.__q.push(['call',arguments])},callSilent:function(){this.__q.push(['callSilent',arguments])},notfound:function(){this.__q.push(['notfound',arguments])}});`
+// Sending methods queue and are replayed; state methods answer immediately so
+// they are never replayed twice. hold() uses the shared window.__gsuiHolds
+// counter, so a hold taken before the client loads still suppresses the
+// reconnect reload and its release function keeps working afterwards.
+const wsStubJS = `window.__gsuiHolds=window.__gsuiHolds||0;
+window.__ws||(window.__ws={__q:[],call:function(){this.__q.push(['call',arguments])},callSilent:function(){this.__q.push(['callSilent',arguments])},subscribe:function(){this.__q.push(['subscribe',arguments])},unsubscribe:function(){this.__q.push(['unsubscribe',arguments])},notfound:function(){this.__q.push(['notfound',arguments])},pageChanged:function(){},hold:function(){window.__gsuiHolds++;var r=false;return function(){if(r)return;r=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1)}},holds:function(){return window.__gsuiHolds},connected:function(){return false},offline:function(){return false},reconnect:function(){}});`
 
 // themeInitJS runs synchronously in <head> before the body renders to
 // prevent FOUC. It reads the stored theme from localStorage, applies the
@@ -605,18 +695,24 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}`
 
 // wsClientJS is the entire client-side framework.
 // It connects to the WS endpoint, sends action calls, executes
-// whatever JS string the server sends back, and shows an offline
-// overlay when the WebSocket disconnects.
+// whatever JS string the server sends back, and shows a non-blocking
+// offline badge when the WebSocket stays down past the grace window.
 const wsClientJS = `var __wsPre=window.__ws;
+var __gsuiCfg=window.__gsuiCfg||{};
+function __gsuiOpt(k,d){var v=__gsuiCfg[k];return typeof v==='number'?v:d}
 var __offline=(function(){
-  var el=null;
-  function show(){
-    if(document.getElementById('__offline__')){el=document.getElementById('__offline__');return;}
-    try{document.body.classList.add('pointer-events-none');}catch(_){}
+  var timer=0,shown=false,removeTimer=0,el=null;
+  function build(){
+    // A badge from a previous outage may still be fading out; cancel its
+    // pending removal and fade it back in instead of leaving a dead node.
+    if(removeTimer){clearTimeout(removeTimer);removeTimer=0;}
+    if(el&&el.parentNode){el.style.opacity='1';return;}
     var o=document.createElement('div');o.id='__offline__';
-    o.style.cssText='position:fixed;inset:0;z-index:60;pointer-events:none;opacity:0;transition:opacity 160ms ease-out;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);background:'+(document.documentElement.classList.contains('dark')?'rgba(0,0,0,0.3)':'rgba(255,255,255,0.18)');
+    // Badge only: never covers the page and never blocks input, so work in
+    // progress (uploads, typing, drag & drop) keeps running while offline.
+    o.style.cssText='position:fixed;top:12px;left:12px;z-index:60;pointer-events:none;opacity:0;transition:opacity 160ms ease-out';
     var b=document.createElement('div');
-    b.className='absolute top-3 left-3 flex items-center gap-2 rounded-full px-3 py-1 text-white shadow-lg ring-1 ring-white/30';
+    b.className='flex items-center gap-2 rounded-full px-3 py-1 text-white shadow-lg ring-1 ring-white/30';
     b.style.background='linear-gradient(135deg,#ef4444,#ec4899)';
     var dot=document.createElement('span');dot.className='inline-block h-2.5 w-2.5 rounded-full bg-white/95 animate-pulse';
     var lbl=document.createElement('span');lbl.className='font-semibold tracking-wide';lbl.style.color='#fff';lbl.textContent='Offline';
@@ -626,19 +722,64 @@ var __offline=(function(){
     requestAnimationFrame(function(){o.style.opacity='1';});
     el=o;
   }
-  function hide(){
-    try{document.body.classList.remove('pointer-events-none');}catch(_){}
-    var o=document.getElementById('__offline__');if(!o){el=null;return;}
-    try{o.style.opacity='0';}catch(_){}
-    setTimeout(function(){try{if(o&&o.parentNode){o.parentNode.removeChild(o);}}catch(_){}},150);
-    el=null;
+  // Only surface the badge once the outage outlives the grace window.
+  function schedule(){
+    var grace=__gsuiOpt('grace',3000);
+    if(grace<0||shown||timer)return;
+    timer=setTimeout(function(){timer=0;shown=true;build()},grace);
   }
-  return{show:show,hide:hide};
+  function hide(){
+    if(timer){clearTimeout(timer);timer=0;}
+    shown=false;
+    if(!el)return;
+    var o=el;
+    try{o.style.opacity='0';}catch(_){}
+    if(removeTimer)clearTimeout(removeTimer);
+    // el is kept until the node is actually gone so a new outage inside the
+    // fade window reuses this element instead of orphaning it.
+    removeTimer=setTimeout(function(){
+      removeTimer=0;
+      try{if(o&&o.parentNode){o.parentNode.removeChild(o);}}catch(_){}
+      if(el===o)el=null;
+    },150);
+  }
+  return{schedule:schedule,hide:hide,visible:function(){return shown}};
 })();
 var __ws=(function(){
   var ws,q=[],ready=false,seq=0,inflight={},loaderEl=null,loaderTimer=0,hadClose=false,backoff=500;
+  var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],epoch=0,api;
+  var inst=typeof __gsuiCfg.inst==='string'?__gsuiCfg.inst:'',serverChanged=false,pendingReload='';
+  // Holds live on window so the pre-client stub and the real client share one
+  // counter across the stub handover.
+  if(typeof window.__gsuiHolds!=='number')window.__gsuiHolds=0;
+  // Reload the page, unless in-progress work (uploads, wizards, unsaved forms)
+  // holds the connection: then wait and reload when the last hold is released.
+  // reloadAfter<0 disables page reloads entirely.
+  function requestReload(reason){
+    if(__gsuiOpt('reloadAfter',15000)<0)return false;
+    if(window.__gsuiHolds>0){
+      if(pendingReload)return false;
+      pendingReload=reason;
+      try{window.dispatchEvent(new CustomEvent('gsui:reloadpending',{detail:{reason:reason}}))}catch(_){}
+      return false;
+    }
+    try{location.reload();return true}catch(_){return false}
+  }
+  // Every connection starts with the server announcing its process id. Element
+  // ids (ui.Target()) are random per process, so a page rendered by a previous
+  // process holds ids the new one never generated: its responses would patch
+  // elements that do not exist and the UI would look dead. Reloading is the
+  // only way to resync, so a restarted server is treated like a long outage.
+  function onHello(id){
+    if(serverChanged||!inst||!id||id===inst)return;
+    serverChanged=true;
+    try{window.dispatchEvent(new CustomEvent('gsui:serverchanged',{detail:{was:inst,now:id}}))}catch(_){}
+    requestReload('server-restart');
+  }
   function showLoader(){
-    if(loaderEl||loaderTimer)return;
+    // While disconnected the request is only queued; the offline badge already
+    // says so, and a blocking loader would lock the page for the whole outage.
+    if(!ready||loaderEl||loaderTimer)return;
     loaderTimer=setTimeout(function(){
       loaderTimer=0;
       var o=document.createElement('div');
@@ -662,24 +803,129 @@ var __ws=(function(){
     if(loaderTimer){clearTimeout(loaderTimer);loaderTimer=0;}
     if(loaderEl){loaderEl.style.opacity='0';var el=loaderEl;loaderEl=null;setTimeout(function(){try{if(el&&el.parentNode)el.parentNode.removeChild(el)}catch(_){}},160);}
   }
+  function startPing(){
+    stopPing();
+    var iv=__gsuiOpt('keepAlive',25000);
+    if(iv<0)return;
+    // Idle WebSockets get closed by proxies; a periodic no-op keeps the
+    // connection alive during long client-side work such as file uploads.
+    pingTimer=setInterval(function(){
+      if(!ready||!ws||ws.readyState!==1)return;
+      rawSend(JSON.stringify({act:'__ping',data:{}}));
+    },iv);
+  }
+  function stopPing(){if(pingTimer){clearInterval(pingTimer);pingTimer=0}}
+  // rawSend never throws: readyState can already be CLOSING/CLOSED before the
+  // close event fires, and send() would then throw and lose the message.
+  function rawSend(msg){
+    if(!ws||ws.readyState!==1)return false;
+    try{ws.send(msg);return true}catch(_){return false}
+  }
+  // send() is the single outbound path: deliver now, otherwise queue for the
+  // next open socket. id is tracked only once the message is safely held.
+  function send(msg,id){
+    if(rawSend(msg)){if(id)inflight[id]=true;return true}
+    if(!queue(msg,id))return false;
+    // Queued requests stay tracked so the loader appears once the connection
+    // is back and clears when the reply finally arrives.
+    if(id)inflight[id]=true;
+    return true;
+  }
+  function flush(){
+    // Incremental: a failing send stops the flush without dropping the rest.
+    while(q.length){
+      if(!rawSend(q[0].msg))break;
+      q.shift();
+    }
+  }
+  // markDown is the single place that records "the connection is gone". It
+  // runs from onclose and when a silently dead socket is discovered, so the
+  // bookkeeping is identical either way.
+  function markDown(){
+    if(!ready&&hadClose)return;
+    ready=false;stopPing();
+    // Replies for messages that were already on the wire will never arrive;
+    // requests still sitting in the queue keep their tracking.
+    inflight={};q.forEach(function(it){if(it.id)inflight[it.id]=true});
+    hideLoader();
+    document.querySelectorAll('button.gsui-busy').forEach(function(b){b.disabled=false;b.classList.remove('gsui-busy','opacity-60','cursor-wait')});
+    if(!downSince)downSince=Date.now();
+    __offline.schedule();hadClose=true;
+  }
+  function reconnectNow(){
+    // readyState is authoritative: a socket can be dead while the ready flag
+    // is still true because the close event has not been delivered yet
+    // (backgrounded mobile tabs do this routinely).
+    if(ws&&(ws.readyState===0||ws.readyState===1))return;
+    markDown();
+    // Do not reset the backoff here: repeated tab switches or online events
+    // would otherwise hammer a server that is actually down. Just bring the
+    // next scheduled attempt forward, at most once per second.
+    var wait=1000-(Date.now()-lastAttempt);
+    if(wait>0){
+      // Still inside the cooldown. Schedule the attempt for when it expires
+      // rather than dropping it, otherwise a socket that died within a second
+      // of connecting waits for an outside event to recover.
+      if(retryTimer)return;
+      retryTimer=setTimeout(function(){retryTimer=0;connect()},wait);
+      return;
+    }
+    if(retryTimer){clearTimeout(retryTimer);retryTimer=0}
+    connect();
+  }
   function connect(){
-    ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/__ws');
-    ws.onopen=function(){
+    retryTimer=0;
+    if(ws&&(ws.readyState===0||ws.readyState===1))return;
+    lastAttempt=Date.now();
+    // sock is captured per attempt: handlers of an abandoned socket must not
+    // touch the state of a newer one (that spawned parallel connections).
+    var sock=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/__ws');
+    ws=sock;
+    sock.onopen=function(){
+      if(ws!==sock){try{sock.close()}catch(_){}return;}
       ready=true;backoff=500;
+      if(retryTimer){clearTimeout(retryTimer);retryTimer=0}
       __offline.hide();
-      q.forEach(function(m){ws.send(m)});q=[];
-      if(hadClose){hadClose=false;try{location.reload();return;}catch(_){}}
+      startPing();
+      // Re-arm server-side subscriptions (Push loops) that died with the old
+      // connection before replaying queued work, so live regions are running
+      // again by the time those actions execute. Without this a silent
+      // reconnect leaves live regions frozen.
+      subs.forEach(function(s){rawSend(JSON.stringify({act:s.act,data:s.data}))});
+      flush();
+      if(Object.keys(inflight).length)showLoader();
+      if(hadClose){
+        hadClose=false;
+        var outage=downSince?Date.now()-downSince:0;downSince=0;
+        var after=__gsuiOpt('reloadAfter',15000),holds=window.__gsuiHolds;
+        // Reload only after a long outage. While the page holds the connection
+        // the reload is deferred until the work finishes, never dropped.
+        if(after>=0&&outage>=after&&requestReload('long-outage'))return;
+        try{window.dispatchEvent(new CustomEvent('gsui:reconnected',{detail:{downMs:outage,holds:holds}}))}catch(_){
+          try{window.dispatchEvent(new Event('gsui:reconnected'))}catch(__){}
+        }
+      }
     };
-    ws.onmessage=function(e){var m;try{m=JSON.parse(e.data)}catch(_){}if(m&&typeof m==='object'&&m.__r){if(inflight[m.id]){delete inflight[m.id];hideLoader()}if(m.js){try{new Function(m.js)()}catch(err){console.error('ws exec error:',err,m.js)}}document.querySelectorAll('button.gsui-busy').forEach(function(b){b.disabled=false;b.classList.remove('gsui-busy','opacity-60','cursor-wait')})}else{try{new Function(e.data)()}catch(err){console.error('ws exec error:',err,e.data)}}try{window.dispatchEvent(new Event('gsui:updated'))}catch(_){}};
-    ws.onclose=function(){ready=false;inflight={};hideLoader();document.querySelectorAll('button.gsui-busy').forEach(function(b){b.disabled=false;b.classList.remove('gsui-busy','opacity-60','cursor-wait')});__offline.show();hadClose=true;var d=Math.min(10000,backoff)*(0.75+Math.random()*0.5);backoff=Math.min(10000,backoff*2);setTimeout(connect,d)};
-    ws.onerror=function(){ws.close()};
+    sock.onmessage=function(e){if(ws!==sock)return;var m;try{m=JSON.parse(e.data)}catch(_){}if(m&&typeof m==='object'&&m.__hello){onHello(m.__hello);return}epoch++;if(m&&typeof m==='object'&&m.__r){if(inflight[m.id]){delete inflight[m.id];hideLoader()}if(m.js){try{new Function(m.js)()}catch(err){console.error('ws exec error:',err,m.js)}}document.querySelectorAll('button.gsui-busy').forEach(function(b){b.disabled=false;b.classList.remove('gsui-busy','opacity-60','cursor-wait')})}else{try{new Function(e.data)()}catch(err){console.error('ws exec error:',err,e.data)}}try{window.dispatchEvent(new Event('gsui:updated'))}catch(_){}};
+    sock.onclose=function(){
+      if(ws!==sock)return;
+      markDown();
+      var d=Math.min(10000,backoff)*(0.75+Math.random()*0.5);backoff=Math.min(10000,backoff*2);
+      if(retryTimer)clearTimeout(retryTimer);
+      retryTimer=setTimeout(function(){retryTimer=0;connect()},d);
+    };
+    sock.onerror=function(){try{sock.close()}catch(_){}};
   }
   connect();
+  // Retry immediately when the browser regains connectivity or the tab is
+  // brought back, instead of waiting out the backoff.
+  window.addEventListener('online',reconnectNow);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)reconnectNow()});
   window.addEventListener('popstate',function(){
-    var id=++seq,msg=JSON.stringify({act:'__nav',data:{url:location.pathname+location.search},id:id});
-    inflight[id]=true;
-    showLoader();
-    if(ready)ws.send(msg);else queue(msg);
+    var id=++seq;
+    // A navigation invalidates the previous page's subscriptions.
+    subs=[];
+    if(send(JSON.stringify({act:'__nav',data:{url:location.pathname+location.search},id:id}),id))showLoader();
   });
   function collectValue(id,d){
     var el=document.getElementById(id);
@@ -714,28 +960,68 @@ var __ws=(function(){
     if(form){btn=form.querySelector('button[type=submit]')||form.querySelector('button:not([type])')||form.querySelector('button');if(!btn&&form.id)btn=document.querySelector('button[form="'+form.id+'"]')}else{var p=t.parentElement;while(p&&p!==document.body){btn=p.querySelector('button');if(btn)break;p=p.parentElement}}
     if(btn){e.preventDefault();btn.click()}
   });
-  function queue(msg){if(q.length>=100){console.warn('gsui: WebSocket queue full; dropping message');return}q.push(msg)}
-  return{
+  function queue(msg,id){
+    if(q.length>=100){console.warn('gsui: WebSocket queue full; dropping message');return false}
+    q.push({msg:msg,id:id||0});return true;
+  }
+  api={
+    // hold() marks critical in-page work (file upload, multi-step form).
+    // While at least one hold is active, a reconnect never reloads the page,
+    // so the work is not destroyed. Call the returned function when done.
+    hold:function(){
+      window.__gsuiHolds++;var released=false;
+      return function(){
+        if(released)return;released=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1);
+        // A reload deferred by this hold runs as soon as the last one is gone.
+        if(window.__gsuiHolds===0&&pendingReload)requestReload(pendingReload);
+      };
+    },
+    holds:function(){return window.__gsuiHolds},
+    connected:function(){return ready&&!!ws&&ws.readyState===1},
+    offline:function(){return __offline.visible()},
+    reconnect:reconnectNow,
+    // subscribe() is callSilent for actions that start a server-side Push
+    // loop. The call is repeated on every reconnect, so live regions survive
+    // an outage without reloading the page. Dropped on navigation.
+    //
+    // It deliberately does not use the send queue: while disconnected the
+    // registration alone is enough, and queueing as well would deliver the
+    // call twice on reconnect (once from the queue, once from the replay)
+    // and start two server goroutines.
+    subscribe:function(act,data){
+      var d=Object.assign({},data||{}),key=act+'|'+JSON.stringify(d);
+      subs=subs.filter(function(s){return s.key!==key});
+      subs.push({act:act,data:d,key:key,epoch:epoch});
+      rawSend(JSON.stringify({act:act,data:d}));
+    },
+    unsubscribe:function(act){
+      subs=subs.filter(function(s){return s.act!==act});
+    },
+    // pageChanged() drops subscriptions belonging to superseded pages. It is
+    // emitted by SetLocation/Response.Navigate. Subscriptions registered by
+    // the JS of the current server message share its epoch and survive, so
+    // the call works regardless of whether the new page's content JS runs
+    // before or after the pushState in the same response.
+    pageChanged:function(){
+      subs=subs.filter(function(s){return s.epoch>=epoch});
+    },
     call:function(act,data,collect){
       var d=Object.assign({},data||{});
       if(collect&&collect.length){
         collect.forEach(function(id){collectValue(id,d)});
       }
-      var id=++seq,msg=JSON.stringify({act:act,data:d,id:id});
-      inflight[id]=true;
-      showLoader();
-      if(ready)ws.send(msg);else queue(msg);
+      var id=++seq;
+      if(send(JSON.stringify({act:act,data:d,id:id}),id))showLoader();
     },
     callSilent:function(act,data){
       var d=Object.assign({},data||{});
-      var msg=JSON.stringify({act:act,data:d});
-      if(ready)ws.send(msg);else queue(msg);
+      send(JSON.stringify({act:act,data:d}));
     },
     notfound:function(id){
-      var msg=JSON.stringify({act:'__notfound',data:{id:id}});
-      if(ready)ws.send(msg);else queue(msg);
+      send(JSON.stringify({act:'__notfound',data:{id:id}}));
     }
   };
+  return api;
 })();
 if(__wsPre&&__wsPre.__q){__wsPre.__q.forEach(function(it){try{__ws[it[0]].apply(__ws,it[1])}catch(e){console.error('gsui: queued ws call failed:',e)}})}`
 
@@ -831,6 +1117,13 @@ func (app *App) handleWS(ws *websocket.Conn) {
 	app.clients[ws] = true
 	app.connStates[ws] = &connState{ctx: pushCtx, cancel: pushCancel}
 	app.mu.Unlock()
+
+	// Announce which process this is. A client whose page was rendered by a
+	// different process holds a DOM full of ids this process never generated,
+	// so it must reload instead of silently patching nothing.
+	if err := app.send(ws, app.helloFrame()); err != nil {
+		log.Printf("gsui: ws hello send error: %v", err)
+	}
 
 	defer func() {
 		app.mu.Lock()

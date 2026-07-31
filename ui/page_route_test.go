@@ -101,7 +101,14 @@ func TestWebSocketNavigationSupportsPagePathValues(t *testing.T) {
 	if err := websocket.Message.Send(ws, message); err != nil {
 		t.Fatalf("send navigation message: %v", err)
 	}
+	// The first frame on every connection announces the server instance.
 	var raw string
+	if err := websocket.Message.Receive(ws, &raw); err != nil {
+		t.Fatalf("receive hello frame: %v", err)
+	}
+	if raw != app.helloFrame() {
+		t.Fatalf("expected hello frame first, got %q", raw)
+	}
 	if err := websocket.Message.Receive(ws, &raw); err != nil {
 		t.Fatalf("receive navigation response: %v", err)
 	}
