@@ -767,7 +767,7 @@ func (f *FormBuilder) buildValidateJS(actionValue string) string {
 	// (the WS client re-enables gsui-busy buttons on the next message),
 	// then call the WS action.
 	b.WriteString("var sb=event.currentTarget;if(sb&&sb.tagName==='BUTTON'&&!sb.disabled){sb.disabled=true;sb.classList.add('gsui-busy','opacity-60','cursor-wait')}")
-	fmt.Fprintf(&b, "__ws.call('%s',d);", escJS(f.actionName))
+	fmt.Fprintf(&b, "__ws.call('%s',d,null,event.currentTarget);", escJS(f.actionName))
 	b.WriteString("})()")
 
 	return b.String()

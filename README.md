@@ -8,6 +8,11 @@ g-sui compiles Go node trees into pure JavaScript. The browser receives raw JS t
 
 Full API documentation: [`docs/documentation.md`](docs/documentation.md)
 
+For SPA-style applications written in Go, start with the
+[server-driven applications documentation](docs/documentation.md#server-driven-applications) and `go run ./example/live`.
+It covers live links, typed actions/forms, region refresh, server-owned views,
+URL-backed tables, shared authorization and cancellable subscriptions.
+
 WebSocket connections are same-origin by default; set `App.AllowedOrigins` for additional trusted origins (or `"*"` to opt out). Tracked calls use reply envelopes so loading state clears even when an action returns no JavaScript.
 
 ## Install

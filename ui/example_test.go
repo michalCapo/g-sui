@@ -75,7 +75,7 @@ func TestElWithOnClick(t *testing.T) {
 	})
 	js := n.ToJS()
 
-	expect(t, js, "addEventListener('click'")
+	expect(t, js, "_bind(e0,'click'")
 	expect(t, js, "__ws.call('counter.increment'")
 	expect(t, js, `"count":0`)
 }

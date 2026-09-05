@@ -42,6 +42,7 @@ type Action struct {
 	Name    string         // e.g. "counter.increment"
 	Data    map[string]any // state payload sent with the call
 	Collect []string       // element IDs whose .value to collect before calling
+	NoQueue bool           // reject while disconnected; enabled by typed actions/live events
 	rawJS   string         // if set, execute client-side JS instead of WS call
 }
 
@@ -360,7 +361,7 @@ func (n *Node) ToJSReplace(targetID string) string {
 	counter := 0
 	var postJS []string
 	root := n.compile(&b, &counter, &postJS)
-	fmt.Fprintf(&b, "_t.replaceWith(%s);", root)
+	fmt.Fprintf(&b, "if(window.__gsuiDispose)__gsuiDispose(_t);_t.replaceWith(%s);", root)
 	for _, js := range postJS {
 		b.WriteString(js)
 	}
@@ -409,7 +410,7 @@ func (n *Node) ToJSInner(targetID string) string {
 	b.WriteString("(function(){")
 	b.WriteString(fmt.Sprintf("var _t=document.getElementById('%s');", escJS(targetID)))
 	b.WriteString(fmt.Sprintf("if(!_t){console.warn('[g-sui] innerHTML: element #%s not found');__ws.notfound('%s');return;}", escJS(targetID), escJS(targetID)))
-	b.WriteString("_t.innerHTML='';")
+	b.WriteString("if(window.__gsuiDispose)Array.from(_t.children).forEach(__gsuiDispose);_t.innerHTML='';")
 	counter := 0
 	var postJS []string
 	root := n.compile(&b, &counter, &postJS)
@@ -429,6 +430,9 @@ const svgNS = "http://www.w3.org/2000/svg"
 // after the root node is inserted into the DOM so that getElementById works.
 // The inSVG flag propagates SVG namespace context to descendants.
 func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG ...bool) string {
+	if *counter == 0 {
+		b.WriteString("function _bind(el,event,fn){(el.__gsuiHandlers||(el.__gsuiHandlers={}))[event]=fn;el.addEventListener(event,fn)}")
+	}
 	varName := fmt.Sprintf("e%d", *counter)
 	*counter++
 
@@ -478,7 +482,7 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 		if action.rawJS != "" {
 			// Client-side only: raw JS, no WS call
 			fmt.Fprintf(b,
-				"%s.addEventListener('%s',function(event){%s});",
+				"_bind(%s,'%s',function(event){%s});",
 				varName, escJS(event), action.rawJS,
 			)
 		} else if len(action.Collect) > 0 {
@@ -497,12 +501,9 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 			if event == "click" || event == "submit" {
 				prevent = "event.preventDefault();"
 			}
-			if event == "click" {
-				busy = "var b=event.currentTarget;if(b&&b.tagName==='BUTTON'&&!b.disabled){b.disabled=true;b.classList.add('gsui-busy','opacity-60','cursor-wait')}"
-			}
 			fmt.Fprintf(b,
-				"%s.addEventListener('%s',function(event){%s%s__ws.call('%s',%s,%s)});",
-				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON), string(collectJSON),
+				"_bind(%s,'%s',function(event){%s%s__ws.call('%s',%s,%s,event.currentTarget,{queue:%t})});",
+				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON), string(collectJSON), !action.NoQueue,
 			)
 		} else {
 			dataJSON, err := json.Marshal(action.Data)
@@ -515,12 +516,9 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 			if event == "click" || event == "submit" {
 				prevent = "event.preventDefault();"
 			}
-			if event == "click" {
-				busy = "var b=event.currentTarget;if(b&&b.tagName==='BUTTON'&&!b.disabled){b.disabled=true;b.classList.add('gsui-busy','opacity-60','cursor-wait')}"
-			}
 			fmt.Fprintf(b,
-				"%s.addEventListener('%s',function(event){%s%s__ws.call('%s',%s)});",
-				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON),
+				"_bind(%s,'%s',function(event){%s%s__ws.call('%s',%s,null,event.currentTarget,{queue:%t})});",
+				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON), !action.NoQueue,
 			)
 		}
 	}
@@ -598,7 +596,7 @@ func Redirect(url string) string {
 // __ws.subscribe) so a later reconnect does not re-arm Push loops that target
 // elements the navigation removed.
 func SetLocation(url string) string {
-	return fmt.Sprintf("history.pushState(null,'','%s');if(window.__ws&&__ws.pageChanged)__ws.pageChanged();", escJS(url))
+	return fmt.Sprintf("history.pushState(null,'','%s');window.__gsuiPage=location.pathname+location.search;if(window.__ws&&__ws.pageChanged)__ws.pageChanged();", escJS(url))
 }
 
 // Back returns JS that navigates back in browser history (history.back()).
@@ -614,7 +612,7 @@ func SetTitle(title string) string {
 
 // RemoveEl returns JS that removes an element by ID.
 func RemoveEl(id string) string {
-	return fmt.Sprintf("(function(){var e=document.getElementById('%s');if(!e){console.warn('[g-sui] remove: element #%s not found');__ws.notfound('%s');return;}e.remove()})();", escJS(id), escJS(id), escJS(id))
+	return fmt.Sprintf("(function(){var e=document.getElementById('%s');if(!e){console.warn('[g-sui] remove: element #%s not found');__ws.notfound('%s');return;}if(window.__gsuiDispose)__gsuiDispose(e);e.remove()})();", escJS(id), escJS(id), escJS(id))
 }
 
 // SetText returns JS that sets the textContent of an element by ID.

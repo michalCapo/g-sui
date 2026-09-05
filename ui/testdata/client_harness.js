@@ -30,7 +30,7 @@ function makeEl(tag) {
     appendChild(c) { c.parentNode = el; el.children.push(c); return c; },
     removeChild(c) { el.children = el.children.filter(x => x !== c); c.parentNode = null; },
     querySelector: () => null, querySelectorAll: () => [],
-    addEventListener() {}, getAttribute: () => null, setAttribute() {},
+    addEventListener() {}, getAttribute: () => null, setAttribute() {}, removeAttribute() {},
   };
   return el;
 }
@@ -125,6 +125,32 @@ function makeEnv() {
 }
 
 const tests = {
+  async repliesOnlyReleaseTheirOwnButton() {
+    const env=makeEnv(), ws=env.run({grace:-1,reloadAfter:-1,keepAlive:-1});
+    env.latest().accept();
+    const a=makeEl('button'),b=makeEl('button');
+    const first=ws.call('a',{},null,a), second=ws.call('b',{},null,b);
+    env.latest().deliver(JSON.stringify({__r:1,id:first,js:''}));
+    check('first button released',a.disabled===false);
+    check('second stays disabled',b.disabled===true);
+    env.latest().deliver(JSON.stringify({__r:1,id:second,js:''}));
+    check('second released on its reply',b.disabled===false);
+  },
+  async stalePageRepliesAreIgnored() {
+    const env=makeEnv(),ws=env.run({grace:-1,reloadAfter:-1,keepAlive:-1});
+    env.latest().accept();
+    const id=ws.call('old');
+    env.sandbox.window.__gsuiVersion=2;
+    env.latest().deliver(JSON.stringify({__r:1,id,version:1,js:'window.stalePatch=true'}));
+    check('old page reply ignored',!env.sandbox.window.stalePatch);
+  },
+  async unsubscribeNotifiesServer() {
+    const env=makeEnv(),ws=env.run({grace:-1,reloadAfter:-1,keepAlive:-1});
+    env.latest().accept();
+    ws.subscribe('clock',{id:'a'});ws.unsubscribe('clock',{id:'a'});
+    const message=JSON.parse(env.latest().sent.at(-1));
+    check('unsubscribe goes over wire',message.act==='__unsubscribe'&&message.data.key==='clock|{"id":"a"}');
+  },
   // A socket that died silently must not let its late close event spawn a
   // second live connection.
   async staleSocketDoesNotSpawnParallelConnections() {

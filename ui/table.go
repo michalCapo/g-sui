@@ -129,6 +129,8 @@ type ColumnFilter struct {
 // search, pagination, sorting indicators, export support, and per-column filtering.
 // Data fetching is delegated to user-defined WS actions.
 type DataTable[T any] struct {
+	rowKey      func(*T) string
+	hideExport  bool
 	id          string
 	heads       []tableHead
 	fields      []tableField[T]
@@ -529,6 +531,10 @@ func (dt *DataTable[T]) RowOffset(offset int) *DataTable[T] {
 	dt.rowOffset = offset
 	return dt
 }
+
+// RowKey preserves row identity during morphs and sorting. Keys must be unique
+// within the table. Use a database record ID, not the current row index.
+func (dt *DataTable[T]) RowKey(key func(*T) string) *DataTable[T] { dt.rowKey = key; return dt }
 
 // DataTableClass sets the wrapper div's CSS classes.
 func (dt *DataTable[T]) DataTableClass(cls string) *DataTable[T] {
@@ -935,9 +941,15 @@ func (dt *DataTable[T]) buildRows(data []*T) []*Node {
 		}
 
 		tr := Tr(rowCls)
+		if dt.rowKey != nil {
+			tr.Key(dt.rowKey(item))
+		}
 
 		if hasDetail {
 			detailID := fmt.Sprintf("%s-detail-%d", dt.id, dt.rowOffset+i)
+			if dt.rowKey != nil {
+				detailID = dt.id + "-detail-key-" + dt.rowKey(item)
+			}
 			toggleJS := fmt.Sprintf(
 				"(function(){if(event.target.closest('button,a,input,select,textarea,label'))return;"+
 					"var d=document.getElementById('%s');"+
@@ -1237,7 +1249,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 	footerItems := make([]*Node, 0, 4)
 
 	// Export buttons (bottom-left)
-	if action != "" {
+	if action != "" && !dt.hideExport {
 		exportBtnCls := "inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer " +
 			"border border-gray-300 dark:border-gray-600 " +
 			"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
@@ -1274,9 +1286,9 @@ func (dt *DataTable[T]) renderFooter() *Node {
 	// Reset paging button (when user has loaded more than first page)
 	if dt.page > 1 && action != "" {
 		resetBtn := Button(
-			"inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-md cursor-pointer " +
-				"border border-gray-300 dark:border-gray-600 " +
-				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 " +
+			"inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-md cursor-pointer "+
+				"border border-gray-300 dark:border-gray-600 "+
+				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors",
 		).Attr("aria-label", "Reset pagination").Text("×").OnClick(JS(dt.resetPagingJS()))
 		footerItems = append(footerItems, resetBtn)

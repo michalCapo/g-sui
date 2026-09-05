@@ -368,7 +368,7 @@ func NavTo(url string, content func() *r.Node) r.ActionHandler {
 	return func(ctx *r.Context) string {
 		return r.NewResponse().
 			Inner(ContentID, content()).
-			Navigate(url).
+			Add(r.SetLocation(url)).
 			Build()
 	}
 }

@@ -32,6 +32,7 @@
 20. [Examples](#examples)
 21. [Release](#release)
 22. [API Reference](#api-reference)
+23. [Server-driven Applications](#server-driven-applications)
 
 ---
 
@@ -240,7 +241,7 @@ func NavTo(url string, content func() *r.Node) r.ActionHandler {
     return func(ctx *r.Context) string {
         return r.NewResponse().
             Inner(ContentID, content()).
-            Navigate(url).
+            Add(r.SetLocation(url)).
             Build()
     }
 }
@@ -276,7 +277,7 @@ func main() {
 | Scenario | What happens |
 |----------|-------------|
 | Full page load (GET) | `app.Page` handler returns `layout(pageContent)` — the entire page including shell |
-| SPA navigation (button click) | `NavTo` swaps only the `ContentID` element's innerHTML via `Inner()` and updates the URL with `Navigate()` |
+| SPA navigation (button click) | Legacy `NavTo` swaps `ContentID` via `Inner()` and updates the URL with `SetLocation()`. For new apps use `NavLink` and built-in layouts; see [server-driven apps](#server-driven-applications). |
 | Browser back/forward | The built-in `__nav` action fires, but since no `app.Layout()` is registered, it clears `document.body` and re-renders the full page tree |
 
 This pattern is used by the `example/` application. See `example/main.go` and `example/pages/routes.go` for the complete implementation.
@@ -383,7 +384,7 @@ Sets up HTTP handlers (page routes, WebSocket endpoint at `/__ws`, client script
 | Field | Type | Description |
 |-------|------|-------------|
 | `Request` | `*http.Request` | The original HTTP request (nil for WS actions) |
-| `Session` | `map[string]any` | Session data store |
+| `Session` | `map[string]any` | Connection-local scratch data; resets on reconnect. Not an authentication store. |
 | `PathParams` | `map[string]string` | URL path parameters |
 | `Query` | `map[string]string` | URL query parameters |
 
@@ -732,7 +733,7 @@ app.Action("invoice.delete", func(ctx *ui.Context) string {
 | `Append(parentID, node)` | Append child |
 | `Remove(id)` | Remove element |
 | `Toast(variant, message)` | Show notification |
-| `Navigate(url)` | Update URL (pushState) |
+| `Navigate(url)` | Load the destination page and update history; use `Add(SetLocation(url))` for address-only updates. |
 | `Back()` | Browser back |
 | `Build() string` | Join all parts into JS string |
 
@@ -1639,7 +1640,7 @@ Brief disconnects are invisible. The client keeps the page fully usable while th
 | Queued calls | Actions invoked while offline are queued (up to 100) and flushed on reconnect. The blocking loader is suppressed while disconnected. |
 | Subscriptions | `window.__ws.subscribe(act, data)` re-sends the call on every reconnect, so server-side `Push` loops are re-armed. Identical registrations are deduplicated, and the call is never queued (that would deliver it twice on reconnect). `__ws.unsubscribe(act)` drops one. |
 | Server restart | Every connection starts with the server announcing its instance id. Element ids (`ui.Target()`) are random per process, so a page rendered by an earlier process can never be patched by a new one: the client detects the change and reloads, deferring the reload while a hold is active. Set `App.InstanceID` to a shared build id when running multiple replicas, otherwise reconnecting to a different replica reloads too. |
-| Subscription lifetime | A subscription belongs to the page that registered it. `popstate` and `SetLocation`/`Response.Navigate` drop the previous page's subscriptions, so a reconnect never re-arms a `Push` loop whose target element is gone. (That matters: a push to a missing element makes the client send `__notfound`, which cancels *every* push loop on that connection.) |
+| Subscription lifetime | Live navigation cancels the old page's subscriptions. `Node.Subscribe` also cancels on removal. A missing target cancels only its sending subscription. See [server-driven apps](#server-driven-applications). |
 
 **Migration note.** A dropped connection cancels the push context server-side, so any goroutine feeding a live region dies with it. Previously the reload-on-reconnect restarted those loops as a side effect. Now that short outages no longer reload, actions that start a `Push` loop must be invoked with `__ws.subscribe('clock.start')` instead of `__ws.callSilent('clock.start')` -- otherwise the live region freezes after the first blip. One-shot actions stay on `callSilent`; they are never replayed.
 
@@ -1892,3 +1893,282 @@ go get github.com/michalCapo/g-sui@v1.001
 | `SkeletonComponent()` | `*Node` | Component skeleton |
 | `SkeletonPage()` | `*Node` | Page skeleton |
 | `SkeletonForm()` | `*Node` | Form skeleton |
+
+---
+
+## Server-driven applications
+
+The Go server owns application state and renders nodes. The browser runtime
+handles navigation, keyed DOM updates, forms, focus and subscriptions. Tailwind
+loading, theme configuration and the existing Node/JavaScript renderer are unchanged.
+
+Run the complete example:
+
+```sh
+go run ./example/live
+## http://127.0.0.1:1425
+```
+
+### Pages and navigation
+
+Register each page once. Use the built-in layout for a persistent application shell:
+
+```go
+app := ui.NewApp()
+app.Layout(func(ctx *ui.Context) *ui.Node {
+    return ui.Div().Render(
+        ui.Nav().Render(ui.NavLink("/projects").Text("Projects")),
+        ui.Main().ID("__content__"),
+    )
+})
+app.Page("/projects", projectsPage)
+```
+
+`NavLink` produces a real anchor. Normal clicks perform live navigation;
+modified clicks, downloads, external links and `target="_blank"` retain browser
+behavior. Ordinary `A().Attr("href", ...)` links still use HTTP navigation.
+
+| Operation | Behavior |
+| --- | --- |
+| `ui.Navigate(url)` / `Result.Navigate(url)` / `Response.Navigate(url)` | Load a page, cancel its predecessor, then update history and focus. |
+| `ui.PatchURL(url, replace)` | Rerender the current route with new URL parameters, preserving its live view and scroll. |
+| `ui.Redirect(url)` | Full HTTP navigation, including cookies and HTTP middleware responses. |
+| `ui.SetLocation(url)` | Low-level address update only, for legacy code that already replaced content. |
+
+On `NavLink`, `Attr("data-gsui-patch", "")` selects PatchURL behavior and
+`Attr("data-gsui-replace", "")` replaces the history entry. A patch to another
+route falls back to HTTP. Unknown, denied and redirecting live destinations also
+fall back to HTTP so the address, status and visible page agree.
+
+`Node.Title("Projects")` updates the document title. `App.Title` remains the
+initial HTML title. Back/Forward rerenders the destination and restores its saved
+scroll position. Normal navigation focuses a heading (or the content container).
+
+**Migration:** `Response.Navigate` now actually loads the route. If an old action
+already does `Inner(...).Navigate(url)`, change it to `Inner(...).Add(ui.SetLocation(url))`,
+or replace the whole action with navigation. The original showcase uses the first
+option. Prefer `NavLink` and `app.Layout` for new applications.
+
+### Authorization and identity
+
+Install route middleware through `app.Use` **before** `Handler` or `Listen`:
+
+```go
+app.Use(requireSession) // func(http.Handler) http.Handler
+app.Identity = currentUser // func(*http.Request) (any, error)
+app.Authorize = func(ctx *ui.Context, action string) error {
+    return checkAccess(ctx.User(), ctx.Request.URL.Path, action)
+}
+```
+
+`Use` applies to initial pages and resolves the destination for live navigation,
+region refresh and page actions. Middleware-added request context values survive
+route resolution. `Authorize` runs with an empty action for page rendering and
+the action name for user events. `Identity` is resolved again for every action:
+validate expiry/revocation in your session store, not only at WebSocket upgrade.
+
+Wrapping `app.Handler()` externally cannot make path-based middleware run again
+inside a WebSocket. Move that protection to `Use`/`Authorize`. Actions are globally
+registered: authorizing a public page alone does not authorize an unrelated action.
+Check action and object permissions on the server. Payloads, route parameters,
+DOM IDs and client page versions are not authentication credentials.
+
+An open WebSocket has its handshake cookies. Login, logout or cookie changes
+should use an HTTP endpoint and full redirect. Middleware must not depend on
+setting a cookie during a live action.
+
+### Typed actions and region refresh
+
+```go
+type RenameProject struct {
+    ID   string `json:"id"`
+    Name string `json:"name"`
+}
+
+rename := ui.RegisterAction(app, "project.rename",
+    func(ctx *ui.Context, input RenameProject) (ui.Result, error) {
+        if err := projects.Rename(ctx.Context(), ctx.User(), input); err != nil {
+            return ui.Result{}, err
+        }
+        return ui.Refresh("project").Toast("Project renamed"), nil
+    },
+)
+
+// In a page:
+ui.Region("project", renderProject(project))
+ui.Button().Text("Rename").OnClick(rename.Call(RenameProject{ID: "42", Name: "New name"}))
+```
+
+`Refresh` reruns the current page renderer and morphs just the named regions.
+Keep rendering free of mutations and use stable region IDs. The zero `Result`
+means success without a DOM update. Other effects include `Morph`, `Remove`,
+`Navigate` and `PatchURL`. Errors produce a generic user message and a server log.
+The existing string-returning action API remains available.
+
+Typed actions and live events reject new calls while disconnected. Requests
+already sent are not automatically replayed; a dropped connection can leave an
+unknown outcome. For payments or other non-repeatable operations, implement
+transaction IDs/idempotency in application storage. Legacy actions retain their
+bounded offline queue; `Action.NoQueue` opts them out.
+
+### Typed forms
+
+```go
+func (input *RenameProject) Validate() error {
+    if input.Name == "" {
+        return ui.ValidationError{Fields: ui.FormErrors{"name": "Name is required"}}
+    }
+    return nil
+}
+
+ui.FormFor[RenameProject]("rename").Render(
+    ui.IHidden().Attr("name", "id").Attr("value", project.ID),
+    ui.Label().Attr("for", "name").Text("Name"),
+    ui.IText().ID("name").Attr("name", "name").Attr("required", ""),
+    ui.Button().Attr("type", "submit").Text("Save"),
+).Submit(rename)
+```
+
+Input names match JSON fields. Text is sent unchanged, numbers become numbers,
+checkboxes become booleans and multi-selects become string slices. Empty number
+inputs send `null`; use pointers for optional numbers. File uploads require an
+HTTP upload endpoint. Repeated text field names are not a slice binding API.
+
+Native constraints run before sending. `RegisterAction` invokes `Validate() error`
+on the input pointer when implemented. `ValidationError` displays field messages,
+sets ARIA error state and focuses the first invalid field. Errors do not replace
+the form or discard its values. Busy state belongs to the submitting control,
+and another request's reply does not release it.
+
+### Server-owned views
+
+```go
+app.Live("/counter", func() ui.View { return &Counter{} })
+
+type Counter struct { Count int }
+
+func (v *Counter) Render(ctx *ui.ViewContext) *ui.Node {
+    return ui.Div().Render(
+        ui.Span().Text(strconv.Itoa(v.Count)),
+        ui.Button().Text("+1").OnClick(ctx.Event("increment")),
+    )
+}
+
+func (v *Counter) Handle(ctx *ui.ViewContext, event ui.Event) error {
+    if event.Name == "increment" { v.Count++ }
+    return nil
+}
+```
+
+Views are per connection/tab. Events run serially, then the framework rerenders
+and morphs the view. `ctx.Event(name, payload)` carries optional data;
+`event.Decode(&input)` decodes it. Validate event data in the handler.
+
+Optional `Mount(*ViewContext) error` runs once on the connected view. The initial
+HTTP render uses a temporary view without Mount, so Render must tolerate its zero
+state. A reconnect creates a fresh view and calls Mount again. Durable state and
+draft recovery belong in application storage; in-memory view state is not a
+durable session. PatchURL preserves the connected view; navigation remounts it.
+
+`Context.Session` is connection-local scratch data, shared by that connection's
+serial actions and retained across page navigation. It resets on reconnect; the
+HTTP render has a separate empty map. It is not an authentication/session store.
+Do not access it or mutate a view from background goroutines without your own
+synchronization. Use subscriptions to push independent updates instead.
+
+### Keyed updates and local interaction
+
+`ToJSMorph` and typed refreshes preserve elements by `Key` or ID. Keys must be
+unique among siblings. Dirty inputs keep their values; active inputs keep their
+selection. Add `Attr("data-gsui-reset", "")` to explicitly replace an input value.
+`Preserve()` leaves an external widget and its descendants under browser ownership.
+
+Legacy `Replace`/`Inner` remain destructive swaps. `Node.JS` and `Subscribe` setup
+run only on newly mounted nodes during morphs. To recreate a widget or change a
+subscription's captured parameters, change its key or explicitly replace it.
+
+`Toggle(id)`, `OpenDialog(id)` and `CloseDialog(id)` are local actions authored in
+Go. `node.OnInput(action, 250*time.Millisecond)` debounces server calls and cancels
+its timer on removal; `Action.Collect` supplies the field values. Ordinary server
+events use the same request/reply API.
+
+### Typed tables
+
+```go
+table := ui.RegisterTable(app, "projects",
+    func(ctx *ui.Context, q ui.TableQuery) (ui.TablePage[Project], error) {
+        return projects.Load(ctx.Context(), ctx.User(), q)
+    },
+    func(t *ui.DataTable[Project]) {
+        t.PageSize(20).Col("Name", ui.ColOpt[Project]{
+            Sortable: true,
+            Text: func(p *Project) *ui.Node { return ui.Span().Text(p.Name) },
+        })
+    },
+)
+
+// Within a page handler:
+node, err := table.Render(ctx)
+```
+
+The loader receives typed search, sorting and filter state. Return the first
+`q.Limit()` matching rows and the total count; this follows DataTable's load-more
+interface. Page size is bounded to 100 and loaded pages to 20. Search replaces
+the URL entry; sort/filter/load-more add one. Query keys are namespaced by table
+ID, so Back/Forward and copied URLs restore the table without global filter maps.
+Only configured sort/filter columns reach the loader. Validate filter operators
+and values against your domain and use parameterized database queries.
+Configure `RowKey(func(*T) string)` with a record ID when rows contain inputs or
+widgets, so sorting keeps browser state attached to the correct record.
+
+This adapter omits export buttons; use the existing DataTable API for custom
+export workflows. `Collate` retains its current lower-level API.
+
+### Subscriptions and shutdown
+
+```go
+app.Subscription("clock", func(ctx *ui.Context) error {
+    ticker := time.NewTicker(time.Second)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Context().Done():
+            return ctx.Context().Err()
+        case now := <-ticker.C:
+            if err := ctx.Push(ui.SetText("clock", now.Format(time.TimeOnly))); err != nil {
+                return err
+            }
+        }
+    }
+})
+
+ui.Span().ID("clock").Subscribe("clock")
+```
+
+Subscriptions start after their response is sent, cancel on removal/navigation/
+disconnect, and restart on reconnect. Name plus data identifies a subscription;
+use different data for independent instances. Removing one does not cancel other
+subscriptions. A missing target only cancels its sending subscription.
+
+Pass `ctx.Context()` to blocking work and stop on cancellation. Reads continue
+while an action runs so disconnect can cancel it. Actions remain serial per
+connection: keep them short and use subscriptions/background jobs for streams.
+The inbound message limit is 1 MiB; writes have a ten-second deadline.
+
+Call `app.Close()` alongside `http.Server.Shutdown()` to close upgraded sockets.
+The example uses `app.Listen` for simple startup. For graceful shutdown, use a
+custom HTTP server with `app.Handler()`. Large broadcasts still use
+the existing broadcast API; tenant-scoped fan-out belongs in the application.
+
+### Verification
+
+```sh
+go test -race ./...
+go run ./example/live
+## In another terminal, with Playwright installed:
+node ui/testdata/browser_runtime.cjs
+```
+
+The browser check covers typed forms, live navigation/history, per-tab views,
+keyed DOM changes, drafts and subscription reconnect. Set `GSUI_URL` for a
+different example address and `GSUI_BROWSER` for an installed Chromium executable.

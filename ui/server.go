@@ -16,6 +16,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/websocket"
 )
@@ -24,9 +25,17 @@ import (
 // goroutines stop when the client navigates away or reports a missing
 // target element.
 type connState struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	writeMu sync.Mutex
+	ctx              context.Context
+	connectionCtx    context.Context
+	connectionCancel context.CancelFunc
+	cancel           context.CancelFunc
+	writeMu          sync.Mutex
+	request          *http.Request
+	version          int64
+	view             View
+	viewPattern      string
+	session          map[string]any
+	subscriptions    map[string]subscription
 }
 
 // ---------------------------------------------------------------------------
@@ -42,14 +51,23 @@ type LayoutHandler func(ctx *Context) *Node
 // and named actions (WS). Pages return a *Node tree that compiles to JS
 // for the initial render. Actions return raw JS strings for DOM mutations.
 type App struct {
-	mu         sync.RWMutex
-	actions    map[string]ActionHandler
-	clients    map[*websocket.Conn]bool
-	connStates map[*websocket.Conn]*connState
-	mux        *http.ServeMux
-	pageMux    *http.ServeMux
-	layout     LayoutHandler
-	setupOnce  sync.Once
+	mu          sync.RWMutex
+	actions     map[string]ActionHandler
+	clients     map[*websocket.Conn]bool
+	connStates  map[*websocket.Conn]*connState
+	mux         *http.ServeMux
+	pageMux     *http.ServeMux
+	layout      LayoutHandler
+	setupOnce   sync.Once
+	middleware  []func(http.Handler) http.Handler
+	pageHandler http.Handler
+	// Authorize runs for initial pages, live navigation and every user action.
+	// An empty action name denotes a page render. Check object permissions in
+	// action handlers as well. Configure before serving requests.
+	Authorize func(*Context, string) error
+	// Identity resolves the current user on every request/action. Cookies on an
+	// existing socket are the handshake cookies; validate expiry in this hook.
+	Identity func(*http.Request) (any, error)
 
 	// Favicon is the URL path for the site favicon (e.g. "/assets/favicon.svg").
 	// When set, a <link rel="icon"> tag is emitted in the HTML shell.
@@ -253,72 +271,39 @@ func (app *App) setup() {
 }
 
 func (app *App) setupRoutes() {
+	app.pageHandler = app.pageMux
+	for i := len(app.middleware) - 1; i >= 0; i-- {
+		app.pageHandler = app.middleware[i](app.pageHandler)
+	}
 	// Built-in __nav action: handles popstate (browser back/forward).
 	// Looks up the page handler for the URL and replaces content.
 	// If a layout is registered, only the __content__ container is replaced
 	// (the layout shell stays). Otherwise the full body is cleared and rebuilt.
 	// Also cancels any outstanding Push goroutines for the connection since
 	// their target elements no longer exist after navigation.
-	app.Action("__nav", func(ctx *Context) string {
-		// Cancel active pushes — the old page's elements are gone.
-		app.cancelConn(ctx.wsConn)
-
+	app.Action("__nav", app.navigate)
+	app.Action("__live", app.liveEvent)
+	app.Action("__unsubscribe", func(ctx *Context) string {
 		var req struct {
-			URL string `json:"url"`
+			Name string `json:"name"`
+			Key  string `json:"key"`
 		}
-		ctx.Body(&req)
-
-		u, err := url.Parse(req.URL)
-		if err != nil || req.URL == "" {
-			return ""
+		if ctx.Body(&req) == nil {
+			app.cancelSubscription(ctx.wsConn, req.Name, req.Key)
 		}
-
-		// Patch the request so page handlers see the navigated URL instead of
-		// the WebSocket upgrade path (/__ws). Server-side logic that keys on
-		// the current path (active nav state, breadcrumbs) depends on this.
-		if ctx.Request != nil {
-			r2 := ctx.Request.Clone(ctx.Request.Context())
-			r2.URL.Path = u.Path
-			r2.URL.RawQuery = u.RawQuery
-			ctx.Request = r2
-		}
-		ctx.Query = make(map[string]string)
-		for k, v := range u.Query() {
-			if len(v) > 0 {
-				ctx.Query[k] = v[0]
-			}
-		}
-
-		handler, matchedRequest, ok := app.matchPage(ctx.Request)
-
-		if !ok {
-			return ""
-		}
-		ctx.Request = matchedRequest
-		ctx.PathParams = requestPathParams(matchedRequest)
-
-		app.mu.RLock()
-		layoutFn := app.layout
-		app.mu.RUnlock()
-
-		pageNode := handler(ctx)
-		if pageNode == nil {
-			return ""
-		}
-
-		// With a layout: replace only __content__ inner content.
-		// Without a layout: clear body and append the full page tree.
-		if layoutFn != nil {
-			return pageNode.ToJSInner("__content__")
-		}
-		return "(function(){document.body.innerHTML=''})();" + pageNode.ToJS()
+		return ""
 	})
 
 	// Built-in __notfound action: the client sends this when a WS patch
 	// targets a DOM element that no longer exists. Cancel push context so
 	// server-side goroutines calling ctx.Push() get an error and stop.
 	app.Action("__notfound", func(ctx *Context) string {
-		app.cancelConn(ctx.wsConn)
+		var req struct {
+			Subscription string `json:"subscription"`
+		}
+		if ctx.Body(&req) == nil && req.Subscription != "" {
+			app.cancelSubscription(ctx.wsConn, "", req.Subscription)
+		}
 		return ""
 	})
 
@@ -335,7 +320,7 @@ func (app *App) setupRoutes() {
 
 	// Page routes (catch-all). The nested mux provides ServeMux pattern
 	// matching and populates Request.PathValue for Page handlers.
-	app.mux.Handle("/", app.pageMux)
+	app.mux.Handle("/", app.pageHandler)
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +353,7 @@ type pageRoute struct {
 func (route pageRoute) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if match, ok := r.Context().Value(pageMatchContextKey{}).(*pageMatch); ok {
 		match.handler = route.handler
-		match.request = r.WithContext(match.requestContext)
+		match.request = r
 		return
 	}
 	route.app.renderPage(w, r, route.handler)
@@ -377,9 +362,8 @@ func (route pageRoute) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type pageMatchContextKey struct{}
 
 type pageMatch struct {
-	handler        PageHandler
-	request        *http.Request
-	requestContext context.Context
+	handler PageHandler
+	request *http.Request
 }
 
 // discardResponseWriter absorbs redirects and not-found responses produced by
@@ -396,9 +380,13 @@ func (app *App) matchPage(r *http.Request) (PageHandler, *http.Request, bool) {
 	if r == nil {
 		return nil, nil, false
 	}
-	match := &pageMatch{requestContext: r.Context()}
+	match := &pageMatch{}
 	r2 := r.WithContext(context.WithValue(r.Context(), pageMatchContextKey{}, match))
-	app.pageMux.ServeHTTP(&discardResponseWriter{header: make(http.Header)}, r2)
+	h := app.pageHandler
+	if h == nil {
+		h = app.pageMux
+	}
+	h.ServeHTTP(&discardResponseWriter{header: make(http.Header)}, r2)
 	if match.handler == nil || match.request == nil {
 		return nil, nil, false
 	}
@@ -436,6 +424,12 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 		PathParams: requestPathParams(r),
 		Query:      make(map[string]string),
 		app:        app,
+	}
+	ctx.Session = make(map[string]any)
+	ctx.setRequest(r)
+	if err := app.authorize(ctx, ""); err != nil {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
 	}
 
 	// Parse query params
@@ -627,7 +621,7 @@ func (app *App) wsConfigJS() string {
 // counter, so a hold taken before the client loads still suppresses the
 // reconnect reload and its release function keeps working afterwards.
 const wsStubJS = `window.__gsuiHolds=window.__gsuiHolds||0;
-window.__ws||(window.__ws={__q:[],call:function(){this.__q.push(['call',arguments])},callSilent:function(){this.__q.push(['callSilent',arguments])},subscribe:function(){this.__q.push(['subscribe',arguments])},unsubscribe:function(){this.__q.push(['unsubscribe',arguments])},notfound:function(){this.__q.push(['notfound',arguments])},pageChanged:function(){},hold:function(){window.__gsuiHolds++;var r=false;return function(){if(r)return;r=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1)}},holds:function(){return window.__gsuiHolds},connected:function(){return false},offline:function(){return false},reconnect:function(){}});`
+window.__ws||(window.__ws={__q:[],navigate:function(){this.__q.push(['navigate',arguments])},call:function(){this.__q.push(['call',arguments])},callSilent:function(){this.__q.push(['callSilent',arguments])},subscribe:function(){this.__q.push(['subscribe',arguments])},unsubscribe:function(){this.__q.push(['unsubscribe',arguments])},notfound:function(){this.__q.push(['notfound',arguments])},pageChanged:function(){},hold:function(){window.__gsuiHolds++;var r=false;return function(){if(r)return;r=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1)}},holds:function(){return window.__gsuiHolds},connected:function(){return false},offline:function(){return false},reconnect:function(){}});`
 
 // themeInitJS runs synchronously in <head> before the body renders to
 // prevent FOUC. It reads the stored theme from localStorage, applies the
@@ -697,7 +691,7 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}`
 // It connects to the WS endpoint, sends action calls, executes
 // whatever JS string the server sends back, and shows a non-blocking
 // offline badge when the WebSocket stays down past the grace window.
-const wsClientJS = `var __wsPre=window.__ws;
+var wsClientJS = runtimeClientJS + `var __wsPre=window.__ws;
 var __gsuiCfg=window.__gsuiCfg||{};
 function __gsuiOpt(k,d){var v=__gsuiCfg[k];return typeof v==='number'?v:d}
 var __offline=(function(){
@@ -747,7 +741,9 @@ var __offline=(function(){
 })();
 var __ws=(function(){
   var ws,q=[],ready=false,seq=0,inflight={},loaderEl=null,loaderTimer=0,hadClose=false,backoff=500;
-  var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],epoch=0,api;
+  var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],epoch=0,api,busy={},uncertain={};
+  function message(act,data,id,sub){return JSON.stringify({act:act,data:data||{},id:id||0,sub:sub||'',page:window.__gsuiPage||location.pathname+location.search,version:window.__gsuiVersion||0})}
+  function release(id){var el=busy[id];if(el){el.disabled=false;el.removeAttribute('aria-busy');if(el.form)el.form.removeAttribute('aria-busy');el.classList.remove('gsui-busy','opacity-60','cursor-wait');delete busy[id]}}
   var inst=typeof __gsuiCfg.inst==='string'?__gsuiCfg.inst:'',serverChanged=false,pendingReload='';
   // Holds live on window so the pre-client stub and the real client share one
   // counter across the stub handover.
@@ -843,12 +839,13 @@ var __ws=(function(){
   // bookkeeping is identical either way.
   function markDown(){
     if(!ready&&hadClose)return;
+    if(Object.keys(uncertain).length){window.__gsuiReport('Connection lost. Your last action may have completed. Check before retrying.');uncertain={}}
     ready=false;stopPing();
     // Replies for messages that were already on the wire will never arrive;
     // requests still sitting in the queue keep their tracking.
     inflight={};q.forEach(function(it){if(it.id)inflight[it.id]=true});
     hideLoader();
-    document.querySelectorAll('button.gsui-busy').forEach(function(b){b.disabled=false;b.classList.remove('gsui-busy','opacity-60','cursor-wait')});
+    Object.keys(busy).forEach(function(id){release(id)});
     if(!downSince)downSince=Date.now();
     __offline.schedule();hadClose=true;
   }
@@ -891,7 +888,7 @@ var __ws=(function(){
       // connection before replaying queued work, so live regions are running
       // again by the time those actions execute. Without this a silent
       // reconnect leaves live regions frozen.
-      subs.forEach(function(s){rawSend(JSON.stringify({act:s.act,data:s.data}))});
+      subs.forEach(function(s){rawSend(message(s.act,s.data,0,s.key))});
       flush();
       if(Object.keys(inflight).length)showLoader();
       if(hadClose){
@@ -906,7 +903,20 @@ var __ws=(function(){
         }
       }
     };
-    sock.onmessage=function(e){if(ws!==sock)return;var m;try{m=JSON.parse(e.data)}catch(_){}if(m&&typeof m==='object'&&m.__hello){onHello(m.__hello);return}epoch++;if(m&&typeof m==='object'&&m.__r){if(inflight[m.id]){delete inflight[m.id];hideLoader()}if(m.js){try{new Function(m.js)()}catch(err){console.error('ws exec error:',err,m.js)}}document.querySelectorAll('button.gsui-busy').forEach(function(b){b.disabled=false;b.classList.remove('gsui-busy','opacity-60','cursor-wait')})}else{try{new Function(e.data)()}catch(err){console.error('ws exec error:',err,e.data)}}try{window.dispatchEvent(new Event('gsui:updated'))}catch(_){}};
+    sock.onmessage=function(e){
+      if(ws!==sock)return;
+      var m;try{m=JSON.parse(e.data)}catch(_){}
+      if(m&&m.__hello){onHello(m.__hello);return}
+      if(m&&m.__r){delete inflight[m.id];delete uncertain[m.id];release(m.id);hideLoader()}
+      if(m&&m.version&&m.version!==window.__gsuiVersion)return;
+      if(m&&m.__push&&m.subscription&&!subs.some(function(s){return s.key===m.subscription}))return;
+      epoch++;
+      window.__gsuiPushSubscription=m&&m.subscription||'';
+      var js=m&&(m.__r||m.__push)?m.js:e.data;
+      try{if(js)new Function(js)()}catch(err){console.error('ws exec error:',err)}
+      finally{window.__gsuiPushSubscription=''}
+      try{window.dispatchEvent(new Event('gsui:updated'))}catch(_){}
+    };
     sock.onclose=function(){
       if(ws!==sock)return;
       markDown();
@@ -921,12 +931,7 @@ var __ws=(function(){
   // brought back, instead of waiting out the backoff.
   window.addEventListener('online',reconnectNow);
   document.addEventListener('visibilitychange',function(){if(!document.hidden)reconnectNow()});
-  window.addEventListener('popstate',function(){
-    var id=++seq;
-    // A navigation invalidates the previous page's subscriptions.
-    subs=[];
-    if(send(JSON.stringify({act:'__nav',data:{url:location.pathname+location.search},id:id}),id))showLoader();
-  });
+  window.addEventListener('popstate',function(event){window.__gsuiPop(event)});
   function collectValue(id,d){
     var el=document.getElementById(id);
     if(!el)return;
@@ -948,7 +953,7 @@ var __ws=(function(){
   // <input> (not textarea), find the nearest ancestor container that has
   // a <button> and click it. Works for both FormBuilder and manual forms.
   document.addEventListener('keydown',function(e){
-    if(e.key!=='Enter')return;
+    if(e.defaultPrevented||e.isComposing||e.key!=='Enter')return;
     var t=e.target;
     if(!t||!t.tagName)return;
     var tag=t.tagName.toLowerCase();
@@ -957,6 +962,7 @@ var __ws=(function(){
     // Skip non-text input types
     if(type==='checkbox'||type==='radio'||type==='file'||type==='range'||type==='color'||type==='hidden'||type==='submit'||type==='reset'||type==='button'||type==='image')return;
     var form=t.form||t.closest('form'),btn;
+    if(form&&form.hasAttribute('data-gsui-form'))return;
     if(form){btn=form.querySelector('button[type=submit]')||form.querySelector('button:not([type])')||form.querySelector('button');if(!btn&&form.id)btn=document.querySelector('button[form="'+form.id+'"]')}else{var p=t.parentElement;while(p&&p!==document.body){btn=p.querySelector('button');if(btn)break;p=p.parentElement}}
     if(btn){e.preventDefault();btn.click()}
   });
@@ -965,6 +971,10 @@ var __ws=(function(){
     q.push({msg:msg,id:id||0});return true;
   }
   api={
+    navigate:function(path,options){window.__gsuiNavigate(path,options)},
+    beginNavigation:function(patch){
+      if(!patch){subs=[];q=[];inflight={};Object.keys(busy).forEach(release);hideLoader()}
+    },
     // hold() marks critical in-page work (file upload, multi-step form).
     // While at least one hold is active, a reconnect never reloads the page,
     // so the work is not destroyed. Call the returned function when done.
@@ -992,10 +1002,12 @@ var __ws=(function(){
       var d=Object.assign({},data||{}),key=act+'|'+JSON.stringify(d);
       subs=subs.filter(function(s){return s.key!==key});
       subs.push({act:act,data:d,key:key,epoch:epoch});
-      rawSend(JSON.stringify({act:act,data:d}));
+      rawSend(message(act,d,0,key));
     },
-    unsubscribe:function(act){
-      subs=subs.filter(function(s){return s.act!==act});
+    unsubscribe:function(act,data){
+      var key=data===undefined?'':act+'|'+JSON.stringify(data||{});
+      subs=subs.filter(function(s){return key?s.key!==key:s.act!==act});
+      send(message('__unsubscribe',{name:act,key:key}));
     },
     // pageChanged() drops subscriptions belonging to superseded pages. It is
     // emitted by SetLocation/Response.Navigate. Subscriptions registered by
@@ -1003,22 +1015,30 @@ var __ws=(function(){
     // the call works regardless of whether the new page's content JS runs
     // before or after the pushState in the same response.
     pageChanged:function(){
+      subs.filter(function(s){return s.epoch<epoch}).forEach(function(s){send(message('__unsubscribe',{name:s.act,key:s.key}))});
       subs=subs.filter(function(s){return s.epoch>=epoch});
     },
-    call:function(act,data,collect){
+    call:function(act,data,collect,source,options){
+      if(options&&options.queue===false&&!api.connected()){window.__gsuiReport('You are offline. Reconnect before trying again.');return 0}
       var d=Object.assign({},data||{});
       if(collect&&collect.length){
         collect.forEach(function(id){collectValue(id,d)});
       }
       var id=++seq;
-      if(send(JSON.stringify({act:act,data:d,id:id}),id))showLoader();
+      if(options&&options.queue===false)uncertain[id]=true;
+      if(source&&/^(BUTTON|FORM)$/.test(source.tagName)){busy[id]=source;source.disabled=true;source.setAttribute('aria-busy','true');if(source.form)source.form.setAttribute('aria-busy','true');source.classList.add('gsui-busy','opacity-60','cursor-wait')}
+      var msg=message(act,d,id);
+      if(options&&options.queue===false){
+        if(rawSend(msg)){inflight[id]=true;showLoader()}else{release(id);delete uncertain[id];window.__gsuiReport('Connection lost before sending. Please try again.')}
+      }else if(send(msg,id))showLoader();else{release(id);delete uncertain[id]}
+      return id;
     },
     callSilent:function(act,data){
       var d=Object.assign({},data||{});
-      send(JSON.stringify({act:act,data:d}));
+      send(message(act,d));
     },
     notfound:function(id){
-      send(JSON.stringify({act:'__notfound',data:{id:id}}));
+      send(message('__notfound',{id:id,subscription:window.__gsuiPushSubscription||''}));
     }
   };
   return api;
@@ -1031,9 +1051,12 @@ if(__wsPre&&__wsPre.__q){__wsPre.__q.forEach(function(it){try{__ws[it[0]].apply(
 
 // wsMessage is what the client sends.
 type wsMessage struct {
-	Act  string         `json:"act"`
-	Data map[string]any `json:"data"`
-	ID   int64          `json:"id"`
+	Act     string         `json:"act"`
+	Data    map[string]any `json:"data"`
+	ID      int64          `json:"id"`
+	Page    string         `json:"page"`
+	Version int64          `json:"version"`
+	Sub     string         `json:"sub"`
 }
 
 // wsHandshake accepts same-origin browser requests, configured origins, and
@@ -1069,6 +1092,9 @@ func (app *App) send(ws *websocket.Conn, s string) error {
 	}
 	st.writeMu.Lock()
 	defer st.writeMu.Unlock()
+	if err := ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return err
+	}
 	return websocket.Message.Send(ws, s)
 }
 
@@ -1090,14 +1116,21 @@ func wsReply(id int64, js string) string {
 func (app *App) cancelConn(ws *websocket.Conn) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-	ctx, cancel := context.WithCancel(context.Background())
 	if st, ok := app.connStates[ws]; ok {
+		parent := st.connectionCtx
+		if parent == nil {
+			parent = context.Background()
+		}
+		ctx, cancel := context.WithCancel(parent)
 		st.cancel()
+		for _, sub := range st.subscriptions {
+			sub.cancel()
+		}
+		st.subscriptions = make(map[string]subscription)
 		st.ctx = ctx
 		st.cancel = cancel
 		return
 	}
-	app.connStates[ws] = &connState{ctx: ctx, cancel: cancel}
 }
 
 // pushCtxForConn returns the current push context for a connection.
@@ -1112,10 +1145,13 @@ func (app *App) pushCtxForConn(ws *websocket.Conn) context.Context {
 
 func (app *App) handleWS(ws *websocket.Conn) {
 	// Register client and create initial push context
-	pushCtx, pushCancel := context.WithCancel(context.Background())
+	connectionCtx, connectionCancel := context.WithCancel(ws.Request().Context())
+	defer connectionCancel()
+	pushCtx, pushCancel := context.WithCancel(connectionCtx)
+	ws.MaxPayloadBytes = 1 << 20
 	app.mu.Lock()
 	app.clients[ws] = true
-	app.connStates[ws] = &connState{ctx: pushCtx, cancel: pushCancel}
+	app.connStates[ws] = &connState{ctx: pushCtx, connectionCtx: connectionCtx, connectionCancel: connectionCancel, cancel: pushCancel, session: make(map[string]any), subscriptions: make(map[string]subscription)}
 	app.mu.Unlock()
 
 	// Announce which process this is. A client whose page was rendered by a
@@ -1129,6 +1165,9 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		app.mu.Lock()
 		if st, ok := app.connStates[ws]; ok {
 			st.cancel()
+			for _, sub := range st.subscriptions {
+				sub.cancel()
+			}
 			delete(app.connStates, ws)
 		}
 		delete(app.clients, ws)
@@ -1136,20 +1175,37 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		ws.Close()
 	}()
 
-	for {
-		var raw string
-		err := websocket.Message.Receive(ws, &raw)
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("gsui: ws read error: %v", err)
+	// Read independently so disconnect cancels a running action. Dispatch is
+	// serial and the inbound queue is bounded.
+	messages := make(chan string, 16)
+	go func() {
+		defer connectionCancel()
+		defer close(messages)
+		for {
+			var raw string
+			if err := websocket.Message.Receive(ws, &raw); err != nil {
+				return
 			}
+			select {
+			case messages <- raw:
+			case <-connectionCtx.Done():
+				return
+			default:
+				// Backpressure must not strand the reader behind a blocked action.
+				// Cancelling here also unblocks handlers using ctx.Context().
+				return
+			}
+		}
+	}()
+	for raw := range messages {
+		if connectionCtx.Err() != nil {
 			return
 		}
 
 		// Parse the incoming message
 		var msg wsMessage
 		if err := json.Unmarshal([]byte(raw), &msg); err != nil {
-			log.Printf("gsui: invalid WebSocket message: %s", raw)
+			log.Printf("gsui: invalid WebSocket message")
 			continue
 		}
 
@@ -1172,13 +1228,15 @@ func (app *App) handleWS(ws *websocket.Conn) {
 
 		// Build context with current push context
 		ctx := &Context{
-			Request:    ws.Request(),
-			PathParams: make(map[string]string),
-			Query:      make(map[string]string),
-			wsConn:     ws,
-			wsData:     msg.Data,
-			app:        app,
-			pushCtx:    app.pushCtxForConn(ws),
+			Request:      ws.Request(),
+			PathParams:   make(map[string]string),
+			Query:        make(map[string]string),
+			wsConn:       ws,
+			wsData:       msg.Data,
+			app:          app,
+			pushCtx:      app.pushCtxForConn(ws),
+			version:      msg.Version,
+			subscription: msg.Sub,
 		}
 
 		// Execute handler -> get JS string (recover from panics)
@@ -1189,6 +1247,9 @@ func (app *App) handleWS(ws *websocket.Conn) {
 					resp = Notify("error", "Server error")
 				}
 			}()
+			if err := app.prepareAction(ctx, msg); err != nil {
+				return Notify("error", "Request denied or page expired")
+			}
 			return handler(ctx)
 		}()
 
@@ -1207,14 +1268,17 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		}
 
 		// Tracked requests always receive an envelope, including empty JS.
-		if msg.ID != 0 {
-			jsResponse = wsReply(msg.ID, jsResponse)
+		if msg.ID != 0 || msg.Version != 0 {
+			jsResponse = runtimeReply(msg.ID, msg.Version, jsResponse)
 		}
 		if jsResponse != "" {
 			if err := app.send(ws, jsResponse); err != nil {
 				log.Printf("gsui: ws send error: %v", err)
 				return
 			}
+		}
+		for _, start := range ctx.after {
+			start()
 		}
 	}
 }
@@ -1225,16 +1289,20 @@ func (app *App) handleWS(ws *websocket.Conn) {
 
 // Context carries request data for both page renders and WS action calls.
 type Context struct {
-	Request    *http.Request
-	Session    map[string]any
-	PathParams map[string]string
-	Query      map[string]string
-	wsConn     *websocket.Conn
-	wsData     map[string]any
-	app        *App
-	pushCtx    context.Context // cancelled when client navigates away or reports element not found
-	headCSS    []string        // per-page <style>/<link> tags collected via ctx.HeadCSS()
-	headJS     []string        // per-page <script> blocks collected via ctx.HeadJS()
+	Request      *http.Request
+	Session      map[string]any // connection-local scratch state; reset on reconnect
+	PathParams   map[string]string
+	Query        map[string]string
+	wsConn       *websocket.Conn
+	wsData       map[string]any
+	app          *App
+	pushCtx      context.Context // cancelled when client navigates away or reports element not found
+	version      int64
+	subscription string
+	user         any
+	after        []func()
+	headCSS      []string // per-page <style>/<link> tags collected via ctx.HeadCSS()
+	headJS       []string // per-page <script> blocks collected via ctx.HeadJS()
 }
 
 // WsData returns the raw WebSocket data map. Useful for passing to
@@ -1388,6 +1456,10 @@ func (ctx *Context) Push(js string) error {
 	if ctx.app == nil {
 		return fmt.Errorf("no app context")
 	}
+	if ctx.version != 0 || ctx.subscription != "" {
+		b, _ := json.Marshal(map[string]any{"__push": true, "js": js, "version": ctx.version, "subscription": ctx.subscription})
+		return ctx.app.send(ctx.wsConn, string(b))
+	}
 	return ctx.app.send(ctx.wsConn, js)
 }
 
@@ -1465,9 +1537,10 @@ func (r *Response) Toast(variant, message string) *Response {
 	return r
 }
 
-// Navigate updates the browser URL via pushState without a page reload.
+// Navigate loads a registered page without reloading the document. Use
+// Add(SetLocation(url)) for legacy code that has already replaced its content.
 func (r *Response) Navigate(url string) *Response {
-	r.parts = append(r.parts, SetLocation(url))
+	r.parts = append(r.parts, Navigate(url))
 	return r
 }
 
