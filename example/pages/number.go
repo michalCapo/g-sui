@@ -53,7 +53,6 @@ func Number(ctx *r.Context) *r.Node {
 	)
 }
 
-func RegisterNumber(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/number", func(ctx *r.Context) *r.Node { return layout(ctx, Number(ctx)) })
-	app.Action("nav.number", NavTo("/number", func() *r.Node { return Number(nil) }))
+func RegisterNumber(app *r.App) {
+	app.Page("/number", Number)
 }

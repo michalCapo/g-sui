@@ -9,9 +9,6 @@ import (
 	r "github.com/michalCapo/g-sui/ui"
 )
 
-// ContentID is the shared target ID for the main content area.
-var ContentID = r.Target()
-
 func RoutesExample(ctx *r.Context) *r.Node {
 	codeSnippet := func(text string) *r.Node {
 		return r.Code("bg-gray-100 px-1 rounded text-sm").Text(text)
@@ -130,8 +127,7 @@ func RoutesExample(ctx *r.Context) *r.Node {
 }
 
 func routeLink(label, href, cls string) *r.Node {
-	return r.A("inline-block px-4 py-2 rounded text-sm "+cls).
-		Attr("href", href).
+	return r.NavLink(href, "inline-block px-4 py-2 rounded text-sm "+cls).
 		Text(label)
 }
 
@@ -180,8 +176,7 @@ func routesUserDetail(id string, query map[string]string) *r.Node {
 
 	detail := r.Div("flex flex-col gap-6").Render(
 		r.Div("flex items-center gap-4").Render(
-			r.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").
-				Attr("href", "/routes").Text("Back"),
+			r.NavLink("/routes", "px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").Text("Back"),
 			r.Div("text-2xl font-bold").Text("User: "+name),
 		),
 		r.Div("bg-white rounded-lg shadow p-6").Render(
@@ -223,8 +218,7 @@ func routesUserPostDetail(userID, postID string) *r.Node {
 
 	detail := r.Div("flex flex-col gap-6").Render(
 		r.Div("flex items-center gap-4").Render(
-			r.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").
-				Attr("href", "/routes").Text("Back"),
+			r.NavLink("/routes", "px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").Text("Back"),
 			r.Div("text-2xl font-bold").Text("Post Details"),
 		),
 		r.Div("bg-white rounded-lg shadow p-6 flex flex-col gap-4").Render(
@@ -239,8 +233,7 @@ func routesUserPostDetail(userID, postID string) *r.Node {
 			infoBox("Content", post["content"]),
 			r.Div("flex items-center gap-2").Render(
 				r.Div("text-sm font-bold text-gray-500").Text("Author:"),
-				r.A("px-3 py-1 border-2 border-blue-600 text-blue-600 rounded text-sm").
-					Attr("href", "/routes/user/"+url.PathEscape(userID)).
+				r.NavLink("/routes/user/"+url.PathEscape(userID), "px-3 py-1 border-2 border-blue-600 text-blue-600 rounded text-sm").
 					Text("User "+userID),
 			),
 		),
@@ -271,8 +264,7 @@ func routesProductDetail(category, product string) *r.Node {
 
 	detail := r.Div("flex flex-col gap-6").Render(
 		r.Div("flex items-center gap-4").Render(
-			r.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").
-				Attr("href", "/routes").Text("Back"),
+			r.NavLink("/routes", "px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").Text("Back"),
 			r.Div("text-2xl font-bold").Text("Product Details"),
 		),
 		r.Div("bg-white rounded-lg shadow p-6 flex flex-col gap-4").Render(
@@ -320,8 +312,7 @@ func routesSearchDetail(query map[string]string) *r.Node {
 
 	detail := r.Div("flex flex-col gap-6").Render(
 		r.Div("flex items-center gap-4").Render(
-			r.A("px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").
-				Attr("href", "/routes").Text("Back"),
+			r.NavLink("/routes", "px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm").Text("Back"),
 			r.Div("text-2xl font-bold").Text("Search Results"),
 		),
 		r.Div("bg-white rounded-lg shadow p-6 flex flex-col gap-4").Render(
@@ -362,36 +353,24 @@ func paramBadge(key, value, cls string) *r.Node {
 		Text(fmt.Sprintf("%s: %s", key, value))
 }
 
-// NavTo creates a navigation action handler that replaces the content area
-// and updates the browser URL.
-func NavTo(url string, content func() *r.Node) r.ActionHandler {
-	return func(ctx *r.Context) string {
-		return r.NewResponse().
-			Inner(ContentID, content()).
-			Add(r.SetLocation(url)).
-			Build()
-	}
-}
-
-func RegisterRoutes(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/routes", func(ctx *r.Context) *r.Node { return layout(ctx, RoutesExample(ctx)) })
+func RegisterRoutes(app *r.App) {
+	app.Page("/routes", RoutesExample)
 	app.Page("/routes/user/{id}", func(ctx *r.Context) *r.Node {
-		return layout(ctx, routesUserDetail(ctx.Request.PathValue("id"), ctx.Query))
+		return routesUserDetail(ctx.Request.PathValue("id"), ctx.Query)
 	})
 	app.Page("/routes/user/{userId}/post/{postId}", func(ctx *r.Context) *r.Node {
-		return layout(ctx, routesUserPostDetail(
+		return routesUserPostDetail(
 			ctx.Request.PathValue("userId"),
 			ctx.Request.PathValue("postId"),
-		))
+		)
 	})
 	app.Page("/routes/category/{category}/product/{product}", func(ctx *r.Context) *r.Node {
-		return layout(ctx, routesProductDetail(
+		return routesProductDetail(
 			ctx.Request.PathValue("category"),
 			ctx.Request.PathValue("product"),
-		))
+		)
 	})
 	app.Page("/routes/search", func(ctx *r.Context) *r.Node {
-		return layout(ctx, routesSearchDetail(ctx.Query))
+		return routesSearchDetail(ctx.Query)
 	})
-	app.Action("nav.routes", NavTo("/routes", func() *r.Node { return RoutesExample(nil) }))
 }

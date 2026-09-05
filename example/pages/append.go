@@ -7,6 +7,8 @@ import (
 	r "github.com/michalCapo/g-sui/ui"
 )
 
+const appendListID = "append-list"
+
 func Append(ctx *r.Context) *r.Node {
 	return r.Div("max-w-5xl mx-auto flex flex-col gap-4").Render(
 		r.Div("text-2xl font-bold").Text("Append / Prepend Demo"),
@@ -19,7 +21,7 @@ func Append(ctx *r.Context) *r.Node {
 				Text("Add at start").
 				OnClick(&r.Action{Name: "append.start"}),
 		),
-		r.Div("space-y-2").ID("append-list").Render(
+		r.Div("space-y-2").ID(appendListID).Render(
 			r.Div("p-2 rounded border bg-white").Render(
 				r.Span("text-sm text-gray-600").Text("Initial item"),
 			),
@@ -27,25 +29,24 @@ func Append(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleAppendEnd(ctx *r.Context) string {
+func HandleAppendEnd(ctx *r.Context, _ struct{}) (r.Result, error) {
 	now := time.Now().Format("15:04:05")
 	item := r.Div("p-2 rounded border bg-white").Render(
 		r.Span("text-sm text-gray-600").Text(fmt.Sprintf("Appended at %s", now)),
 	)
-	return item.ToJSAppend("append-list")
+	return r.Result{}.Append(appendListID, item), nil
 }
 
-func HandleAppendStart(ctx *r.Context) string {
+func HandleAppendStart(ctx *r.Context, _ struct{}) (r.Result, error) {
 	now := time.Now().Format("15:04:05")
 	item := r.Div("p-2 rounded border bg-white").Render(
 		r.Span("text-sm text-gray-600").Text(fmt.Sprintf("Prepended at %s", now)),
 	)
-	return item.ToJSPrepend("append-list")
+	return r.Result{}.Prepend(appendListID, item), nil
 }
 
-func RegisterAppend(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/append", func(ctx *r.Context) *r.Node { return layout(ctx, Append(ctx)) })
-	app.Action("nav.append", NavTo("/append", func() *r.Node { return Append(nil) }))
-	app.Action("append.end", HandleAppendEnd)
-	app.Action("append.start", HandleAppendStart)
+func RegisterAppend(app *r.App) {
+	app.Page("/append", Append)
+	r.RegisterAction(app, "append.end", HandleAppendEnd)
+	r.RegisterAction(app, "append.start", HandleAppendStart)
 }

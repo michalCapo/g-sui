@@ -6,6 +6,12 @@ import (
 	r "github.com/michalCapo/g-sui/ui"
 )
 
+const (
+	formPageID    = "form-page"
+	form1ResultID = "form1-result"
+	form2ResultID = "form2-result"
+)
+
 type FormData struct {
 	Action     string `json:"Action"`
 	Title      string `json:"Title"`
@@ -68,7 +74,7 @@ func formPageContent(result1 string, data1 FormData, result2 string, data2 FormD
 		result2 = "Form 2 result will be displayed here."
 	}
 
-	return r.Div("max-w-5xl mx-auto flex flex-col gap-4").ID("form-page").Render(
+	return r.Div("max-w-5xl mx-auto flex flex-col gap-4").ID(formPageID).Render(
 		r.Div("text-2xl font-bold").Text("Form association"),
 		r.Div("text-gray-600").Text("Two independent forms on the same page. Each form uses HTML form association — inputs are scoped by form ID so radio groups, IDs, and validation are fully isolated."),
 
@@ -78,10 +84,10 @@ func formPageContent(result1 string, data1 FormData, result2 string, data2 FormD
 				r.Div("text-lg font-semibold").Text("Form 1"),
 				r.Div("text-gray-600 text-sm mb-4").Text("First form instance with its own state."),
 			),
-			r.Div("flex flex-col").ID("form1-result").Render(
+			r.Div("flex flex-col").ID(form1ResultID).Render(
 				r.Div("text-sm text-gray-600").Text(result1),
 			),
-			formBuilder("form1", data1).Build(),
+			formBuilder(form1ID, data1).Build(),
 		),
 
 		// Form 2 — same field definitions, different form ID
@@ -90,18 +96,15 @@ func formPageContent(result1 string, data1 FormData, result2 string, data2 FormD
 				r.Div("text-lg font-semibold").Text("Form 2"),
 				r.Div("text-gray-600 text-sm mb-4").Text("Second form instance — fully isolated from Form 1."),
 			),
-			r.Div("flex flex-col").ID("form2-result").Render(
+			r.Div("flex flex-col").ID(form2ResultID).Render(
 				r.Div("text-sm text-gray-600").Text(result2),
 			),
-			formBuilder("form2", data2).Build(),
+			formBuilder(form2ID, data2).Build(),
 		),
 	)
 }
 
-func HandleFormSubmit(ctx *r.Context) string {
-	var data FormData
-	ctx.Body(&data)
-
+func HandleFormSubmit(ctx *r.Context, data FormData) (r.Result, error) {
 	result := fmt.Sprintf(
 		"Action=%s  Title=%s  GenderNext=%s  Gender=%s  Country=%s  Some=%s  Number=%s  Agree=%v",
 		data.Action, data.Title, data.GenderNext, data.Gender, data.Country, data.Some, data.Number, data.Agree,
@@ -117,14 +120,12 @@ func HandleFormSubmit(ctx *r.Context) string {
 		toast = "Form submitted successfully"
 	}
 
-	return r.NewResponse().
-		Replace("form-page", formPageContent(result, data, "", FormData{})).
-		Toast("success", toast).
-		Build()
+	return r.Result{}.
+		Replace(formPageID, formPageContent(result, data, "", FormData{})).
+		Notify("success", toast), nil
 }
 
-func RegisterForm(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/form", func(ctx *r.Context) *r.Node { return layout(ctx, FormPage(ctx)) })
-	app.Action("nav.form", NavTo("/form", func() *r.Node { return FormPage(nil) }))
-	app.Action("form.submit", HandleFormSubmit)
+func RegisterForm(app *r.App) {
+	app.Page("/form", FormPage)
+	r.RegisterAction(app, "form.submit", HandleFormSubmit)
 }

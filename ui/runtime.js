@@ -108,7 +108,7 @@
   window.__gsuiNavigate = function (path, options) {
     options = options || {};
     var url = new URL(path, location.href);
-    if (url.origin !== location.origin) { location.assign(url.href); return; }
+    if (url.origin !== location.origin || !__ws.connected()) { location.assign(url.href); return; }
     if (options.history !== 'none') rememberScroll();
     if (!options.patch) window.__gsuiVersion++;
     __ws.beginNavigation(!!options.patch);
@@ -122,7 +122,6 @@
   window.__gsuiNavigationDone = function (request) {
     if (request.history === 'push') history.pushState({__gsuiKey: ++historyKey}, '', request.url);
     if (request.history === 'replace') history.replaceState(history.state, '', request.url);
-    if(!request.patch)__ws.pageChanged();
     var root = document.getElementById('__content__') || document.querySelector('main') || document.body;
     var title = root.querySelector('[data-gsui-title]');
     if (title) document.title = title.getAttribute('data-gsui-title');
@@ -198,6 +197,6 @@
     });
     var button = event.submitter;
     if (button && button.name) data[button.name] = button.value;
-    __ws.call(action,data,null,button || form,{queue:false});
+    __ws.call(action,data,null,button || form);
   };
 })();

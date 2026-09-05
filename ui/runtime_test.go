@@ -67,7 +67,7 @@ func TestRuntimeSharedMiddleware(t *testing.T) {
 	})
 	app.Page("/private", func(*Context) *Node { renders.Add(1); return Div().Text("PRIVATE") })
 	app.Page("/public/{id}", func(*Context) *Node { return Div() })
-	app.Action("inspect", func(ctx *Context) string {
+	app.action("inspect", func(ctx *Context) string {
 		return fmt.Sprintf("%s:%s:%s:%v", ctx.Request.URL.Path, ctx.PathParams["id"], ctx.Query["q"], ctx.Request.Context().Value(contextKey{}))
 	})
 	ws := runtimeSocket(t, app)
@@ -96,7 +96,7 @@ func TestRuntimeNavigationContextAndCancellation(t *testing.T) {
 		}
 		return Div().Text("new page")
 	})
-	app.Action("start", func(ctx *Context) string { old <- ctx.Context(); return "" })
+	app.action("start", func(ctx *Context) string { old <- ctx.Context(); return "" })
 	ws := runtimeSocket(t, app)
 	runtimeCall(t, ws, "start", "/a", 1, nil)
 	previous := <-old
@@ -127,7 +127,7 @@ func TestRuntimeAuthorizationRechecked(t *testing.T) {
 		return "user", nil
 	}
 	var runs atomic.Int32
-	app.Action("save", func(ctx *Context) string {
+	app.action("save", func(ctx *Context) string {
 		if ctx.User() != "user" {
 			t.Error("missing identity")
 		}
@@ -147,7 +147,7 @@ func TestRuntimeDisconnectCancelsRunningAction(t *testing.T) {
 	app := NewApp()
 	app.Page("/", func(*Context) *Node { return Div() })
 	started, stopped := make(chan struct{}), make(chan struct{})
-	app.Action("wait", func(ctx *Context) string {
+	app.action("wait", func(ctx *Context) string {
 		close(started)
 		<-ctx.Context().Done()
 		close(stopped)
@@ -174,7 +174,7 @@ func TestRuntimeCloseCancelsRunningActionWithQueuedMessages(t *testing.T) {
 	app := NewApp()
 	app.Page("/", func(*Context) *Node { return Div() })
 	started, stopped := make(chan struct{}), make(chan struct{})
-	app.Action("wait", func(ctx *Context) string {
+	app.action("wait", func(ctx *Context) string {
 		close(started)
 		<-ctx.Context().Done()
 		close(stopped)
@@ -361,5 +361,100 @@ func TestRuntimeTableSourceKeepsStateInURL(t *testing.T) {
 	q = <-queries
 	if q.Search != "Alice" || q.Limit() != 10 {
 		t.Fatal("URL did not restore query", q)
+	}
+}
+
+func TestRuntimeRejectsUnversionedAndPagelessActions(t *testing.T) {
+	app := NewApp()
+	app.Page("/", func(*Context) *Node { return Div() })
+	var runs atomic.Int32
+	RegisterAction(app, "save", func(*Context, struct{}) (Result, error) {
+		runs.Add(1)
+		return Result{}.Toast("Saved"), nil
+	})
+	ws := runtimeSocket(t, app)
+	for _, request := range []struct {
+		page    string
+		version int64
+	}{{"/", 0}, {"", 1}} {
+		js := runtimeCall(t, ws, "save", request.page, request.version, nil)
+		if !strings.Contains(js, "Request denied") {
+			t.Fatal(js)
+		}
+	}
+	if runs.Load() != 0 {
+		t.Fatal("unsupported request reached handler")
+	}
+	runtimeCall(t, ws, "save", "/", 1, nil)
+	if runs.Load() != 1 {
+		t.Fatal("versioned action did not run")
+	}
+}
+
+func TestRuntimeTypedPushAndBroadcastEnvelopes(t *testing.T) {
+	app := NewApp()
+	app.Page("/", func(*Context) *Node { return Div() })
+	stopped := make(chan error, 1)
+	app.Subscription("clock", func(ctx *Context) error {
+		if err := ctx.Push(Result{}.SetText("clock", "tick")); err != nil {
+			return err
+		}
+		<-ctx.Context().Done()
+		err := ctx.Push(Result{}.SetText("clock", "late"))
+		stopped <- err
+		return err
+	})
+	ws := runtimeSocket(t, app)
+	err := websocket.Message.Send(ws, `{"act":"clock","page":"/","version":1,"sub":"clock|{}","data":{}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		var raw string
+		if err := websocket.Message.Receive(ws, &raw); err != nil {
+			t.Fatal(err)
+		}
+		var frame struct {
+			Reply        int    `json:"__r"`
+			Push         bool   `json:"__push"`
+			Version      int    `json:"version"`
+			Subscription string `json:"subscription"`
+			JS           string `json:"js"`
+		}
+		if err := json.Unmarshal([]byte(raw), &frame); err != nil {
+			t.Fatal(err)
+		}
+		if frame.Version != 1 {
+			t.Fatal("push/reply missing version", raw)
+		}
+		if i == 1 && (!frame.Push || frame.Subscription != "clock|{}" || !strings.Contains(frame.JS, "tick")) {
+			t.Fatal(raw)
+		}
+	}
+	if err := app.Broadcast(Result{}.Toast("Broadcast")); err != nil {
+		t.Fatal(err)
+	}
+	var raw string
+	if err := websocket.Message.Receive(ws, &raw); err != nil {
+		t.Fatal(err)
+	}
+	var frame struct {
+		Push bool   `json:"__push"`
+		JS   string `json:"js"`
+	}
+	if err := json.Unmarshal([]byte(raw), &frame); err != nil || !frame.Push || !strings.Contains(frame.JS, "Broadcast") {
+		t.Fatal("invalid broadcast", raw, err)
+	}
+	runtimeCall(t, ws, "__unsubscribe", "/", 1, map[string]any{"key": "clock|{}"})
+	select {
+	case err := <-stopped:
+		if err == nil {
+			t.Fatal("cancelled subscription allowed push")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription did not stop")
+	}
+	if err := app.Broadcast(Refresh("page")); err == nil {
+		t.Fatal("broadcast accepted page-dependent effect")
 	}
 }

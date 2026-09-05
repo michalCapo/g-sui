@@ -81,6 +81,9 @@ func (ctx *Context) setRequest(r *http.Request) {
 }
 
 func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
+	if msg.Version < 1 {
+		return errors.New("page version required")
+	}
 	app.mu.RLock()
 	st := app.connStates[ctx.wsConn]
 	previous, version := st.request, st.version
@@ -89,14 +92,11 @@ func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
 	if msg.Act == "__nav" {
 		return nil
 	} // destination authorization is in navigate
-	if previous != nil && msg.Version != 0 && msg.Version != version {
+	if previous != nil && msg.Version != version {
 		return errors.New("stale page")
 	}
 	path := msg.Page
-	if path == "" && previous != nil {
-		path = previous.URL.RequestURI()
-	}
-	if path == "" && len(app.middleware) > 0 {
+	if path == "" {
 		return errors.New("page required")
 	}
 	if previous != nil && st.view != nil && path != previous.URL.RequestURI() {
@@ -203,9 +203,6 @@ func (app *App) navigate(ctx *Context) string {
 }
 
 func runtimeReply(id, version int64, js string) string {
-	if version == 0 {
-		return wsReply(id, js)
-	}
 	b, _ := json.Marshal(map[string]any{"__r": 1, "id": id, "version": version, "js": js})
 	return string(b)
 }
@@ -257,7 +254,7 @@ func (app *App) Close() error {
 // sent. The callback must select on ctx.Context().Done() or use cancellable IO.
 // Reconnect starts a fresh subscription; page changes/unsubscribe cancel it.
 func (app *App) Subscription(name string, run func(*Context) error) {
-	app.Action(name, func(ctx *Context) string {
+	app.action(name, func(ctx *Context) string {
 		if ctx.subscription == "" {
 			return Notify("error", "Subscription required")
 		}
@@ -336,7 +333,7 @@ func (n *Node) OnInput(action *Action, delay ...time.Duration) *Node {
 	if err != nil {
 		panic(err)
 	}
-	return n.On("input", JS(fmt.Sprintf("var el=event.currentTarget;clearTimeout(el.__gsuiInputTimer);if(!el.__gsuiInputCleanup){el.__gsuiInputCleanup=true;(el.__gsuiCleanup||(el.__gsuiCleanup=[])).push(function(){clearTimeout(el.__gsuiInputTimer)})}el.__gsuiInputTimer=setTimeout(function(){__ws.call('%s',%s,%s,null,{queue:%t})},%d);", escJS(action.Name), data, collect, !action.NoQueue, max(wait.Milliseconds(), 0))))
+	return n.On("input", JS(fmt.Sprintf("var el=event.currentTarget;clearTimeout(el.__gsuiInputTimer);if(!el.__gsuiInputCleanup){el.__gsuiInputCleanup=true;(el.__gsuiCleanup||(el.__gsuiCleanup=[])).push(function(){clearTimeout(el.__gsuiInputTimer)})}el.__gsuiInputTimer=setTimeout(function(){__ws.call('%s',%s,%s,null)},%d);", escJS(action.Name), data, collect, max(wait.Milliseconds(), 0))))
 }
 
 // Toggle and dialog helpers run locally; business actions still run in Go.
@@ -361,7 +358,7 @@ func (r Result) effect(fn func(*Context) (string, error)) Result {
 	return r
 }
 func (r Result) Toast(message string) Result {
-	return r.effect(func(*Context) (string, error) { return Notify("success", message), nil })
+	return r.Notify("success", message)
 }
 func (r Result) Navigate(path string) Result {
 	return r.effect(func(*Context) (string, error) { return Navigate(path), nil })
@@ -386,6 +383,9 @@ func (r Result) Remove(id string) Result {
 func Refresh(regions ...string) Result { return Result{}.Refresh(regions...) }
 func (r Result) Refresh(regions ...string) Result {
 	return r.effect(func(ctx *Context) (string, error) {
+		if ctx == nil || ctx.app == nil || ctx.Request == nil {
+			return "", errors.New("refresh requires a page context")
+		}
 		handler, matched, ok := ctx.app.matchPage(ctx.Request)
 		if !ok {
 			return "", errors.New("page unavailable")
@@ -446,13 +446,13 @@ func (a ActionRef[T]) Call(input T) *Action {
 	if err := json.Unmarshal(b, &data); err != nil {
 		panic("action input must be a JSON object")
 	}
-	return &Action{Name: a.name, Data: data, NoQueue: true}
+	return &Action{Name: a.name, Data: data}
 }
 
 // RegisterAction decodes input, calls optional Validate() error on *T, and
 // renders Result effects. Errors are logged server-side, not exposed to users.
 func RegisterAction[T any](app *App, name string, handler func(*Context, T) (Result, error)) ActionRef[T] {
-	app.Action(name, func(ctx *Context) string {
+	app.action(name, func(ctx *Context) string {
 		var input T
 		if err := ctx.Body(&input); err != nil {
 			return Notify("error", "Invalid input")
@@ -561,7 +561,7 @@ func (ctx *Context) Event(name string, data ...any) *Action {
 	if len(data) > 0 {
 		payload = data[0]
 	}
-	return &Action{Name: "__live", Data: map[string]any{"event": name, "data": payload}, NoQueue: true}
+	return &Action{Name: "__live", Data: map[string]any{"event": name, "data": payload}}
 }
 
 // Live registers a server-owned view. Mount(*ViewContext) error is optional and
@@ -631,4 +631,45 @@ func (app *App) liveEvent(ctx *Context) string {
 		root = handler(ctx)
 	}
 	return root.ToJSMorph("__live__")
+}
+
+// Notify displays a notification with an explicit variant.
+func (r Result) Notify(variant, message string) Result {
+	return r.effect(func(*Context) (string, error) { return Notify(variant, message), nil })
+}
+
+// Replace replaces a subtree, including its input state. Use Morph to retain drafts.
+func (r Result) Replace(id string, node *Node) Result {
+	return r.effect(func(*Context) (string, error) {
+		if node == nil {
+			return "", errors.New("nil node")
+		}
+		return node.ToJSReplace(id), nil
+	})
+}
+
+func (r Result) Append(id string, node *Node) Result {
+	return r.effect(func(*Context) (string, error) {
+		if node == nil {
+			return "", errors.New("nil node")
+		}
+		return node.ToJSAppend(id), nil
+	})
+}
+
+func (r Result) Prepend(id string, node *Node) Result {
+	return r.effect(func(*Context) (string, error) {
+		if node == nil {
+			return "", errors.New("nil node")
+		}
+		return node.ToJSPrepend(id), nil
+	})
+}
+
+func (r Result) SetText(id, text string) Result {
+	return r.effect(func(*Context) (string, error) { return SetText(id, text), nil })
+}
+
+func (r Result) Download(filename, mimeType, base64Data string) Result {
+	return r.effect(func(*Context) (string, error) { return Download(filename, mimeType, base64Data), nil })
 }

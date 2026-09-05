@@ -47,7 +47,7 @@ func TestClientKeepsPageUsableWhileOffline(t *testing.T) {
 		"__offline.schedule()",
 		"window.__gsuiHolds>0",
 		"gsui:reconnected",
-		"act:'__ping'",
+		"message('__ping'",
 	} {
 		if !strings.Contains(wsClientJS, want) {
 			t.Errorf("client script missing %q", want)
@@ -58,7 +58,7 @@ func TestClientKeepsPageUsableWhileOffline(t *testing.T) {
 // The stub runs before /__ws.js loads; every documented helper must exist on
 // it, and hold() must share its counter with the real client.
 func TestStubExposesFullClientAPI(t *testing.T) {
-	for _, want := range []string{"call", "callSilent", "subscribe", "unsubscribe", "notfound", "hold", "holds", "connected", "offline", "reconnect"} {
+	for _, want := range []string{"call", "subscribe", "unsubscribe", "notfound", "hold", "holds", "connected", "offline", "reconnect"} {
 		if !strings.Contains(wsStubJS, want+":function") {
 			t.Errorf("stub missing %q", want)
 		}
@@ -85,7 +85,7 @@ func TestPingActionIsRegistered(t *testing.T) {
 
 // TestClientJSBehavior runs the embedded client source in Node against a fake
 // DOM and a scriptable WebSocket (ui/testdata/client_harness.js), covering the
-// reconnect state machine, queueing, holds, subscriptions and the badge.
+// reconnect state machine, rejected offline calls, holds, subscriptions and the badge.
 func TestClientJSBehavior(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {

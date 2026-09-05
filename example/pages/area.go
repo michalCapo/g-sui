@@ -53,7 +53,6 @@ func Area(ctx *r.Context) *r.Node {
 	)
 }
 
-func RegisterArea(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/area", func(ctx *r.Context) *r.Node { return layout(ctx, Area(ctx)) })
-	app.Action("nav.area", NavTo("/area", func() *r.Node { return Area(nil) }))
+func RegisterArea(app *r.App) {
+	app.Page("/area", Area)
 }

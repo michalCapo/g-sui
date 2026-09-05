@@ -71,7 +71,7 @@ func TestWebSocketReplyEnvelope(t *testing.T) {
 		ID    int64  `json:"id"`
 		JS    string `json:"js"`
 	}
-	if err := json.Unmarshal([]byte(wsReply(7, "x()")), &got); err != nil {
+	if err := json.Unmarshal([]byte(runtimeReply(7, 1, "x()")), &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.Reply != 1 || got.ID != 7 || got.JS != "x()" {

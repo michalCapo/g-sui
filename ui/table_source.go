@@ -40,7 +40,7 @@ type TableSource[T any] struct {
 // should configure columns, filters, page size and appearance without state.
 func RegisterTable[T any](app *App, id string, load func(*Context, TableQuery) (TablePage[T], error), configure func(*DataTable[T])) *TableSource[T] {
 	source := &TableSource[T]{id: id, action: "table." + id, load: load, configure: configure}
-	app.Action(source.action, func(ctx *Context) string {
+	app.action(source.action, func(ctx *Context) string {
 		var req struct {
 			Operation string `json:"operation"`
 			Search    string `json:"search"`

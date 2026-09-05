@@ -2,14 +2,14 @@
 
 Go server-rendered UI framework with real-time WebSocket patches.
 
-g-sui compiles Go node trees into pure JavaScript. The browser receives raw JS that performs `document.createElement()` calls directly -- no HTML templates, no JSON intermediate, no client-side framework. SVG elements use `document.createElementNS()` with proper namespace handling. User interactions trigger server actions via WebSocket, which respond with JS strings for DOM mutations.
+g-sui compiles Go node trees into pure JavaScript. The runtime sends versioned messages containing JavaScript that performs `document.createElement()` calls directly -- no HTML templates, no client-side framework. SVG elements use `document.createElementNS()` with proper namespace handling. User interactions trigger server actions via WebSocket, which return typed `Result` effects.
 
 ## Documentation
 
 Full API documentation: [`docs/documentation.md`](docs/documentation.md)
 
 For SPA-style applications written in Go, start with the
-[server-driven applications documentation](docs/documentation.md#server-driven-applications) and `go run ./example/live`.
+[server-driven applications documentation](docs/documentation.md#server-driven-applications) and `go run ./example`.
 It covers live links, typed actions/forms, region refresh, server-owned views,
 URL-backed tables, shared authorization and cancellable subscriptions.
 
@@ -49,11 +49,11 @@ func main() {
 Server (Go)                          Browser
 ─────────────                        ───────
 PageHandler → *Node → .ToJS()   →   Minimal HTML + <script>
-ActionHandler → JS string       ←→  WebSocket (__ws)
+RegisterAction → Result       ←→  WebSocket (__ws)
 ```
 
 - **Server-centric** -- all DOM trees built in Go, compiled to JavaScript
-- **WebSocket-only interactivity** -- click/submit events call server handlers, responses are JS strings
+- **WebSocket-only interactivity** -- click/submit events call server handlers, handlers return typed effects
 - **Partial updates** -- replace, append, prepend, or innerHTML specific DOM targets
 - **No client framework** -- the client is a small WS connector with keep-alive, silent reconnect, and a non-blocking offline badge
 - **Tailwind CSS** -- loaded via browser CDN (`@tailwindcss/browser@4`)
@@ -65,14 +65,14 @@ ActionHandler → JS string       ←→  WebSocket (__ws)
 - Server-rendered UI with a Go DSL (60+ element constructors, SVG namespace support)
 - WebSocket actions with data payloads and field collection (`Collect`)
 - Five DOM swap strategies: `ToJS`, `ToJSReplace`, `ToJSAppend`, `ToJSPrepend`, `ToJSInner`
-- Multi-action `Response` builder for complex updates
-- Real-time server push via `ctx.Push()` and broadcast via `ctx.Broadcast()` / `app.Broadcast()`
+- Typed `Result` effects for complex updates
+- Real-time server push via `ctx.Push()` and broadcast via `app.Broadcast()`
 - Custom HTTP routes: `app.GET()`, `app.POST()`, `app.DELETE()`
 - Layout system via `app.Layout()` and custom `Handler()` for embedding
 - SEO metadata: `app.Title`, `app.Description`, `app.HTMLHead`
 - Conditional rendering helpers: `If`, `Or`, `Map`
 - Toast notifications: success, error, error-reload, info
-- JS helpers: `Redirect`, `SetLocation`, `SetTitle`, `RemoveEl`, `SetText`, `SetAttr`, `AddClass`, `RemoveClass`, `Show`, `Hide`, `Download`, `DragToScroll`
+- JS helpers: `Redirect`, `SetTitle`, `RemoveEl`, `SetText`, `SetAttr`, `AddClass`, `RemoveClass`, `Show`, `Hide`, `Download`, `DragToScroll`
 
 ### Components
 
@@ -124,45 +124,45 @@ ActionHandler → JS string       ←→  WebSocket (__ws)
 
 ```bash
 go run example/main.go
-# Open http://localhost:1423
+# Open http://localhost:1424
 ```
 
-The example app includes 23 pages demonstrating components, forms, tables, data panels, real-time updates, navigation, and more.
+The example app includes pages demonstrating components, forms, tables, data panels, real-time updates, navigation, and more.
 
 ## Server Actions
 
 ```go
-// Register action
-app.Action("counter.inc", func(ctx *ui.Context) string {
-    count++
-    return ui.Span().ID("count").Text(fmt.Sprintf("%d", count)).ToJSReplace("count")
+type RenameInput struct { Name string `json:"name"` }
+rename := ui.RegisterAction(app, "profile.rename", func(ctx *ui.Context, input RenameInput) (ui.Result, error) {
+    return ui.Result{}.SetText("name", input.Name).Toast("Saved"), nil
 })
-
-// Attach to element
-ui.Button("...").Text("+1").OnClick(&ui.Action{Name: "counter.inc"})
+ui.Button().Text("Rename").OnClick(rename.Call(RenameInput{Name: "Alice"}))
 ```
 
-### Multi-Action Response
+### Multiple Effects
 
 ```go
-return ui.NewResponse().
-    Replace("row-"+id, updatedRow).
-    Toast("success", "Updated").
-    Navigate("/items").
-    Build()
+return ui.Result{}.Morph("row-"+id, updatedRow).Toast("Updated").Navigate("/items"), nil
 ```
 
 ### Real-Time Push
 
 ```go
-go func() {
+app.Subscription("clock", func(ctx *ui.Context) error {
+    ticker := time.NewTicker(time.Second)
+    defer ticker.Stop()
     for {
-        time.Sleep(time.Second)
-        if err := ctx.Push(ui.SetText("clock", time.Now().Format("15:04:05"))); err != nil {
-            return
+        select {
+        case <-ctx.Context().Done():
+            return ctx.Context().Err()
+        case now := <-ticker.C:
+            if err := ctx.Push(ui.Result{}.SetText("clock", now.Format("15:04:05"))); err != nil {
+                return err
+            }
         }
     }
-}()
+})
+ui.Span().ID("clock").Subscribe("clock")
 ```
 
 ## Theme & Dark Mode

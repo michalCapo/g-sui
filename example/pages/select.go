@@ -4,6 +4,11 @@ import (
 	r "github.com/michalCapo/g-sui/ui"
 )
 
+const (
+	selectChooseID  = "select-choose"
+	selectDisplayID = "select-display"
+)
+
 func SelectPage(ctx *r.Context) *r.Node {
 	row := func(title string, content *r.Node) *r.Node {
 		return r.Div("bg-white p-4 rounded-lg shadow border border-gray-200 flex flex-col gap-3").Render(
@@ -52,10 +57,10 @@ func SelectPage(ctx *r.Context) *r.Node {
 			"Placeholder + change handler",
 			r.Div("w-64").Render(
 				labeled("Choose",
-					r.Select(selectCls).Attr("name", "ChooseField").ID("select-choose").
+					r.Select(selectCls).Attr("name", "ChooseField").ID(selectChooseID).
 						On("change", &r.Action{
 							Name:    "select.change",
-							Collect: []string{"select-choose"},
+							Collect: []string{selectChooseID},
 						}).
 						Render(
 							r.Option().Attr("value", "").Text("Pick one"),
@@ -65,7 +70,7 @@ func SelectPage(ctx *r.Context) *r.Node {
 						),
 				),
 			),
-			r.Div("text-sm text-gray-700").ID("select-display").Text("Selected: (none)"),
+			r.Div("text-sm text-gray-700").ID(selectDisplayID).Text("Selected: (none)"),
 		),
 	)
 
@@ -110,20 +115,16 @@ func SelectPage(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleSelectChange(ctx *r.Context) string {
-	var data map[string]any
-	ctx.Body(&data)
-
-	val, _ := data["ChooseField"].(string)
+func HandleSelectChange(ctx *r.Context, data struct{ ChooseField string }) (r.Result, error) {
+	val := data.ChooseField
 	if val == "" {
 		val = "(none)"
 	}
 
-	return r.SetText("select-display", "Selected: "+val)
+	return r.Result{}.SetText(selectDisplayID, "Selected: "+val), nil
 }
 
-func RegisterSelect(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/select", func(ctx *r.Context) *r.Node { return layout(ctx, SelectPage(ctx)) })
-	app.Action("nav.select", NavTo("/select", func() *r.Node { return SelectPage(nil) }))
-	app.Action("select.change", HandleSelectChange)
+func RegisterSelect(app *r.App) {
+	app.Page("/select", SelectPage)
+	r.RegisterAction(app, "select.change", HandleSelectChange)
 }

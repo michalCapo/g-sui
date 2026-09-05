@@ -30,17 +30,16 @@ func ReloadRedirect(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleRedirectDashboard(ctx *r.Context) string {
-	return r.Notify("info", "Redirecting to dashboard...") + r.Redirect("/")
+func HandleRedirectDashboard(ctx *r.Context, _ struct{}) (r.Result, error) {
+	return r.Result{}.Notify("info", "Redirecting to dashboard...").Navigate("/"), nil
 }
 
-func HandleRedirectButton(ctx *r.Context) string {
-	return r.Notify("info", "Redirecting to button page...") + r.Redirect("/button")
+func HandleRedirectButton(ctx *r.Context, _ struct{}) (r.Result, error) {
+	return r.Result{}.Notify("info", "Redirecting to button page...").Navigate("/button"), nil
 }
 
-func RegisterReloadRedirect(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/reload-redirect", func(ctx *r.Context) *r.Node { return layout(ctx, ReloadRedirect(ctx)) })
-	app.Action("nav.reload", NavTo("/reload-redirect", func() *r.Node { return ReloadRedirect(nil) }))
-	app.Action("redirect.dashboard", HandleRedirectDashboard)
-	app.Action("redirect.button", HandleRedirectButton)
+func RegisterReloadRedirect(app *r.App) {
+	app.Page("/reload-redirect", ReloadRedirect)
+	r.RegisterAction(app, "redirect.dashboard", HandleRedirectDashboard)
+	r.RegisterAction(app, "redirect.button", HandleRedirectButton)
 }

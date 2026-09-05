@@ -1,7 +1,7 @@
 // Package ui provides a server-rendered UI framework where Go builds
 // typed DOM node trees that compile to pure JavaScript strings.
-// The browser receives raw JS that performs document.createElement calls
-// directly -- no HTML, no JSON intermediate, no client-side framework.
+// The runtime sends versioned messages with JavaScript DOM operations.
+// Applications return typed Result effects without a client-side framework.
 //
 // SVG elements (svg, path, circle, rect, etc.) are automatically created
 // with document.createElementNS using the SVG namespace. Child elements
@@ -42,7 +42,6 @@ type Action struct {
 	Name    string         // e.g. "counter.increment"
 	Data    map[string]any // state payload sent with the call
 	Collect []string       // element IDs whose .value to collect before calling
-	NoQueue bool           // reject while disconnected; enabled by typed actions/live events
 	rawJS   string         // if set, execute client-side JS instead of WS call
 }
 
@@ -502,8 +501,8 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 				prevent = "event.preventDefault();"
 			}
 			fmt.Fprintf(b,
-				"_bind(%s,'%s',function(event){%s%s__ws.call('%s',%s,%s,event.currentTarget,{queue:%t})});",
-				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON), string(collectJSON), !action.NoQueue,
+				"_bind(%s,'%s',function(event){%s%s__ws.call('%s',%s,%s,event.currentTarget)});",
+				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON), string(collectJSON),
 			)
 		} else {
 			dataJSON, err := json.Marshal(action.Data)
@@ -517,8 +516,8 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 				prevent = "event.preventDefault();"
 			}
 			fmt.Fprintf(b,
-				"_bind(%s,'%s',function(event){%s%s__ws.call('%s',%s,null,event.currentTarget,{queue:%t})});",
-				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON), !action.NoQueue,
+				"_bind(%s,'%s',function(event){%s%s__ws.call('%s',%s,null,event.currentTarget)});",
+				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON),
 			)
 		}
 	}
@@ -587,16 +586,6 @@ func Notify(variant, message string) string {
 // The body is hidden for 200ms before navigating for a smooth transition.
 func Redirect(url string) string {
 	return fmt.Sprintf("document.body.style.visibility='hidden';setTimeout(function(){window.location.href='%s'},200);", escJS(url))
-}
-
-// SetLocation returns JS that updates the browser URL without a page reload
-// using history.pushState. Use this in WS actions to keep the address bar
-// in sync with the visible content.
-// It also drops the previous page's WebSocket subscriptions (see
-// __ws.subscribe) so a later reconnect does not re-arm Push loops that target
-// elements the navigation removed.
-func SetLocation(url string) string {
-	return fmt.Sprintf("history.pushState(null,'','%s');window.__gsuiPage=location.pathname+location.search;if(window.__ws&&__ws.pageChanged)__ws.pageChanged();", escJS(url))
 }
 
 // Back returns JS that navigates back in browser history (history.back()).

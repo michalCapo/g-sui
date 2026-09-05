@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -49,10 +50,10 @@ type LayoutHandler func(ctx *Context) *Node
 
 // App is the top-level application container. It holds page routes (GET)
 // and named actions (WS). Pages return a *Node tree that compiles to JS
-// for the initial render. Actions return raw JS strings for DOM mutations.
+// for the initial render. Typed actions return Result effects.
 type App struct {
 	mu          sync.RWMutex
-	actions     map[string]ActionHandler
+	actions     map[string]actionHandler
 	clients     map[*websocket.Conn]bool
 	connStates  map[*websocket.Conn]*connState
 	mux         *http.ServeMux
@@ -99,7 +100,7 @@ type App struct {
 	// ReconnectReloadAfterMs controls the page reload that happens after the
 	// socket comes back. The reload only runs when the outage lasted at least
 	// this long AND no client-side hold is active (see __ws.hold()). Shorter
-	// outages resync silently: queued messages are flushed and a
+	// outages resync silently: subscriptions restart and a
 	// "gsui:reconnected" event is dispatched so the page can refresh itself
 	// without losing in-page state such as an upload in progress.
 	// Default 15000. Use -1 to never reload.
@@ -133,14 +134,14 @@ type App struct {
 // PageHandler builds the initial DOM for a GET route.
 type PageHandler func(ctx *Context) *Node
 
-// ActionHandler processes a WS action call and returns a JS string
+// actionHandler processes a WS action call and returns a JS string
 // to execute on the client.
-type ActionHandler func(ctx *Context) string
+type actionHandler func(ctx *Context) string
 
 // NewApp creates a new application instance.
 func NewApp() *App {
 	return &App{
-		actions:    make(map[string]ActionHandler),
+		actions:    make(map[string]actionHandler),
 		clients:    make(map[*websocket.Conn]bool),
 		connStates: make(map[*websocket.Conn]*connState),
 		mux:        http.NewServeMux(),
@@ -194,10 +195,8 @@ func (app *App) CSS(urls []string, css string) {
 	}
 }
 
-// Action registers a named server action callable via WebSocket.
-// The handler receives a Context (with .Body() for payload) and returns
-// a raw JS string that the client executes directly.
-func (app *App) Action(name string, handler ActionHandler) {
+// action registers an internal dispatcher. Applications use RegisterAction.
+func (app *App) action(name string, handler actionHandler) {
 	app.mu.Lock()
 	app.actions[name] = handler
 	app.mu.Unlock()
@@ -281,9 +280,9 @@ func (app *App) setupRoutes() {
 	// (the layout shell stays). Otherwise the full body is cleared and rebuilt.
 	// Also cancels any outstanding Push goroutines for the connection since
 	// their target elements no longer exist after navigation.
-	app.Action("__nav", app.navigate)
-	app.Action("__live", app.liveEvent)
-	app.Action("__unsubscribe", func(ctx *Context) string {
+	app.action("__nav", app.navigate)
+	app.action("__live", app.liveEvent)
+	app.action("__unsubscribe", func(ctx *Context) string {
 		var req struct {
 			Name string `json:"name"`
 			Key  string `json:"key"`
@@ -297,7 +296,7 @@ func (app *App) setupRoutes() {
 	// Built-in __notfound action: the client sends this when a WS patch
 	// targets a DOM element that no longer exists. Cancel push context so
 	// server-side goroutines calling ctx.Push() get an error and stop.
-	app.Action("__notfound", func(ctx *Context) string {
+	app.action("__notfound", func(ctx *Context) string {
 		var req struct {
 			Subscription string `json:"subscription"`
 		}
@@ -309,8 +308,8 @@ func (app *App) setupRoutes() {
 
 	// Built-in __ping action: keep-alive traffic from the client so idle
 	// connections are not dropped by proxies. Sent without an id, so the
-	// empty response is never written back.
-	app.Action("__ping", func(_ *Context) string { return "" })
+	// empty reply carries no DOM changes.
+	app.action("__ping", func(_ *Context) string { return "" })
 
 	// Serve the tiny WS client script
 	app.mux.HandleFunc("GET /__ws.js", app.serveWSClient)
@@ -621,7 +620,7 @@ func (app *App) wsConfigJS() string {
 // counter, so a hold taken before the client loads still suppresses the
 // reconnect reload and its release function keeps working afterwards.
 const wsStubJS = `window.__gsuiHolds=window.__gsuiHolds||0;
-window.__ws||(window.__ws={__q:[],navigate:function(){this.__q.push(['navigate',arguments])},call:function(){this.__q.push(['call',arguments])},callSilent:function(){this.__q.push(['callSilent',arguments])},subscribe:function(){this.__q.push(['subscribe',arguments])},unsubscribe:function(){this.__q.push(['unsubscribe',arguments])},notfound:function(){this.__q.push(['notfound',arguments])},pageChanged:function(){},hold:function(){window.__gsuiHolds++;var r=false;return function(){if(r)return;r=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1)}},holds:function(){return window.__gsuiHolds},connected:function(){return false},offline:function(){return false},reconnect:function(){}});`
+window.__ws||(window.__ws={__q:[],navigate:function(){this.__q.push(['navigate',arguments])},call:function(){this.__q.push(['call',arguments])},subscribe:function(){this.__q.push(['subscribe',arguments])},unsubscribe:function(){this.__q.push(['unsubscribe',arguments])},notfound:function(){this.__q.push(['notfound',arguments])},hold:function(){window.__gsuiHolds++;var r=false;return function(){if(r)return;r=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1)}},holds:function(){return window.__gsuiHolds},connected:function(){return false},offline:function(){return false},reconnect:function(){}});`
 
 // themeInitJS runs synchronously in <head> before the body renders to
 // prevent FOUC. It reads the stored theme from localStorage, applies the
@@ -740,9 +739,9 @@ var __offline=(function(){
   return{schedule:schedule,hide:hide,visible:function(){return shown}};
 })();
 var __ws=(function(){
-  var ws,q=[],ready=false,seq=0,inflight={},loaderEl=null,loaderTimer=0,hadClose=false,backoff=500;
-  var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],epoch=0,api,busy={},uncertain={};
-  function message(act,data,id,sub){return JSON.stringify({act:act,data:data||{},id:id||0,sub:sub||'',page:window.__gsuiPage||location.pathname+location.search,version:window.__gsuiVersion||0})}
+  var ws,ready=false,seq=0,inflight={},loaderEl=null,loaderTimer=0,hadClose=false,backoff=500;
+  var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],api,busy={},uncertain={};
+  function message(act,data,id,sub){return JSON.stringify({act:act,data:data||{},id:id||0,sub:sub||'',page:window.__gsuiPage||location.pathname+location.search,version:window.__gsuiVersion})}
   function release(id){var el=busy[id];if(el){el.disabled=false;el.removeAttribute('aria-busy');if(el.form)el.form.removeAttribute('aria-busy');el.classList.remove('gsui-busy','opacity-60','cursor-wait');delete busy[id]}}
   var inst=typeof __gsuiCfg.inst==='string'?__gsuiCfg.inst:'',serverChanged=false,pendingReload='';
   // Holds live on window so the pre-client stub and the real client share one
@@ -773,7 +772,7 @@ var __ws=(function(){
     requestReload('server-restart');
   }
   function showLoader(){
-    // While disconnected the request is only queued; the offline badge already
+    // While disconnected there is no pending request; the offline badge already
     // says so, and a blocking loader would lock the page for the whole outage.
     if(!ready||loaderEl||loaderTimer)return;
     loaderTimer=setTimeout(function(){
@@ -807,7 +806,7 @@ var __ws=(function(){
     // connection alive during long client-side work such as file uploads.
     pingTimer=setInterval(function(){
       if(!ready||!ws||ws.readyState!==1)return;
-      rawSend(JSON.stringify({act:'__ping',data:{}}));
+      rawSend(message('__ping',{}));
     },iv);
   }
   function stopPing(){if(pingTimer){clearInterval(pingTimer);pingTimer=0}}
@@ -817,23 +816,6 @@ var __ws=(function(){
     if(!ws||ws.readyState!==1)return false;
     try{ws.send(msg);return true}catch(_){return false}
   }
-  // send() is the single outbound path: deliver now, otherwise queue for the
-  // next open socket. id is tracked only once the message is safely held.
-  function send(msg,id){
-    if(rawSend(msg)){if(id)inflight[id]=true;return true}
-    if(!queue(msg,id))return false;
-    // Queued requests stay tracked so the loader appears once the connection
-    // is back and clears when the reply finally arrives.
-    if(id)inflight[id]=true;
-    return true;
-  }
-  function flush(){
-    // Incremental: a failing send stops the flush without dropping the rest.
-    while(q.length){
-      if(!rawSend(q[0].msg))break;
-      q.shift();
-    }
-  }
   // markDown is the single place that records "the connection is gone". It
   // runs from onclose and when a silently dead socket is discovered, so the
   // bookkeeping is identical either way.
@@ -842,8 +824,8 @@ var __ws=(function(){
     if(Object.keys(uncertain).length){window.__gsuiReport('Connection lost. Your last action may have completed. Check before retrying.');uncertain={}}
     ready=false;stopPing();
     // Replies for messages that were already on the wire will never arrive;
-    // requests still sitting in the queue keep their tracking.
-    inflight={};q.forEach(function(it){if(it.id)inflight[it.id]=true});
+    // No action is replayed after reconnect.
+    inflight={};
     hideLoader();
     Object.keys(busy).forEach(function(id){release(id)});
     if(!downSince)downSince=Date.now();
@@ -885,11 +867,9 @@ var __ws=(function(){
       __offline.hide();
       startPing();
       // Re-arm server-side subscriptions (Push loops) that died with the old
-      // connection before replaying queued work, so live regions are running
-      // again by the time those actions execute. Without this a silent
+      // connection. Without this a silent
       // reconnect leaves live regions frozen.
       subs.forEach(function(s){rawSend(message(s.act,s.data,0,s.key))});
-      flush();
       if(Object.keys(inflight).length)showLoader();
       if(hadClose){
         hadClose=false;
@@ -905,14 +885,15 @@ var __ws=(function(){
     };
     sock.onmessage=function(e){
       if(ws!==sock)return;
-      var m;try{m=JSON.parse(e.data)}catch(_){}
+      var m;try{m=JSON.parse(e.data)}catch(_){return}
       if(m&&m.__hello){onHello(m.__hello);return}
+      if(!m||(!m.__r&&!m.__push))return;
+      if(!m.broadcast&&(!Number.isInteger(m.version)||m.version<1))return;
       if(m&&m.__r){delete inflight[m.id];delete uncertain[m.id];release(m.id);hideLoader()}
       if(m&&m.version&&m.version!==window.__gsuiVersion)return;
       if(m&&m.__push&&m.subscription&&!subs.some(function(s){return s.key===m.subscription}))return;
-      epoch++;
       window.__gsuiPushSubscription=m&&m.subscription||'';
-      var js=m&&(m.__r||m.__push)?m.js:e.data;
+      var js=m.js;
       try{if(js)new Function(js)()}catch(err){console.error('ws exec error:',err)}
       finally{window.__gsuiPushSubscription=''}
       try{window.dispatchEvent(new Event('gsui:updated'))}catch(_){}
@@ -966,14 +947,10 @@ var __ws=(function(){
     if(form){btn=form.querySelector('button[type=submit]')||form.querySelector('button:not([type])')||form.querySelector('button');if(!btn&&form.id)btn=document.querySelector('button[form="'+form.id+'"]')}else{var p=t.parentElement;while(p&&p!==document.body){btn=p.querySelector('button');if(btn)break;p=p.parentElement}}
     if(btn){e.preventDefault();btn.click()}
   });
-  function queue(msg,id){
-    if(q.length>=100){console.warn('gsui: WebSocket queue full; dropping message');return false}
-    q.push({msg:msg,id:id||0});return true;
-  }
   api={
     navigate:function(path,options){window.__gsuiNavigate(path,options)},
     beginNavigation:function(patch){
-      if(!patch){subs=[];q=[];inflight={};Object.keys(busy).forEach(release);hideLoader()}
+      if(!patch){subs=[];inflight={};Object.keys(busy).forEach(release);hideLoader()}
     },
     // hold() marks critical in-page work (file upload, multi-step form).
     // While at least one hold is active, a reconnect never reloads the page,
@@ -990,55 +967,33 @@ var __ws=(function(){
     connected:function(){return ready&&!!ws&&ws.readyState===1},
     offline:function(){return __offline.visible()},
     reconnect:reconnectNow,
-    // subscribe() is callSilent for actions that start a server-side Push
-    // loop. The call is repeated on every reconnect, so live regions survive
-    // an outage without reloading the page. Dropped on navigation.
-    //
-    // It deliberately does not use the send queue: while disconnected the
-    // registration alone is enough, and queueing as well would deliver the
-    // call twice on reconnect (once from the queue, once from the replay)
-    // and start two server goroutines.
+    // Managed subscriptions restart once per connection and stop on navigation.
     subscribe:function(act,data){
       var d=Object.assign({},data||{}),key=act+'|'+JSON.stringify(d);
       subs=subs.filter(function(s){return s.key!==key});
-      subs.push({act:act,data:d,key:key,epoch:epoch});
+      subs.push({act:act,data:d,key:key});
       rawSend(message(act,d,0,key));
     },
     unsubscribe:function(act,data){
       var key=data===undefined?'':act+'|'+JSON.stringify(data||{});
       subs=subs.filter(function(s){return key?s.key!==key:s.act!==act});
-      send(message('__unsubscribe',{name:act,key:key}));
+      rawSend(message('__unsubscribe',{name:act,key:key}));
     },
-    // pageChanged() drops subscriptions belonging to superseded pages. It is
-    // emitted by SetLocation/Response.Navigate. Subscriptions registered by
-    // the JS of the current server message share its epoch and survive, so
-    // the call works regardless of whether the new page's content JS runs
-    // before or after the pushState in the same response.
-    pageChanged:function(){
-      subs.filter(function(s){return s.epoch<epoch}).forEach(function(s){send(message('__unsubscribe',{name:s.act,key:s.key}))});
-      subs=subs.filter(function(s){return s.epoch>=epoch});
-    },
-    call:function(act,data,collect,source,options){
-      if(options&&options.queue===false&&!api.connected()){window.__gsuiReport('You are offline. Reconnect before trying again.');return 0}
+    call:function(act,data,collect,source){
+      if(!api.connected()){window.__gsuiReport('You are offline. Reconnect before trying again.');return 0}
       var d=Object.assign({},data||{});
       if(collect&&collect.length){
         collect.forEach(function(id){collectValue(id,d)});
       }
       var id=++seq;
-      if(options&&options.queue===false)uncertain[id]=true;
+      uncertain[id]=true;
       if(source&&/^(BUTTON|FORM)$/.test(source.tagName)){busy[id]=source;source.disabled=true;source.setAttribute('aria-busy','true');if(source.form)source.form.setAttribute('aria-busy','true');source.classList.add('gsui-busy','opacity-60','cursor-wait')}
       var msg=message(act,d,id);
-      if(options&&options.queue===false){
         if(rawSend(msg)){inflight[id]=true;showLoader()}else{release(id);delete uncertain[id];window.__gsuiReport('Connection lost before sending. Please try again.')}
-      }else if(send(msg,id))showLoader();else{release(id);delete uncertain[id]}
       return id;
     },
-    callSilent:function(act,data){
-      var d=Object.assign({},data||{});
-      send(message(act,d));
-    },
     notfound:function(id){
-      send(message('__notfound',{id:id,subscription:window.__gsuiPushSubscription||''}));
+      rawSend(message('__notfound',{id:id,subscription:window.__gsuiPushSubscription||''}));
     }
   };
   return api;
@@ -1096,19 +1051,6 @@ func (app *App) send(ws *websocket.Conn, s string) error {
 		return err
 	}
 	return websocket.Message.Send(ws, s)
-}
-
-func wsReply(id int64, js string) string {
-	b, err := json.Marshal(struct {
-		Reply int64  `json:"__r"`
-		ID    int64  `json:"id"`
-		JS    string `json:"js"`
-	}{Reply: 1, ID: id, JS: js})
-	if err != nil {
-		log.Printf("gsui: marshal WebSocket reply: %v", err)
-		return `{"__r":1,"id":0,"js":""}`
-	}
-	return string(b)
 }
 
 // cancelConn cancels the push context for a connection and creates a fresh
@@ -1216,9 +1158,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 
 		if !ok {
 			errJS := Notify("error", fmt.Sprintf("Unknown action: %s", msg.Act))
-			if msg.ID != 0 {
-				errJS = wsReply(msg.ID, errJS)
-			}
+			errJS = runtimeReply(msg.ID, msg.Version, errJS)
 			if err := app.send(ws, errJS); err != nil {
 				log.Printf("gsui: ws send error: %v", err)
 				return
@@ -1268,9 +1208,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		}
 
 		// Tracked requests always receive an envelope, including empty JS.
-		if msg.ID != 0 || msg.Version != 0 {
-			jsResponse = runtimeReply(msg.ID, msg.Version, jsResponse)
-		}
+		jsResponse = runtimeReply(msg.ID, msg.Version, jsResponse)
 		if jsResponse != "" {
 			if err := app.send(ws, jsResponse); err != nil {
 				log.Printf("gsui: ws send error: %v", err)
@@ -1433,11 +1371,11 @@ func (ctx *Context) Body(target any) error {
 	return json.Unmarshal(b, target)
 }
 
-// Push sends a JS string to THIS client connection immediately.
+// Push sends Result effects to this client connection immediately.
 // Useful for sending additional updates outside the normal request/response.
 // Returns an error if the connection's push context has been cancelled
 // (e.g. the client navigated away or reported a missing target element).
-func (ctx *Context) Push(js string) error {
+func (ctx *Context) Push(result Result) error {
 	if ctx.wsConn == nil {
 		return fmt.Errorf("no websocket connection")
 	}
@@ -1456,101 +1394,32 @@ func (ctx *Context) Push(js string) error {
 	if ctx.app == nil {
 		return fmt.Errorf("no app context")
 	}
-	if ctx.version != 0 || ctx.subscription != "" {
-		b, _ := json.Marshal(map[string]any{"__push": true, "js": js, "version": ctx.version, "subscription": ctx.subscription})
-		return ctx.app.send(ctx.wsConn, string(b))
+	js, err := result.build(ctx)
+	if err != nil {
+		return err
 	}
-	return ctx.app.send(ctx.wsConn, js)
+	b, _ := json.Marshal(map[string]any{"__push": true, "js": js, "version": ctx.version, "subscription": ctx.subscription})
+	return ctx.app.send(ctx.wsConn, string(b))
 }
 
-// Broadcast sends a JS string to ALL connected WebSocket clients.
-func (ctx *Context) Broadcast(js string) {
-	if ctx.app != nil {
-		ctx.app.Broadcast(js)
+// Broadcast sends effects to all connected clients. Effects must not depend on a page context.
+func (app *App) Broadcast(result Result) error {
+	js, err := result.build(nil)
+	if err != nil {
+		return err
 	}
-}
-
-// Broadcast sends a JS string to ALL connected WebSocket clients.
-// Can be called from anywhere (background goroutines, HTTP handlers, etc.)
-// without needing a Context.
-func (app *App) Broadcast(js string) {
+	frame, _ := json.Marshal(map[string]any{"__push": true, "broadcast": true, "js": js})
 	app.mu.RLock()
 	clients := make([]*websocket.Conn, 0, len(app.clients))
 	for conn := range app.clients {
 		clients = append(clients, conn)
 	}
 	app.mu.RUnlock()
+	var failures []error
 	for _, conn := range clients {
-		if err := app.send(conn, js); err != nil {
-			log.Printf("gsui: broadcast send error: %v", err)
+		if err := app.send(conn, string(frame)); err != nil {
+			failures = append(failures, err)
 		}
 	}
-}
-
-// ---------------------------------------------------------------------------
-// Multi-action response builder
-// ---------------------------------------------------------------------------
-
-// Response collects multiple JS statements into a single response string.
-type Response struct {
-	parts []string
-}
-
-// NewResponse creates an empty response builder.
-func NewResponse() *Response {
-	return &Response{}
-}
-
-// Add appends a JS string to the response.
-func (r *Response) Add(js string) *Response {
-	r.parts = append(r.parts, js)
-	return r
-}
-
-// Replace adds a node replacement operation to the response.
-func (r *Response) Replace(targetID string, node *Node) *Response {
-	r.parts = append(r.parts, node.ToJSReplace(targetID))
-	return r
-}
-
-// Render adds a node innerHTML replacement operation to the response.
-func (r *Response) Inner(targetID string, node *Node) *Response {
-	r.parts = append(r.parts, node.ToJSInner(targetID))
-	return r
-}
-
-// Append adds a node append operation.
-func (r *Response) Append(parentID string, node *Node) *Response {
-	r.parts = append(r.parts, node.ToJSAppend(parentID))
-	return r
-}
-
-// Remove adds an element removal.
-func (r *Response) Remove(id string) *Response {
-	r.parts = append(r.parts, RemoveEl(id))
-	return r
-}
-
-// Toast adds a notification.
-func (r *Response) Toast(variant, message string) *Response {
-	r.parts = append(r.parts, Notify(variant, message))
-	return r
-}
-
-// Navigate loads a registered page without reloading the document. Use
-// Add(SetLocation(url)) for legacy code that has already replaced its content.
-func (r *Response) Navigate(url string) *Response {
-	r.parts = append(r.parts, Navigate(url))
-	return r
-}
-
-// Back navigates back in browser history (history.back()).
-func (r *Response) Back() *Response {
-	r.parts = append(r.parts, "history.back();")
-	return r
-}
-
-// Build joins all parts into a single JS string.
-func (r *Response) Build() string {
-	return strings.Join(r.parts, "")
+	return errors.Join(failures...)
 }

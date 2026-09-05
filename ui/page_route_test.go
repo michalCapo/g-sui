@@ -97,7 +97,7 @@ func TestWebSocketNavigationSupportsPagePathValues(t *testing.T) {
 	}
 	defer ws.Close()
 
-	message := `{"act":"__nav","data":{"url":"/dp/ws-token"},"id":1}`
+	message := `{"act":"__nav","data":{"url":"/dp/ws-token"},"id":1,"version":1}`
 	if err := websocket.Message.Send(ws, message); err != nil {
 		t.Fatalf("send navigation message: %v", err)
 	}

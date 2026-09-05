@@ -27,28 +27,33 @@ func Hello(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleHelloOk(ctx *r.Context) string {
-	return r.Notify("success", "Hello")
+func HandleHelloOk(ctx *r.Context, _ struct{}) (r.Result, error) {
+	return r.Result{}.Notify("success", "Hello"), nil
 }
 
-func HandleHelloError(ctx *r.Context) string {
-	return r.Notify("error", "Hello error")
+func HandleHelloError(ctx *r.Context, _ struct{}) (r.Result, error) {
+	return r.Result{}.Notify("error", "Hello error"), nil
 }
 
-func HandleHelloDelay(ctx *r.Context) string {
-	time.Sleep(2 * time.Second)
-	return r.Notify("info", "Information (after 2s delay)")
+func HandleHelloDelay(ctx *r.Context, _ struct{}) (r.Result, error) {
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-ctx.Context().Done():
+		return r.Result{}, ctx.Context().Err()
+	case <-timer.C:
+	}
+	return r.Result{}.Notify("info", "Information (after 2s delay)"), nil
 }
 
-func HandleHelloCrash(ctx *r.Context) string {
+func HandleHelloCrash(ctx *r.Context, _ struct{}) (r.Result, error) {
 	panic("Hello again")
 }
 
-func RegisterHello(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/hello", func(ctx *r.Context) *r.Node { return layout(ctx, Hello(ctx)) })
-	app.Action("nav.hello", NavTo("/hello", func() *r.Node { return Hello(nil) }))
-	app.Action("hello.ok", HandleHelloOk)
-	app.Action("hello.error", HandleHelloError)
-	app.Action("hello.delay", HandleHelloDelay)
-	app.Action("hello.crash", HandleHelloCrash)
+func RegisterHello(app *r.App) {
+	app.Page("/hello", Hello)
+	r.RegisterAction(app, "hello.ok", HandleHelloOk)
+	r.RegisterAction(app, "hello.error", HandleHelloError)
+	r.RegisterAction(app, "hello.delay", HandleHelloDelay)
+	r.RegisterAction(app, "hello.crash", HandleHelloCrash)
 }

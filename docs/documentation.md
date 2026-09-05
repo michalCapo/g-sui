@@ -20,7 +20,7 @@
 8. [JS Compilation & DOM Swaps](#js-compilation--dom-swaps)
 9. [JS Helper Functions](#js-helper-functions)
 10. [Conditional Helpers](#conditional-helpers)
-11. [Response Builder](#response-builder)
+11. [Result Effects](#result-effects)
 12. [Components](#components)
 13. [Form Builder](#form-builder)
 14. [Data Tables](#data-tables)
@@ -38,7 +38,7 @@
 
 ## Architecture
 
-g-sui compiles Go node trees into **pure JavaScript** strings. The browser receives raw JS that performs `document.createElement()` calls directly -- no HTML templates, no JSON intermediate format, no client-side framework. SVG elements are created with `document.createElementNS()` using the proper SVG namespace, so inline SVG icons render correctly without workarounds.
+g-sui compiles Go node trees into **pure JavaScript** strings. The browser receives versioned messages containing JavaScript that performs `document.createElement()` calls directly -- no HTML templates, no client-side framework. SVG elements are created with `document.createElementNS()` using the proper SVG namespace, so inline SVG icons render correctly without workarounds.
 
 ```
 ┌──────────────────────────────────────────┐
@@ -48,7 +48,7 @@ g-sui compiles Go node trees into **pure JavaScript** strings. The browser recei
 │        ↓                                 │
 │  Minimal HTML shell + <script> body      │
 │                                          │
-│  ActionHandler → JS string (DOM patch)   │
+│  RegisterAction → Result effects         │
 │        ↕                                 │
 │  WebSocket (__ws endpoint)               │
 └──────────────────────────────────────────┘
@@ -157,27 +157,15 @@ Static routes remain exact matches, including `/` and routes ending in `/`. Use 
 ### Action Handlers
 
 ```go
-app.Action("counter.inc", func(ctx *ui.Context) string {
-    count++
-    return ui.NewResponse().
-        Replace("counter", ui.Span().ID("counter").Text(fmt.Sprintf("%d", count))).
-        Build()
+type RenameInput struct { Name string `json:"name"` }
+rename := ui.RegisterAction(app, "profile.rename", func(ctx *ui.Context, input RenameInput) (ui.Result, error) {
+    return ui.Result{}.SetText("name", input.Name).Toast("Saved"), nil
 })
+ui.Button().Text("Rename").OnClick(rename.Call(RenameInput{Name: "Alice"}))
 ```
 
-Registers a named server action callable via WebSocket. The handler receives a `Context` and returns a raw JS string that the client executes.
-
-### Custom HTTP Routes
-
-```go
-app.GET("/api/health", func(w http.ResponseWriter, r *http.Request) {
-    w.Write([]byte("ok"))
-})
-app.POST("/api/upload", uploadHandler)
-app.DELETE("/api/items/:id", deleteHandler)
-```
-
-Standard HTTP handlers for REST endpoints or webhooks. Path parameters use `:param` syntax.
+Actions decode and validate their input before invoking the handler. Return a
+`Result` and an error. Use `App.Subscription` for cancellable background updates.
 
 ### Layout (Built-in)
 
@@ -194,94 +182,6 @@ Sets a global layout handler. The layout wraps page content for all routes. The 
 
 > **Note:** The `"__content__"` ID is hardcoded in the framework. If you need a custom content ID, use the manual layout pattern below.
 
-### Layout (Manual — Custom Content ID)
-
-For full control over the content container ID and SPA navigation, bypass `app.Layout()` and use a manual layout wrapper with `ui.Target()`:
-
-```go
-// pages/pages.go — shared across all pages
-package pages
-
-import r "github.com/michalCapo/g-sui/ui"
-
-// ContentID is the shared target ID for the main content area.
-var ContentID = r.Target()
-```
-
-Define a layout function in your main package that wraps page content and assigns the `ContentID`:
-
-```go
-// main.go
-func layout(content *r.Node) *r.Node {
-    return r.Div("min-h-screen bg-gray-50").Render(
-        r.Nav("bg-white shadow").Render(
-            r.Div("mx-auto px-4 py-3 flex items-center gap-2").Render(
-                r.Button("px-3 py-1 rounded text-sm").
-                    Text("Home").
-                    OnClick(&r.Action{Name: "nav.home"}),
-                r.Button("px-3 py-1 rounded text-sm").
-                    Text("About").
-                    OnClick(&r.Action{Name: "nav.about"}),
-            ),
-        ),
-        r.Main("max-w-5xl mx-auto px-4 py-8").ID(pages.ContentID).Render(
-            content,
-        ),
-    )
-}
-```
-
-Register pages by wrapping their output with `layout()`, and register SPA navigation actions using a `NavTo` helper that targets `ContentID`:
-
-```go
-// pages/pages.go
-// NavTo creates a navigation action handler that replaces the content
-// area and updates the browser URL via pushState.
-func NavTo(url string, content func() *r.Node) r.ActionHandler {
-    return func(ctx *r.Context) string {
-        return r.NewResponse().
-            Inner(ContentID, content()).
-            Add(r.SetLocation(url)).
-            Build()
-    }
-}
-```
-
-```go
-// main.go
-func main() {
-    app := r.NewApp()
-
-    // Full-page route — layout wraps the page content
-    app.Page("/", func(ctx *r.Context) *r.Node {
-        return layout(pages.Home(ctx))
-    })
-    // SPA navigation — only swaps the content area, layout stays
-    app.Action("nav.home", pages.NavTo("/", func() *r.Node {
-        return pages.Home(nil)
-    }))
-
-    app.Page("/about", func(ctx *r.Context) *r.Node {
-        return layout(pages.About(ctx))
-    })
-    app.Action("nav.about", pages.NavTo("/about", func() *r.Node {
-        return pages.About(nil)
-    }))
-
-    app.Listen(":8080")
-}
-```
-
-**How it works:**
-
-| Scenario | What happens |
-|----------|-------------|
-| Full page load (GET) | `app.Page` handler returns `layout(pageContent)` — the entire page including shell |
-| SPA navigation (button click) | Legacy `NavTo` swaps `ContentID` via `Inner()` and updates the URL with `SetLocation()`. For new apps use `NavLink` and built-in layouts; see [server-driven apps](#server-driven-applications). |
-| Browser back/forward | The built-in `__nav` action fires, but since no `app.Layout()` is registered, it clears `document.body` and re-renders the full page tree |
-
-This pattern is used by the `example/` application. See `example/main.go` and `example/pages/routes.go` for the complete implementation.
-
 ### Handler
 
 ```go
@@ -294,10 +194,10 @@ Returns the `http.Handler` for custom server configurations (TLS, middleware wra
 ### App-Level Broadcast
 
 ```go
-app.Broadcast(ui.Notify("info", "Server restarting in 5 minutes"))
+err := app.Broadcast(ui.Result{}.Notify("info", "Server restarting in 5 minutes"))
 ```
 
-Sends a JS string to all connected WebSocket clients without needing a `Context`.
+Sends typed effects to all connected clients and returns any errors. Broadcast effects must not depend on a page context.
 
 ### Static Assets
 
@@ -394,48 +294,50 @@ Sets up HTTP handlers (page routes, WebSocket endpoint at `/__ws`, client script
 |--------|-----------|-------------|
 | `WsData` | `() map[string]any` | Returns raw WebSocket data map |
 | `Body` | `(target any) error` | Unmarshals WS data into a struct |
-| `Push` | `(js string) error` | Sends JS to THIS client immediately |
-| `Broadcast` | `(js string)` | Sends JS to ALL connected clients |
+| `Push` | `(result Result) error` | Sends effects to THIS client immediately |
+
 | `CSS` | `(urls []string, css string)` | Registers per-page CSS (stylesheets and/or inline rules) |
 | `HeadJS` | `(code string)` | Registers per-page JavaScript for `<head>` |
 
-### Body Example
+### Typed Input Example
 
 ```go
-app.Action("form.submit", func(ctx *ui.Context) string {
-    var data struct {
-        Name  string `json:"Name"`
-        Email string `json:"Email"`
-    }
-    ctx.Body(&data)
-    // use data.Name, data.Email
-    return ui.Notify("success", "Saved!")
+type ContactInput struct {
+    Name string `json:"Name"`
+    Email string `json:"Email"`
+}
+ui.RegisterAction(app, "form.submit", func(ctx *ui.Context, input ContactInput) (ui.Result, error) {
+    // Store input.Name and input.Email.
+    return ui.Result{}.Toast("Saved!"), nil
 })
 ```
 
 ### Push (Real-time Updates)
 
 ```go
-app.Action("clock.start", func(ctx *ui.Context) string {
-    go func() {
-        for {
-            time.Sleep(time.Second)
-            err := ctx.Push(ui.SetText("clock", time.Now().Format("15:04:05")))
-            if err != nil {
-                return // client navigated away
+app.Subscription("clock", func(ctx *ui.Context) error {
+    ticker := time.NewTicker(time.Second)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Context().Done():
+            return ctx.Context().Err()
+        case now := <-ticker.C:
+            if err := ctx.Push(ui.Result{}.SetText("clock", now.Format("15:04:05"))); err != nil {
+                return err
             }
         }
-    }()
-    return ""
+    }
 })
+ui.Span().ID("clock").Subscribe("clock")
 ```
 
-`Push` returns an error when the client navigates away or the connection drops, allowing goroutines to clean up.
+Subscriptions stop on navigation, node removal or disconnect. Reconnect starts a fresh subscription.
 
 ### Broadcast
 
 ```go
-ctx.Broadcast(ui.Notify("info", "System maintenance in 5 minutes"))
+err := app.Broadcast(ui.Result{}.Notify("info", "System maintenance in 5 minutes"))
 ```
 
 Sends a JS string to every connected WebSocket client.
@@ -579,15 +481,13 @@ All accept an optional class string: `ui.IText("w-full border rounded px-3 py-2"
 ### Server Actions (WebSocket)
 
 ```go
-// Define action
-app.Action("counter.inc", func(ctx *ui.Context) string {
-    count++
-    return ui.Span().ID("count").Text(fmt.Sprintf("%d", count)).ToJSReplace("count")
+refresh := ui.RegisterAction(app, "counter.refresh", func(ctx *ui.Context, _ struct{}) (ui.Result, error) {
+    return ui.Refresh("counter"), nil
 })
-
-// Attach to element
-ui.Button("...").OnClick(&ui.Action{Name: "counter.inc"})
+ui.Button().Text("Refresh").OnClick(refresh.Call(struct{}{}))
 ```
+
+Use `App.Live` for per-tab counter state; see [live views](#live-views).
 
 ### Actions with Data
 
@@ -640,9 +540,9 @@ When compiling, the framework detects SVG elements and emits `document.createEle
 ### Example
 
 ```go
-app.Action("item.add", func(ctx *ui.Context) string {
+ui.RegisterAction(app, "item.add", func(ctx *ui.Context, _ struct{}) (ui.Result, error) {
     newItem := ui.Li("py-2").Text("New Item")
-    return newItem.ToJSAppend("item-list")
+    return ui.Result{}.Append("item-list", newItem), nil
 })
 ```
 
@@ -656,7 +556,6 @@ These return JS strings for common DOM operations. Use them in action handlers.
 |----------|-----------|-------------|
 | `Notify` | `(variant, message string) string` | Toast notification (success/error/error-reload/info) |
 | `Redirect` | `(url string) string` | Full page navigation (`window.location.href`) |
-| `SetLocation` | `(url string) string` | URL update without reload (`history.pushState`) |
 | `Back` | `() *Action` | Browser back (`history.back()`) |
 | `SetTitle` | `(title string) string` | Update document title |
 | `RemoveEl` | `(id string) string` | Remove element by ID |
@@ -709,33 +608,33 @@ ui.Ul("...").Render(items...)
 
 ---
 
-## Response Builder
-
-For action handlers that need multiple operations in a single response:
+## Result Effects
 
 ```go
-app.Action("invoice.delete", func(ctx *ui.Context) string {
-    return ui.NewResponse().
-        Remove("row-" + id).
-        Toast("success", "Invoice deleted").
-        Navigate("/invoices").
-        Build()
+type DeleteInput struct { ID string `json:"id"` }
+ui.RegisterAction(app, "invoice.delete", func(ctx *ui.Context, input DeleteInput) (ui.Result, error) {
+    // Authorize and delete the invoice first.
+    return ui.Result{}.Remove("row-" + input.ID).Toast("Invoice deleted").Navigate("/invoices"), nil
 })
 ```
 
-### Methods
+Effects are immutable: assign the returned value when building a result in a loop.
 
 | Method | Description |
-|--------|-------------|
-| `Add(js string)` | Append raw JS |
-| `Replace(targetID, node)` | Replace element |
-| `Inner(targetID, node)` | Replace innerHTML |
-| `Append(parentID, node)` | Append child |
-| `Remove(id)` | Remove element |
-| `Toast(variant, message)` | Show notification |
-| `Navigate(url)` | Load the destination page and update history; use `Add(SetLocation(url))` for address-only updates. |
-| `Back()` | Browser back |
-| `Build() string` | Join all parts into JS string |
+| --- | --- |
+| `Morph(id, node)` | Update a subtree while preserving drafts and focus |
+| `Replace(id, node)` | Replace a subtree and reset its input state |
+| `Append(id, node)` / `Prepend(id, node)` | Insert a child |
+| `SetText(id, text)` | Update text |
+| `Remove(id)` | Remove an element |
+| `Toast(message)` / `Notify(variant, message)` | Show a notification |
+| `Navigate(url)` / `PatchURL(url, replace)` | Navigate or rerender the current route |
+| `Refresh(regions...)` | Rerender named regions |
+| `Download(filename, mimeType, base64Data)` | Download generated data |
+
+Return the result directly. `Context.Push` accepts a result for subscription
+updates. `App.Broadcast` accepts effects that do not require a page context and
+returns any build or delivery errors.
 
 ---
 
@@ -1068,20 +967,19 @@ The handler receives `Action` field in data to identify which button was clicked
 ### Server-Side Validation
 
 ```go
-app.Action("contact.submit", func(ctx *ui.Context) string {
-    errs := form.Validate(ctx.WsData())
-    if errs.HasErrors() {
-        // re-render form with errors
-        return renderFormWithErrors(errs)
+func (input *ContactInput) Validate() error {
+    if input.Name == "" {
+        return ui.ValidationError{Fields: ui.FormErrors{"Name": "Name is required"}}
     }
-
-    var data ContactForm
-    ctx.Body(&data)
-    // process data...
-
-    return ui.Notify("success", "Form submitted!")
+    return nil
+}
+ui.RegisterAction(app, "contact.submit", func(ctx *ui.Context, input ContactInput) (ui.Result, error) {
+    return ui.Result{}.Toast("Form submitted!"), nil
 })
 ```
+
+`RegisterAction` calls `Validate` before the handler. `FormFor[ContactInput]`
+displays field errors for typed form submissions.
 
 `FormErrors` methods:
 
@@ -1355,13 +1253,13 @@ dt := newCollateWithState(req.Search, req.Order).
     Page(req.Page).TotalItems(totalItems).HasMore(hasMore).
     RowOffset(start)
 
-resp := ui.NewResponse()
+resp := ui.Result{}
 rows := dt.RenderRows(pageData)
 for _, row := range rows {
-    resp.Append(dt.BodyID(), row)
+    resp = resp.Append(dt.BodyID(), row)
 }
-resp.Replace(dt.FooterID(), dt.RenderFooter())
-return resp.Build()
+resp = resp.Replace(dt.FooterID(), dt.RenderFooter())
+return resp, nil
 ```
 
 ### Collate Configuration
@@ -1637,12 +1535,12 @@ Brief disconnects are invisible. The client keeps the page fully usable while th
 | Reconnect reload | The page reloads after reconnect only when the outage lasted at least `App.ReconnectReloadAfterMs` (default 15000, `-1` never reloads) **and** no hold is active. |
 | Holds | `window.__ws.hold()` registers critical work and returns a release function. While any hold is active a reconnect never reloads the page. |
 | Fast retry | Reconnect is attempted immediately on the browser `online` event and when a hidden tab becomes visible again, instead of waiting out the backoff. |
-| Queued calls | Actions invoked while offline are queued (up to 100) and flushed on reconnect. The blocking loader is suppressed while disconnected. |
+| Offline calls | Actions are rejected while disconnected and never replayed. Retry explicitly after reconnect. |
 | Subscriptions | `window.__ws.subscribe(act, data)` re-sends the call on every reconnect, so server-side `Push` loops are re-armed. Identical registrations are deduplicated, and the call is never queued (that would deliver it twice on reconnect). `__ws.unsubscribe(act)` drops one. |
 | Server restart | Every connection starts with the server announcing its instance id. Element ids (`ui.Target()`) are random per process, so a page rendered by an earlier process can never be patched by a new one: the client detects the change and reloads, deferring the reload while a hold is active. Set `App.InstanceID` to a shared build id when running multiple replicas, otherwise reconnecting to a different replica reloads too. |
 | Subscription lifetime | Live navigation cancels the old page's subscriptions. `Node.Subscribe` also cancels on removal. A missing target cancels only its sending subscription. See [server-driven apps](#server-driven-applications). |
 
-**Migration note.** A dropped connection cancels the push context server-side, so any goroutine feeding a live region dies with it. Previously the reload-on-reconnect restarted those loops as a side effect. Now that short outages no longer reload, actions that start a `Push` loop must be invoked with `__ws.subscribe('clock.start')` instead of `__ws.callSilent('clock.start')` -- otherwise the live region freezes after the first blip. One-shot actions stay on `callSilent`; they are never replayed.
+Use `App.Subscription` and `Node.Subscribe` for background updates.
 
 ```go
 app := ui.NewApp()
@@ -1691,7 +1589,7 @@ The `example/` directory contains a full working application demonstrating all f
 
 ```bash
 go run example/main.go
-# Open http://localhost:1423
+# Open http://localhost:1424
 ```
 
 ### Example Pages
@@ -1701,7 +1599,7 @@ go run example/main.go
 | `/` | Component showcase (alerts, badges, cards, tabs, accordion, dropdowns, tooltips, progress) |
 | `/counter` | Stateful counter with increment/decrement via WebSocket |
 | `/hello` | Action responses: success, error, delayed, panic recovery |
-| `/clock` | Live clock using `ctx.Push()` goroutine |
+| `/clock` | Live clock using a managed subscription |
 | `/form` | FormBuilder with validation, multiple submit buttons |
 | `/login` | Login form with server-side validation |
 | `/shared` | Reusable form template pattern |
@@ -1755,9 +1653,7 @@ go get github.com/michalCapo/g-sui@v1.001
 | `App` | Application container (routes, actions, WS clients) |
 | `LayoutHandler` | `func(ctx *Context) *Node` |
 | `PageHandler` | `func(ctx *Context) *Node` |
-| `ActionHandler` | `func(ctx *Context) string` |
 | `Context` | Request data for pages and WS actions |
-| `Response` | Multi-action response builder |
 | `FormBuilder` | Declarative form builder |
 | `FieldBuilder` | Single field configuration |
 | `Field` | Field definition struct |
@@ -1817,7 +1713,6 @@ go get github.com/michalCapo/g-sui@v1.001
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `Page` | `(pattern string, handler PageHandler)` | Register GET page route using `http.ServeMux` patterns and path values |
-| `Action` | `(name string, handler ActionHandler)` | Register WS action handler |
 | `Layout` | `(handler LayoutHandler)` | Set global layout (uses `__content__` ID) |
 | `CSS` | `(urls []string, css string)` | Global stylesheets/inline CSS in `<head>` |
 | `GET` | `(path string, handler http.HandlerFunc)` | Register HTTP GET handler |
@@ -1826,7 +1721,7 @@ go get github.com/michalCapo/g-sui@v1.001
 | `Assets` | `(fsys fs.FS, dir, prefix string)` | Serve static files |
 | `Handler` | `() http.Handler` | Returns mux for custom server setup |
 | `Listen` | `(addr string) error` | Start HTTP server |
-| `Broadcast` | `(js string)` | Send JS to all connected clients |
+| `Broadcast` | `(result Result) error` | Send effects to all connected clients |
 
 #### Context Methods
 
@@ -1834,8 +1729,8 @@ go get github.com/michalCapo/g-sui@v1.001
 |--------|-----------|-------------|
 | `WsData` | `() map[string]any` | Returns raw WebSocket data map |
 | `Body` | `(target any) error` | Unmarshals WS data into a struct |
-| `Push` | `(js string) error` | Sends JS to THIS client immediately |
-| `Broadcast` | `(js string)` | Sends JS to ALL connected clients |
+| `Push` | `(result Result) error` | Sends effects to THIS client immediately |
+
 | `CSS` | `(urls []string, css string)` | Per-page CSS; `<head>` on full load, JS injection on SPA nav (links deduped) |
 | `HeadJS` | `(code string)` | Per-page JS; `<script>` in `<head>` on full load, prepended JS on SPA nav |
 
@@ -1853,7 +1748,6 @@ go get github.com/michalCapo/g-sui@v1.001
 | `Map[T](items, fn)` | `[]*Node` | Slice iteration |
 | `Notify(variant, msg)` | `string` | Toast JS |
 | `Redirect(url)` | `string` | Full redirect JS |
-| `SetLocation(url)` | `string` | pushState JS |
 | `Back()` | `*Action` | history.back() action |
 | `SetTitle(title)` | `string` | Document title JS |
 | `RemoveEl(id)` | `string` | Remove element JS |
@@ -1865,7 +1759,6 @@ go get github.com/michalCapo/g-sui@v1.001
 | `Hide(id)` | `string` | Hide element JS |
 | `Download(name, mime, b64)` | `string` | File download JS |
 | `DragToScroll(id)` | `string` | Drag scroll JS |
-| `NewResponse()` | `*Response` | Multi-action builder |
 | `NewForm(id)` | `*FormBuilder` | Form builder |
 | `NewDataTable[T](id)` | `*DataTable[T]` | Generic table |
 | `FilterPopup(col, label, type, opts, val)` | `*Node` | Standalone filter popup |
@@ -1902,11 +1795,11 @@ The Go server owns application state and renders nodes. The browser runtime
 handles navigation, keyed DOM updates, forms, focus and subscriptions. Tailwind
 loading, theme configuration and the existing Node/JavaScript renderer are unchanged.
 
-Run the complete example:
+Run the component showcase:
 
 ```sh
-go run ./example/live
-## http://127.0.0.1:1425
+go run ./example
+## http://127.0.0.1:1424
 ```
 
 ### Pages and navigation
@@ -1930,10 +1823,9 @@ behavior. Ordinary `A().Attr("href", ...)` links still use HTTP navigation.
 
 | Operation | Behavior |
 | --- | --- |
-| `ui.Navigate(url)` / `Result.Navigate(url)` / `Response.Navigate(url)` | Load a page, cancel its predecessor, then update history and focus. |
+| `ui.Navigate(url)` / `Result.Navigate(url)` | Load a page, cancel its predecessor, then update history and focus. |
 | `ui.PatchURL(url, replace)` | Rerender the current route with new URL parameters, preserving its live view and scroll. |
 | `ui.Redirect(url)` | Full HTTP navigation, including cookies and HTTP middleware responses. |
-| `ui.SetLocation(url)` | Low-level address update only, for legacy code that already replaced content. |
 
 On `NavLink`, `Attr("data-gsui-patch", "")` selects PatchURL behavior and
 `Attr("data-gsui-replace", "")` replaces the history entry. A patch to another
@@ -1943,11 +1835,6 @@ fall back to HTTP so the address, status and visible page agree.
 `Node.Title("Projects")` updates the document title. `App.Title` remains the
 initial HTML title. Back/Forward rerenders the destination and restores its saved
 scroll position. Normal navigation focuses a heading (or the content container).
-
-**Migration:** `Response.Navigate` now actually loads the route. If an old action
-already does `Inner(...).Navigate(url)`, change it to `Inner(...).Add(ui.SetLocation(url))`,
-or replace the whole action with navigation. The original showcase uses the first
-option. Prefer `NavLink` and `app.Layout` for new applications.
 
 ### Authorization and identity
 
@@ -2003,13 +1890,12 @@ ui.Button().Text("Rename").OnClick(rename.Call(RenameProject{ID: "42", Name: "Ne
 Keep rendering free of mutations and use stable region IDs. The zero `Result`
 means success without a DOM update. Other effects include `Morph`, `Remove`,
 `Navigate` and `PatchURL`. Errors produce a generic user message and a server log.
-The existing string-returning action API remains available.
+Handlers return `(Result, error)`; raw string handlers are not supported.
 
 Typed actions and live events reject new calls while disconnected. Requests
 already sent are not automatically replayed; a dropped connection can leave an
 unknown outcome. For payments or other non-repeatable operations, implement
-transaction IDs/idempotency in application storage. Legacy actions retain their
-bounded offline queue; `Action.NoQueue` opts them out.
+transaction IDs/idempotency in application storage. All actions use the same delivery policy; offline mutations are never queued.
 
 ### Typed forms
 
@@ -2135,7 +2021,7 @@ app.Subscription("clock", func(ctx *ui.Context) error {
         case <-ctx.Context().Done():
             return ctx.Context().Err()
         case now := <-ticker.C:
-            if err := ctx.Push(ui.SetText("clock", now.Format(time.TimeOnly))); err != nil {
+            if err := ctx.Push(ui.Result{}.SetText("clock", now.Format(time.TimeOnly))); err != nil {
                 return err
             }
         }
@@ -2164,11 +2050,11 @@ the existing broadcast API; tenant-scoped fan-out belongs in the application.
 
 ```sh
 go test -race ./...
-go run ./example/live
+go run ./example
 ## In another terminal, with Playwright installed:
 node ui/testdata/browser_runtime.cjs
 ```
 
-The browser check covers typed forms, live navigation/history, per-tab views,
-keyed DOM changes, drafts and subscription reconnect. Set `GSUI_URL` for a
+The browser check covers typed forms, table search/exports, menu routes,
+navigation/history, per-tab views, keyed DOM changes, drafts and subscription reconnect. Set `GSUI_URL` for a
 different example address and `GSUI_BROWSER` for an installed Chromium executable.

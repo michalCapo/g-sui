@@ -238,16 +238,16 @@ func TestShowHide(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Response builder tests
+// Result tests
 // ---------------------------------------------------------------------------
 
-func TestResponseBuilder(t *testing.T) {
+func TestResultEffects(t *testing.T) {
 	node := Div().ID("new-content").Text("Updated")
 
-	js := NewResponse().
-		Replace("content", node).
-		Toast("success", "Done!").
-		Build()
+	js, err := (Result{}).Replace("content", node).Toast("Done!").build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	expect(t, js, "replaceWith(")
 	expect(t, js, "'Done!'")

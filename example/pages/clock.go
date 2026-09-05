@@ -1,54 +1,34 @@
 package pages
 
 import (
-	"fmt"
-	"time"
-
 	r "github.com/michalCapo/g-sui/ui"
+	"time"
 )
 
-func Clock(ctx *r.Context) *r.Node {
-	t := time.Now()
-	timeStr := pad2(t.Hour()) + ":" + pad2(t.Minute()) + ":" + pad2(t.Second())
+const liveClockID = "live-clock"
 
+func Clock(ctx *r.Context) *r.Node {
 	return r.Div("max-w-5xl mx-auto flex flex-col gap-4").Render(
 		r.Div("text-2xl font-bold").Text("Live Clock (WS patches)"),
 		r.Div("text-gray-600").Text("Updates via WebSocket patches every second."),
-		r.Div("font-mono text-3xl bg-white p-4 border rounded").ID("live-clock").Text(timeStr).
-			// subscribe (not callSilent) so the push loop is re-armed after a
-			// reconnect, which no longer reloads the page.
-			JS("__ws.subscribe('clock.start')"),
+		r.Div("font-mono text-3xl bg-white p-4 border rounded").ID(liveClockID).Text(time.Now().Format("15:04:05")).Subscribe("clock"),
 	)
 }
 
-// HandleClockStart is a WS action that spawns a goroutine to push
-// live clock updates every second over the caller's WebSocket connection.
-func HandleClockStart(ctx *r.Context) string {
-	go func() {
-		defer func() { recover() }()
-		tick := time.NewTicker(time.Second)
-		defer tick.Stop()
-		for range tick.C {
-			now := time.Now()
-			ts := pad2(now.Hour()) + ":" + pad2(now.Minute()) + ":" + pad2(now.Second())
-			node := r.Div("font-mono text-3xl bg-white p-4 border rounded").ID("live-clock").Text(ts)
-			if err := ctx.Push(node.ToJSReplace("live-clock")); err != nil {
-				return
+func RegisterClock(app *r.App) {
+	app.Page("/clock", Clock)
+	app.Subscription("clock", func(ctx *r.Context) error {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Context().Done():
+				return ctx.Context().Err()
+			case now := <-ticker.C:
+				if err := ctx.Push(r.Result{}.SetText(liveClockID, now.Format("15:04:05"))); err != nil {
+					return err
+				}
 			}
 		}
-	}()
-	return ""
-}
-
-func pad2(n int) string {
-	if n < 10 {
-		return fmt.Sprintf("0%d", n)
-	}
-	return fmt.Sprintf("%d", n)
-}
-
-func RegisterClock(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/clock", func(ctx *r.Context) *r.Node { return layout(ctx, Clock(ctx)) })
-	app.Action("nav.clock", NavTo("/clock", func() *r.Node { return Clock(nil) }))
-	app.Action("clock.start", HandleClockStart)
+	})
 }

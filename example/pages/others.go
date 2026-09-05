@@ -2,7 +2,7 @@ package pages
 
 import r "github.com/michalCapo/g-sui/ui"
 
-func Others(ctx *r.Context) *r.Node {
+func Others(ctx *r.Context, counters *r.Node) *r.Node {
 	hello := r.Div("bg-white p-6 rounded-lg shadow w-full").Render(
 		r.Div("text-lg font-bold mb-2").Text("Hello"),
 		Hello(ctx),
@@ -10,7 +10,7 @@ func Others(ctx *r.Context) *r.Node {
 
 	counter := r.Div("bg-white p-6 rounded-lg shadow w-full").Render(
 		r.Div("text-lg font-bold mb-2").Text("Counter"),
-		Counter(ctx),
+		counters,
 	)
 
 	mdSample := `# Markdown Example
@@ -49,7 +49,12 @@ Inline ` + "`code`" + ` and **bold** with *italic* text.
 	)
 }
 
-func RegisterOthers(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/others", func(ctx *r.Context) *r.Node { return layout(ctx, Others(ctx)) })
-	app.Action("nav.others", NavTo("/others", func() *r.Node { return Others(nil) }))
+func RegisterOthers(app *r.App) {
+	app.Live("/others", func() r.View { return &othersView{counterView{Counts: [2]int{3, 5}}} })
+}
+
+type othersView struct{ counterView }
+
+func (v *othersView) Render(ctx *r.ViewContext) *r.Node {
+	return Others(ctx, v.counterView.Render(ctx))
 }

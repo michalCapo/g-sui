@@ -29,6 +29,7 @@ function makeEl(tag) {
     classList: {add() {}, remove() {}, contains: () => false},
     appendChild(c) { c.parentNode = el; el.children.push(c); return c; },
     removeChild(c) { el.children = el.children.filter(x => x !== c); c.parentNode = null; },
+    remove() { if (el.parentNode) el.parentNode.removeChild(el); },
     querySelector: () => null, querySelectorAll: () => [],
     addEventListener() {}, getAttribute: () => null, setAttribute() {}, removeAttribute() {},
   };
@@ -114,6 +115,7 @@ function makeEnv() {
     badge: () => body.children.find(c => c.id === '__offline__') || null,
     run(cfg, extra) {
       sandbox.window.__gsuiCfg = cfg;
+      sandbox.window.__gsuiVersion = 1;
       vm.runInContext(stubSrc, sandbox);
       if (extra) extra(sandbox);
       vm.runInContext(clientSrc, sandbox);
@@ -130,10 +132,10 @@ const tests = {
     env.latest().accept();
     const a=makeEl('button'),b=makeEl('button');
     const first=ws.call('a',{},null,a), second=ws.call('b',{},null,b);
-    env.latest().deliver(JSON.stringify({__r:1,id:first,js:''}));
+    env.latest().deliver(JSON.stringify({__r:1,id:first,version:1,js:''}));
     check('first button released',a.disabled===false);
     check('second stays disabled',b.disabled===true);
-    env.latest().deliver(JSON.stringify({__r:1,id:second,js:''}));
+    env.latest().deliver(JSON.stringify({__r:1,id:second,version:1,js:''}));
     check('second released on its reply',b.disabled===false);
   },
   async stalePageRepliesAreIgnored() {
@@ -185,8 +187,8 @@ const tests = {
       'new sockets=' + (env.sockets.length - before));
   },
 
-  // send() must not lose a message when readyState flipped before onclose.
-  async sendOnDeadSocketQueuesInsteadOfThrowing() {
+  // A dead socket must reject mutations without throwing or replaying them.
+  async sendOnDeadSocketRejectsWithoutThrowing() {
     const env = makeEnv();
     const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1});
     const a = env.sockets[0];
@@ -201,12 +203,12 @@ const tests = {
     const b = env.latest();
     b.accept();
     await sleep(10);
-    check('queued call is delivered after reconnect',
-      b.sent.some(m => JSON.parse(m).act === 'doThing'), JSON.stringify(b.sent));
+    check('offline call is not replayed after reconnect',
+      !b.sent.some(m => JSON.parse(m).act === 'doThing'), JSON.stringify(b.sent));
   },
 
-  // Overflowing the queue must not leave orphan inflight ids (stuck loader).
-  async queueOverflowDoesNotLeakInflight() {
+  // Rejected offline calls must not leave orphan inflight ids (stuck loader).
+  async offlineCallsDoNotLeakInflight() {
     const env = makeEnv();
     const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1});
     const a = env.sockets[0];
@@ -221,7 +223,7 @@ const tests = {
     // reply to everything the client actually sent; loader must then clear
     b.sent.forEach(m => {
       const p = JSON.parse(m);
-      if (p.id) b.deliver(JSON.stringify({__r: 1, id: p.id, js: ''}));
+      if (p.id) b.deliver(JSON.stringify({__r: 1, id: p.id, version:1, js: ''}));
     });
     await sleep(220);
     const loader = env.body.children.find(c => c.id === '__ws-loader');
@@ -235,7 +237,7 @@ const tests = {
     const a = env.sockets[0];
     a.accept();
     ws.subscribe('clock.start');
-    ws.callSilent('analytics.hit');
+    ws.call('analytics.hit');
     check('subscribe sent once', a.sent.filter(m => JSON.parse(m).act === 'clock.start').length === 1);
     a.drop();
     await sleep(1200);
@@ -245,7 +247,7 @@ const tests = {
     await sleep(10);
     const acts = b.sent.map(m => JSON.parse(m).act);
     check('subscription replayed', acts.includes('clock.start'), JSON.stringify(acts));
-    check('one-shot callSilent not replayed', !acts.includes('analytics.hit'), JSON.stringify(acts));
+    check('one-shot action not replayed', !acts.includes('analytics.hit'), JSON.stringify(acts));
   },
 
   // The reload only fires on a long outage, and never while a hold is active.
@@ -383,7 +385,7 @@ const tests = {
     check('the new socket is a distinct object', env.latest() !== a);
   },
 
-  // Server-driven navigation (Response.Navigate -> pushState) must invalidate
+  // Built-in navigation must invalidate
   // the previous page's subscriptions, but keep the new page's.
   async serverNavDropsStaleSubscriptions() {
     const env = makeEnv();
@@ -391,10 +393,9 @@ const tests = {
     const a = env.sockets[0];
     a.accept();
     ws.subscribe('clock.start');     // page /clock
-    // Server response: new content subscribes, then pushState + pageChanged
-    // (the real ordering produced by Response.Inner(...).Navigate(...)).
-    a.deliver(JSON.stringify({__r: 1, id: 1, js:
-      "__ws.subscribe('table.live');history.pushState(null,'','/table');if(window.__ws&&__ws.pageChanged)__ws.pageChanged();"}));
+    // Navigation disposes old subscriptions before rendering the new page.
+    a.deliver(JSON.stringify({__r: 1, id: 1, version:1, js:
+      "__ws.beginNavigation(false);__ws.subscribe('table.live');"}));
     await sleep(10);
     a.drop();
     await sleep(1200);
@@ -407,9 +408,8 @@ const tests = {
     check('current page subscription is replayed', acts.includes('table.live'), JSON.stringify(acts));
   },
 
-  // A call made while offline must still get a loader once the socket is back,
-  // and that loader must clear when the reply arrives.
-  async queuedCallTracksLoader() {
+  // Offline calls are rejected; reconnect must not send them or show a loader.
+  async offlineCallIsNotReplayed() {
     const env = makeEnv();
     const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1});
     const a = env.sockets[0];
@@ -423,10 +423,9 @@ const tests = {
     const b = env.latest();
     b.accept();
     await sleep(200);
-    check('loader appears once reconnected', !!env.body.children.find(c => c.id === '__ws-loader'));
+    check('no loader after reconnect', !env.body.children.find(c => c.id === '__ws-loader'));
     const sent = b.sent.map(m => JSON.parse(m)).find(m => m.act === 'save');
-    check('queued call was delivered', !!sent);
-    b.deliver(JSON.stringify({__r: 1, id: sent.id, js: ''}));
+    check('offline call was not delivered', !sent);
     await sleep(220);
     check('loader clears on reply', !env.body.children.find(c => c.id === '__ws-loader'));
   },
@@ -549,6 +548,16 @@ const tests = {
 
   // The hello frame is protocol, not a page update: it must not run as JS nor
   // age out subscriptions registered before it.
+  async rawFramesAreRejected() {
+    const env = makeEnv();
+    env.run({grace:-1,reloadAfter:-1,keepAlive:-1});
+    const a=env.sockets[0];a.accept();
+    a.deliver('window.rawFrameExecuted=true');
+    a.deliver(JSON.stringify({js:'window.rawFrameExecuted=true'}));
+    a.deliver(JSON.stringify({__r:1,id:1,js:'window.rawFrameExecuted=true'}));
+    check('raw and unframed messages are ignored', !env.sandbox.window.rawFrameExecuted);
+  },
+
   async helloFrameIsNotExecutedAsJs() {
     const env = makeEnv();
     const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1, inst: 'srv-1'});
@@ -557,7 +566,6 @@ const tests = {
     ws.subscribe('clock.start', {});
     hello(a, 'srv-1');
     await sleep(20);
-    ws.pageChanged();                // keeps only subscriptions of this epoch
     a.drop();
     await waitFor(() => env.latest() !== a, 3000);
     const b = env.latest();

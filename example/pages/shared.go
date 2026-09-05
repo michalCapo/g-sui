@@ -1,8 +1,27 @@
 package pages
 
 import (
+	"errors"
 	r "github.com/michalCapo/g-sui/ui"
 )
+
+const (
+	form1ID = "form1"
+	form2ID = "form2"
+)
+
+type sharedInput struct {
+	FormID      string `json:"formID"`
+	Title       string `json:"Title"`
+	Description string `json:"Description"`
+}
+
+func (input *sharedInput) Validate() error {
+	if input.FormID != form1ID && input.FormID != form2ID {
+		return errors.New("unknown form")
+	}
+	return nil
+}
 
 func sharedForm(formID, title, description string) *r.Node {
 	inputCls := "w-full border border-gray-300 rounded px-3 py-2 text-sm"
@@ -39,48 +58,39 @@ func Shared(ctx *r.Context) *r.Node {
 		r.Div("border rounded-lg p-4 bg-white shadow-lg").Render(
 			r.Div("text-lg font-semibold").Text("Form 1"),
 			r.Div("text-gray-600 text-sm mb-4").Text("This form is reused."),
-			sharedForm("form1", "Hello", "What a nice day"),
+			sharedForm(form1ID, "Hello", "What a nice day"),
 		),
 		r.Div("border rounded-lg p-4 bg-white shadow-lg").Render(
 			r.Div("text-lg font-semibold").Text("Form 2"),
 			r.Div("text-gray-600 text-sm mb-4").Text("This form is reused."),
-			sharedForm("form2", "Next Title", "Next Description"),
+			sharedForm(form2ID, "Next Title", "Next Description"),
 		),
 	)
 }
 
-func HandleSharedSubmit(ctx *r.Context) string {
-	var data map[string]any
-	ctx.Body(&data)
+func HandleSharedSubmit(ctx *r.Context, data sharedInput) (r.Result, error) {
+	formID := data.FormID
+	title := data.Title
+	desc := data.Description
 
-	formID, _ := data["formID"].(string)
-	title, _ := data[formID+"-title"].(string)
-	desc, _ := data[formID+"-desc"].(string)
-
-	if formID == "form1" {
-		return r.NewResponse().
+	if formID == form1ID {
+		return r.Result{}.
 			Replace(formID, sharedForm(formID, title, desc)).
-			Toast("error", "Data not stored").
-			Build()
+			Notify("error", "Data not stored"), nil
 	}
 
-	return r.NewResponse().
+	return r.Result{}.
 		Replace(formID, sharedForm(formID, title, desc)).
-		Toast("success", "Data stored").
-		Build()
+		Notify("success", "Data stored"), nil
 }
 
-func HandleSharedReset(ctx *r.Context) string {
-	var data map[string]any
-	ctx.Body(&data)
-
-	formID, _ := data["formID"].(string)
-	return sharedForm(formID, "", "").ToJSReplace(formID)
+func HandleSharedReset(ctx *r.Context, data sharedInput) (r.Result, error) {
+	formID := data.FormID
+	return r.Result{}.Replace(formID, sharedForm(formID, "", "")), nil
 }
 
-func RegisterShared(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/shared", func(ctx *r.Context) *r.Node { return layout(ctx, Shared(ctx)) })
-	app.Action("nav.shared", NavTo("/shared", func() *r.Node { return Shared(nil) }))
-	app.Action("shared.submit", HandleSharedSubmit)
-	app.Action("shared.reset", HandleSharedReset)
+func RegisterShared(app *r.App) {
+	app.Page("/shared", Shared)
+	r.RegisterAction(app, "shared.submit", HandleSharedSubmit)
+	r.RegisterAction(app, "shared.reset", HandleSharedReset)
 }

@@ -12,6 +12,8 @@ import (
 	r "github.com/michalCapo/g-sui/ui"
 )
 
+const employeesCollateID = "employees-collate"
+
 // Employee is the sample type for the Collate demo.
 type Employee struct {
 	ID         int
@@ -75,7 +77,7 @@ func CollatePage(ctx *r.Context) *r.Node {
 }
 
 func newCollate() *r.Collate[Employee] {
-	return r.NewCollate[Employee]("employees-collate").
+	return r.NewCollate[Employee](employeesCollateID).
 		Action("collate.data").
 		Limit(8).
 		Sort(
@@ -213,12 +215,9 @@ type CollateDataRequest struct {
 	Filters   []r.CollateFilterValue `json:"filters"`
 }
 
-func handleCollateData(ctx *r.Context) string {
+func handleCollateData(ctx *r.Context, req CollateDataRequest) (r.Result, error) {
 	collateFiltersMu.Lock()
 	defer collateFiltersMu.Unlock()
-	var req CollateDataRequest
-	ctx.Body(&req)
-
 	limit := 8
 	if req.Limit > 0 {
 		limit = req.Limit
@@ -264,7 +263,7 @@ func handleCollateData(ctx *r.Context) string {
 		start := (req.Page - 1) * limit
 		end := min(start+limit, totalItems)
 		if start >= totalItems {
-			return ""
+			return r.Result{}, nil
 		}
 		pageData := filtered[start:end]
 		hasMore := end < totalItems
@@ -273,13 +272,13 @@ func handleCollateData(ctx *r.Context) string {
 			Page(req.Page).TotalItems(totalItems).HasMore(hasMore).
 			RowOffset(start)
 
-		resp := r.NewResponse()
+		resp := r.Result{}
 		rows := dt.RenderRows(pageData)
 		for _, row := range rows {
-			resp.Append(dt.BodyID(), row)
+			resp = resp.Append(dt.BodyID(), row)
 		}
-		resp.Replace(dt.FooterID(), dt.RenderFooter())
-		return resp.Build()
+		resp = resp.Replace(dt.FooterID(), dt.RenderFooter())
+		return resp, nil
 	}
 
 	// Default: full re-render (search, sort, filter)
@@ -294,7 +293,7 @@ func handleCollateData(ctx *r.Context) string {
 		Page(req.Page).TotalItems(totalItems).HasMore(hasMore).
 		Render(pageData)
 
-	return collateNode.ToJSReplace("employees-collate")
+	return r.Result{}.Replace(employeesCollateID, collateNode), nil
 }
 
 func newCollateWithState(search, order string) *r.Collate[Employee] {
@@ -393,7 +392,7 @@ func sortEmployees(data []*Employee, order string) {
 	})
 }
 
-func exportEmployeesPDF(employees []*Employee) string {
+func exportEmployeesPDF(employees []*Employee) (r.Result, error) {
 	pdf := fpdf.New("L", "mm", "A4", "")
 	pdf.SetAutoPageBreak(true, 15)
 	pdf.AddPage()
@@ -442,14 +441,14 @@ func exportEmployeesPDF(employees []*Employee) string {
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
-		return fmt.Sprintf("console.error('PDF error: %s');", err)
+		return r.Result{}, err
 	}
 
 	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	return r.Download("employees.pdf", "application/pdf", b64)
+	return r.Result{}.Download("employees.pdf", "application/pdf", b64), nil
 }
 
-func exportEmployeesCSV(employees []*Employee) string {
+func exportEmployeesCSV(employees []*Employee) (r.Result, error) {
 	var buf bytes.Buffer
 	buf.WriteString("ID,Name,Department,Salary,Hire Date,Status,Role\n")
 	for _, emp := range employees {
@@ -463,11 +462,10 @@ func exportEmployeesCSV(employees []*Employee) string {
 			emp.ID, name, emp.Department, emp.Salary, emp.HireDate, status, role))
 	}
 	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	return r.Download("employees.csv", "text/csv", b64)
+	return r.Result{}.Download("employees.csv", "text/csv", b64), nil
 }
 
-func RegisterCollate(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/collate", func(ctx *r.Context) *r.Node { return layout(ctx, CollatePage(ctx)) })
-	app.Action("nav.collate", NavTo("/collate", func() *r.Node { return CollatePage(nil) }))
-	app.Action("collate.data", handleCollateData)
+func RegisterCollate(app *r.App) {
+	app.Page("/collate", CollatePage)
+	r.RegisterAction(app, "collate.data", handleCollateData)
 }

@@ -13,6 +13,8 @@ import (
 	r "github.com/michalCapo/g-sui/ui"
 )
 
+const productsTableID = "products-table"
+
 // Product is the sample type for the DataTable demo.
 type Product struct {
 	ID           int
@@ -322,12 +324,9 @@ func sortProducts(data []*Product, col int, dir string) {
 	})
 }
 
-func handleTableData(ctx *r.Context) string {
+func handleTableData(ctx *r.Context, req TableDataRequest) (r.Result, error) {
 	activeFiltersMu.Lock()
 	defer activeFiltersMu.Unlock()
-	var req TableDataRequest
-	ctx.Body(&req)
-
 	pageSize := 10
 	if req.PageSize > 0 {
 		pageSize = req.PageSize
@@ -384,7 +383,7 @@ func handleTableData(ctx *r.Context) string {
 		start := (req.Page - 1) * pageSize
 		end := min(start+pageSize, totalItems)
 		if start >= totalItems {
-			return ""
+			return r.Result{}, nil
 		}
 		pageData := filtered[start:end]
 		hasMore := end < totalItems
@@ -394,13 +393,13 @@ func handleTableData(ctx *r.Context) string {
 			Sort(req.Sort, req.Dir).Search(req.Search).
 			RowOffset(start)
 
-		resp := r.NewResponse()
+		resp := r.Result{}
 		rows := dt.RenderRows(pageData)
 		for _, row := range rows {
-			resp.Append(dt.TbodyID(), row)
+			resp = resp.Append(dt.TbodyID(), row)
 		}
-		resp.Replace(dt.FooterID(), dt.RenderFooter())
-		return resp.Build()
+		resp = resp.Replace(dt.FooterID(), dt.RenderFooter())
+		return resp, nil
 	}
 
 	// Default: full table re-render (search, sort, filter)
@@ -416,7 +415,7 @@ func handleTableData(ctx *r.Context) string {
 		Sort(req.Sort, req.Dir).Search(req.Search).
 		Render(pageData)
 
-	return dataTable.ToJSReplace("products-table")
+	return r.Result{}.Replace(productsTableID, dataTable), nil
 }
 
 // newDataWithFilters creates a DataTable with current active filter state applied
@@ -471,7 +470,7 @@ func newDataWithFilters() *r.DataTable[Product] {
 }
 
 func NewData() *r.DataTable[Product] {
-	dataTable := r.NewDataTable[Product]("products-table").
+	dataTable := r.NewDataTable[Product](productsTableID).
 		Col("ID", r.ColOpt[Product]{
 			Sortable: true,
 			Filter:   r.NumFilter,
@@ -555,7 +554,7 @@ func productDetail(p *Product) *r.Node {
 	)
 }
 
-func exportProductsPDF(products []*Product) string {
+func exportProductsPDF(products []*Product) (r.Result, error) {
 	pdf := fpdf.New("L", "mm", "A4", "")
 	pdf.SetAutoPageBreak(true, 15)
 	pdf.AddPage()
@@ -601,14 +600,14 @@ func exportProductsPDF(products []*Product) string {
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
-		return fmt.Sprintf("console.error('PDF error: %s');", err)
+		return r.Result{}, err
 	}
 
 	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	return r.Download("products.pdf", "application/pdf", b64)
+	return r.Result{}.Download("products.pdf", "application/pdf", b64), nil
 }
 
-func exportProductsCSV(products []*Product) string {
+func exportProductsCSV(products []*Product) (r.Result, error) {
 	var buf bytes.Buffer
 	buf.WriteString("ID,Name,Price,Stock,Created,Category,Status,ReleaseMonth\n")
 	for _, p := range products {
@@ -617,11 +616,10 @@ func exportProductsCSV(products []*Product) string {
 			p.ID, name, p.Price, p.Stock, p.CreatedAt, p.Category, p.Status, p.ReleaseMonth))
 	}
 	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	return r.Download("products.csv", "text/csv", b64)
+	return r.Result{}.Download("products.csv", "text/csv", b64), nil
 }
 
-func RegisterTable(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/table", func(ctx *r.Context) *r.Node { return layout(ctx, TablePage(ctx)) })
-	app.Action("nav.table", NavTo("/table", func() *r.Node { return TablePage(nil) }))
-	app.Action("table.data", handleTableData)
+func RegisterTable(app *r.App) {
+	app.Page("/table", TablePage)
+	r.RegisterAction(app, "table.data", handleTableData)
 }

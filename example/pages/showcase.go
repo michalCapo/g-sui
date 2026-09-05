@@ -397,7 +397,6 @@ func renderConfirmDialogSection() *r.Node {
 	)
 }
 
-func RegisterShowcase(app *r.App, layout func(*r.Context, *r.Node) *r.Node) {
-	app.Page("/", func(ctx *r.Context) *r.Node { return layout(ctx, Showcase(ctx)) })
-	app.Action("nav.showcase", NavTo("/", func() *r.Node { return Showcase(nil) }))
+func RegisterShowcase(app *r.App) {
+	app.Page("/", Showcase)
 }
