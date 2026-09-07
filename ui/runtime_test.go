@@ -115,6 +115,23 @@ func TestRuntimeNavigationContextAndCancellation(t *testing.T) {
 	}
 }
 
+func TestRuntimeNavigationFractionalScroll(t *testing.T) {
+	app := NewApp()
+	app.Page("/docs", func(*Context) *Node { return Div().Text("Documentation") })
+	ws := runtimeSocket(t, app)
+	js := runtimeCall(t, ws, "__nav", "/recipe", 1, map[string]any{
+		"url": "/docs", "history": "none", "x": -0.5, "y": 1100.9090576171875,
+	})
+	if !strings.Contains(js, "Documentation") {
+		t.Fatalf("navigation did not render the destination: %s", js)
+	}
+	for _, want := range []string{`"history":"none"`, `"x":-0.5`, `"y":1100.9090576171875`} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("navigation did not preserve %s: %s", want, js)
+		}
+	}
+}
+
 func TestRuntimeAuthorizationRechecked(t *testing.T) {
 	app := NewApp()
 	var allowed atomic.Bool

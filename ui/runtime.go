@@ -136,11 +136,11 @@ func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
 }
 
 type navigationRequest struct {
-	URL     string `json:"url"`
-	History string `json:"history"` // push, replace, or none (popstate)
-	Patch   bool   `json:"patch"`
-	X       int    `json:"x"`
-	Y       int    `json:"y"`
+	URL     string  `json:"url"`
+	History string  `json:"history"` // push, replace, or none (popstate)
+	Patch   bool    `json:"patch"`
+	X       float64 `json:"x"` // CSS pixels can be fractional with zoom/display scaling.
+	Y       float64 `json:"y"`
 }
 
 func (app *App) navigate(ctx *Context) string {
