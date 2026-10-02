@@ -225,10 +225,10 @@ func (c *Collate[T]) loc() *CollateLocale {
 // Builder methods
 // ---------------------------------------------------------------------------
 
-// Action sets the WS action name for all operations.
+// Action sets the server action for all operations.
 // The action receives: {operation, search, page, limit, order, filters}
-func (c *Collate[T]) Action(name string) *Collate[T] {
-	c.action = name
+func (c *Collate[T]) Action(action AnyActionRef) *Collate[T] {
+	c.action = action.actionName()
 	return c
 }
 
@@ -384,12 +384,12 @@ func (c *Collate[T]) RenderRows(data []*T) []*Node {
 	return c.buildRows(data)
 }
 
-// BodyID returns the ID of the body container for use with ToJSAppend.
+// BodyID returns the ID of the body container for use with Result.Append.
 func (c *Collate[T]) BodyID() string {
 	return c.id + "-body"
 }
 
-// FooterID returns the ID of the footer element for use with ToJSReplace.
+// FooterID returns the ID of the footer element for use with Result.Replace.
 func (c *Collate[T]) FooterID() string {
 	return c.id + "-footer"
 }
@@ -441,7 +441,7 @@ func (c *Collate[T]) buildRows(data []*T) []*Node {
 			if rowNode != nil {
 				// Add click handler to the row
 				rowNode.Class(" cursor-pointer group transition-colors")
-				rowNode.OnClick(JS(toggleJS))
+				rowNode.OnClick(UnsafeJS(toggleJS))
 
 				rows = append(rows, rowNode)
 
@@ -491,8 +491,8 @@ func (c *Collate[T]) renderHeader() *Node {
 	).ID(searchID).
 		Attr("placeholder", c.loc().Search).
 		Attr("value", c.search).
-		On("keydown", JS(c.searchEnterJS(searchID))).
-		On("search", JS(c.searchImmediateJS(searchID)))
+		On("keydown", UnsafeJS(c.searchEnterJS(searchID))).
+		On("search", UnsafeJS(c.searchImmediateJS(searchID)))
 
 	searchWrap := Div("relative inline-flex items-center").Render(searchIcon, searchInput)
 	items = append(items, searchWrap)
@@ -506,7 +506,7 @@ func (c *Collate[T]) renderHeader() *Node {
 		"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 		"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
 
-	pdfBtn := Button(exportBtnCls).Attr("type", "button").Attr("aria-label", "Export PDF").OnClick(JS(c.exportPdfJS())).Render(
+	pdfBtn := Button(exportBtnCls).Attr("type", "button").Attr("aria-label", "Export PDF").OnClick(UnsafeJS(c.exportPdfJS())).Render(
 		Span("text-base leading-none").
 			Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 			Text("picture_as_pdf"),
@@ -514,7 +514,7 @@ func (c *Collate[T]) renderHeader() *Node {
 	)
 	items = append(items, pdfBtn)
 
-	exportBtn := Button(exportBtnCls).Attr("type", "button").Attr("aria-label", "Export Excel").OnClick(JS(c.exportJS())).Render(
+	exportBtn := Button(exportBtnCls).Attr("type", "button").Attr("aria-label", "Export Excel").OnClick(UnsafeJS(c.exportJS())).Render(
 		Span("text-base leading-none").
 			Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 			Text("grid_on"),
@@ -548,7 +548,7 @@ func (c *Collate[T]) renderHeader() *Node {
 				"border border-gray-300 dark:border-gray-600 "+
 				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Attr("type", "button").Attr("aria-label", "Open filters").OnClick(JS(fmt.Sprintf(
+		).Attr("type", "button").Attr("aria-label", "Open filters").OnClick(UnsafeJS(fmt.Sprintf(
 			// Open with Escape/outside-click dismissal; clicks on the trigger are
 			// ignored by the document listener so this handler performs the toggle.
 			"var p=document.getElementById('%s'),b=this;"+
@@ -593,7 +593,7 @@ func (c *Collate[T]) renderFilterPanel() *Node {
 			Button(
 				"w-8 h-8 rounded-full flex items-center justify-center "+
 					"hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors",
-			).Attr("type", "button").Attr("aria-label", "Close filters").OnClick(JS(fmt.Sprintf(
+			).Attr("type", "button").Attr("aria-label", "Close filters").OnClick(UnsafeJS(fmt.Sprintf(
 				"document.getElementById('%s').classList.add('hidden')", escJS(panelID),
 			))).Render(
 				Span("text-base leading-none text-gray-400").
@@ -621,7 +621,7 @@ func (c *Collate[T]) renderFilterPanel() *Node {
 			"bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 " +
 			"shadow-2xl p-4 w-[calc(100vw-2rem)] max-w-sm max-h-[80vh] overflow-y-auto",
 	).ID(panelID).
-		OnClick(JS("event.stopPropagation()")).
+		OnClick(UnsafeJS("event.stopPropagation()")).
 		Render(parts...)
 }
 
@@ -702,7 +702,7 @@ func (c *Collate[T]) renderSortButton(sf CollateSortField) *Node {
 		ID(btnID).
 		Attr("type", "button").
 		Attr("data-sort-field", sf.Field).
-		OnClick(JS(cycleJS)).
+		OnClick(UnsafeJS(cycleJS)).
 		Render(
 			Span("text-base leading-none").
 				Style("font-family", "Material Icons Round").
@@ -866,7 +866,7 @@ func (c *Collate[T]) collateQuickDateBtn(fromID, toID, label, rangeType string) 
 		"px-2 py-0.5 text-[10px] rounded-full border border-gray-200 dark:border-gray-600 "+
 			"bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 "+
 			"hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer",
-	).Attr("type", "button").Text(label).OnClick(JS(fmt.Sprintf(
+	).Attr("type", "button").Text(label).OnClick(UnsafeJS(fmt.Sprintf(
 		"(function(){"+
 			"var d=new Date(),y=d.getFullYear(),m=d.getMonth(),day=d.getDate(),f,t;"+
 			"function fmt(dt){return dt.toISOString().slice(0,10)}"+
@@ -943,7 +943,7 @@ func (c *Collate[T]) renderPanelFooter() *Node {
 					"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
 					"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
 			).Attr("type", "button").
-				OnClick(JS(c.resetJS())).
+				OnClick(UnsafeJS(c.resetJS())).
 				Render(
 					Span("text-base leading-none").
 						Style("font-family", "Material Icons Round").
@@ -957,7 +957,7 @@ func (c *Collate[T]) renderPanelFooter() *Node {
 					"bg-gray-900 dark:bg-gray-600 text-white "+
 					"hover:bg-gray-800 dark:hover:bg-gray-500 transition-colors",
 			).Attr("type", "button").
-				OnClick(JS(c.applyJS())).
+				OnClick(UnsafeJS(c.applyJS())).
 				Render(
 					Span("text-base leading-none").
 						Style("font-family", "Material Icons Round").
@@ -1012,7 +1012,7 @@ func (c *Collate[T]) renderFooter() *Node {
 				"border border-gray-300 dark:border-gray-600 "+
 				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Attr("type", "button").Attr("aria-label", "Reset pagination").Text("×").OnClick(JS(c.resetPagingJS()))
+		).Attr("type", "button").Attr("aria-label", "Reset pagination").Text("×").OnClick(UnsafeJS(c.resetPagingJS()))
 		items = append(items, resetBtn)
 	}
 
@@ -1023,7 +1023,7 @@ func (c *Collate[T]) renderFooter() *Node {
 				"border border-gray-300 dark:border-gray-600 "+
 				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Attr("type", "button").Text(c.loc().LoadMore).OnClick(JS(c.loadMoreJS()))
+		).Attr("type", "button").Text(c.loc().LoadMore).OnClick(UnsafeJS(c.loadMoreJS()))
 		items = append(items, loadMoreBtn)
 	}
 

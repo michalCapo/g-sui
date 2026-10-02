@@ -527,7 +527,7 @@ func NewData() *r.DataTable[Product] {
 			Text:     func(p *Product) *r.Node { return r.Span().Text(p.ReleaseMonth) },
 		}).
 		Detail(productDetail).
-		Action("table.data")
+		Action(tableData)
 
 	return dataTable
 }
@@ -619,7 +619,9 @@ func exportProductsCSV(products []*Product) (r.Result, error) {
 	return r.Result{}.Download("products.csv", "text/csv", b64), nil
 }
 
+var tableData r.ActionRef[TableDataRequest]
+
 func RegisterTable(app *r.App) {
+	tableData = r.RegisterAction(app, "table.data", handleTableData)
 	app.Page("/table", TablePage)
-	r.RegisterAction(app, "table.data", handleTableData)
 }

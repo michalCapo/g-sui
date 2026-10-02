@@ -11,20 +11,20 @@ import (
 const scriptBreakoutPayload = "</script><script>alert(1)</script>"
 
 func TestTextEscapesScriptBreakoutForScriptContext(t *testing.T) {
-	js := Div().Text(scriptBreakoutPayload).ToJS()
+	js := Div().Text(scriptBreakoutPayload).toJS()
 
 	assertNoRawScriptBreakout(t, js, scriptBreakoutPayload)
 	expect(t, js, `\u003c/script\u003e\u003cscript\u003ealert(1)\u003c/script\u003e`)
 }
 
 func TestAttrEscapesScriptBreakoutForScriptContext(t *testing.T) {
-	js := Div().Attr("title", scriptBreakoutPayload).ToJS()
+	js := Div().Attr("title", scriptBreakoutPayload).toJS()
 
 	assertNoRawScriptBreakout(t, js, scriptBreakoutPayload)
 }
 
 func TestHelpersEscapeScriptBreakoutForScriptContext(t *testing.T) {
-	helpers := map[string]string{
+	helpers := map[string]*Action{
 		"SetTitle":     SetTitle(scriptBreakoutPayload),
 		"SetText":      SetText("target", scriptBreakoutPayload),
 		"SetAttrValue": SetAttr("target", "title", scriptBreakoutPayload),
@@ -34,15 +34,15 @@ func TestHelpersEscapeScriptBreakoutForScriptContext(t *testing.T) {
 
 	for name, js := range helpers {
 		t.Run(name, func(t *testing.T) {
-			assertNoRawScriptBreakout(t, js, scriptBreakoutPayload)
+			assertNoRawScriptBreakout(t, Button().OnClick(js).toJS(), scriptBreakoutPayload)
 		})
 	}
 }
 
 func TestNotifyEscapesQuotesAndScriptBreakout(t *testing.T) {
-	js := Notify("info", `</script>'quoted'`)
+	js := Notify("info", `</script>"quoted"`).script()
 	assertNoRawScriptBreakout(t, js, "</script>")
-	expect(t, js, `\'quoted\'`)
+	expect(t, js, `\"quoted\"`)
 }
 
 func TestWebSocketOriginHandshake(t *testing.T) {
@@ -80,10 +80,7 @@ func TestWebSocketReplyEnvelope(t *testing.T) {
 }
 
 func TestActionDataEscapesScriptBreakoutForScriptContext(t *testing.T) {
-	js := Button().Text("go").OnClick(&Action{
-		Name: "submit",
-		Data: map[string]any{"payload": scriptBreakoutPayload},
-	}).ToJS()
+	js := Button().Text("go").OnClick(call("submit", map[string]any{"payload": scriptBreakoutPayload})).toJS()
 
 	assertNoRawScriptBreakout(t, js, scriptBreakoutPayload)
 }
@@ -176,7 +173,7 @@ func TestMarkdownOmitsRawHTMLAndEscapesScriptBreakout(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			js := Markdown("prose", tc.content).ToJS()
+			js := Markdown("prose", tc.content).toJS()
 			assertNoRawScriptBreakout(t, js, tc.content)
 			notExpect(t, strings.ToLower(js), "javascript:alert")
 			notExpect(t, strings.ToLower(js), "onerror=alert")

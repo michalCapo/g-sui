@@ -23,12 +23,14 @@ type FormData struct {
 	Agree      bool   `json:"Agree"`
 }
 
+var formSubmit r.ActionRef[FormData]
+
 // formBuilder returns a reusable form definition. The form ID scopes all
 // element IDs, radio group names, and the HTML form attribute — so multiple
 // instances with different IDs can coexist on the same page without collision.
 func formBuilder(formID string, data FormData) *r.FormBuilder {
 	return r.NewForm(formID).
-		Action("form.submit").
+		Action(formSubmit).
 
 		// Title (text, required)
 		Text("Title", "Title").Required().Placeholder("Enter title").Value(data.Title).Render().
@@ -126,6 +128,6 @@ func HandleFormSubmit(ctx *r.Context, data FormData) (r.Result, error) {
 }
 
 func RegisterForm(app *r.App) {
+	formSubmit = r.RegisterAction(app, "form.submit", HandleFormSubmit)
 	app.Page("/form", FormPage)
-	r.RegisterAction(app, "form.submit", HandleFormSubmit)
 }

@@ -120,9 +120,10 @@ func (f *FormBuilder) ErrClass(cls string) *FormBuilder {
 	return f
 }
 
-// Action sets the WS action name that the form submits to.
-func (f *FormBuilder) Action(name string) *FormBuilder {
-	f.actionName = name
+// Action sets the server action the form submits to. The payload has the
+// field names plus "Action", the value of the clicked Submit button.
+func (f *FormBuilder) Action(action AnyActionRef) *FormBuilder {
+	f.actionName = action.actionName()
 	return f
 }
 
@@ -308,13 +309,13 @@ func (f *FormBuilder) Build() *Node {
 				Attr("type", "button").
 				Attr("form", f.id).
 				Text(btn.label).
-				OnClick(JS(f.buildValidateJS(btn.action)))
+				OnClick(UnsafeJS(f.buildValidateJS(btn.action)))
 		}
 		children = append(children, Div("flex gap-2").Render(btns...))
 	}
 
 	return Form(f.class).ID(f.id).
-		OnSubmit(JS("event.preventDefault()")).
+		OnSubmit(UnsafeJS("event.preventDefault()")).
 		Render(children...)
 }
 
@@ -786,12 +787,18 @@ func (fe FormErrors) HasErrors() bool { return len(fe) > 0 }
 // Get returns the error for a specific field name, or empty string.
 func (fe FormErrors) Get(name string) string { return fe[name] }
 
-// ShowErrors returns JS that displays server-side validation errors in the
-// per-field error elements produced by Build.
+// ShowErrors returns a Result that displays server-side validation errors in
+// the per-field error elements produced by Build.
 //
-//	errs := form.Validate(ctx.WsData())
-//	return form.ShowErrors(errs)
-func (f *FormBuilder) ShowErrors(errs FormErrors) string {
+//	if errs := form.Validate(input); errs.HasErrors() {
+//		return form.ShowErrors(errs), nil
+//	}
+func (f *FormBuilder) ShowErrors(errs FormErrors) Result {
+	js := f.showErrorsJS(errs)
+	return Result{}.effect(func(*Context) (string, error) { return js, nil })
+}
+
+func (f *FormBuilder) showErrorsJS(errs FormErrors) string {
 	var b strings.Builder
 	b.WriteString("(function(){var first=null;")
 	for i := range f.fields {
@@ -808,11 +815,15 @@ func (f *FormBuilder) ShowErrors(errs FormErrors) string {
 	return b.String()
 }
 
-// Validate checks the data map against the form's field definitions.
-// It returns a FormErrors map (empty if all valid).
-// The data parameter should be the map[string]any from ctx.Body().
-func (f *FormBuilder) Validate(data map[string]any) FormErrors {
+// Validate checks the action input against the form's field definitions.
+// input is the struct (or map) the action received; JSON names must match
+// field names. It returns a FormErrors map (empty if all valid).
+func (f *FormBuilder) Validate(input any) FormErrors {
 	errs := make(FormErrors)
+	var data map[string]any
+	if b, err := json.Marshal(input); err == nil {
+		_ = json.Unmarshal(b, &data)
+	}
 
 	for i := range f.fields {
 		fld := &f.fields[i]

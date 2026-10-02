@@ -145,7 +145,7 @@ func SkeletonForm() *Node {
 
 // Markdown converts a markdown string to HTML and renders it inside a Div.
 // Since the framework produces only document.createElement JS (no innerHTML
-// setter on nodes), this uses .JS() to set innerHTML after the node mounts.
+// setter on nodes), this uses .UnsafeJS() to set innerHTML after the node mounts.
 // Goldmark's default safe renderer omits raw HTML and unsafe links such as
 // javascript: URLs; do not enable unsafe markdown rendering for untrusted input.
 // The class parameter is applied to the container div.
@@ -158,7 +158,7 @@ func Markdown(class, content string) *Node {
 	id := Target()
 	html := buf.String()
 
-	return Div(class).ID(id).JS(
+	return Div(class).ID(id).UnsafeJS(
 		fmt.Sprintf("document.getElementById('%s').innerHTML='%s';", escJS(id), escJS(html)),
 	)
 }
@@ -231,7 +231,7 @@ func (c *CaptchaV3Builder) Build() *Node {
 
 	return Div().ID(containerID).Render(
 		IHidden().ID(inputID).Attr("name", c.tokenField),
-	).JS(js)
+	).UnsafeJS(js)
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +379,7 @@ func (a *AccordionBuilder) Build() *Node {
 				`})();`,
 			escJS(groupID),
 		)
-		wrapper.JS(js)
+		wrapper.UnsafeJS(js)
 	}
 
 	return wrapper
@@ -492,12 +492,12 @@ func (a *AlertBuilder) Build() *Node {
 			Button("text-lg leading-none opacity-50 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-current rounded cursor-pointer flex-shrink-0 -mt-1").
 				Attr("aria-label", "Dismiss").
 				Text("\u00d7").
-				OnClick(JS(dismissJS)),
+				OnClick(UnsafeJS(dismissJS)),
 		)
 	}
 
 	if a.persistKey != "" {
-		container.JS(
+		container.UnsafeJS(
 			fmt.Sprintf(
 				"if(localStorage.getItem('%s')==='1'){document.getElementById('%s').style.display='none';}",
 				escJS(a.persistKey), escJS(id),
@@ -917,14 +917,14 @@ type ConfirmLocale struct {
 	Confirm string
 }
 
-// ConfirmDialog creates a fixed-overlay confirmation dialog with title,
-// message, a confirm button (red), and a cancel button.
 // ConfirmOpt configures optional ConfirmDialog settings.
 type ConfirmOpt struct {
 	CancelAction *Action        // custom cancel action; nil = dismiss overlay
 	Locale       *ConfirmLocale // per-instance locale; nil = English default
 }
 
+// ConfirmDialog creates a fixed-overlay confirmation dialog with title,
+// message, a confirm button (red), and a cancel button. Both buttons close it.
 func ConfirmDialog(title, message string, confirmAction *Action, opts ...ConfirmOpt) *Node {
 	overlayID := Target()
 	titleID := Target()
@@ -941,12 +941,12 @@ func ConfirmDialog(title, message string, confirmAction *Action, opts ...Confirm
 		}
 	}
 	if cancel == nil {
-		cancel = JS(RemoveEl(overlayID))
+		cancel = Remove(overlayID)
 	}
 
 	overlay := Div("fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4").ID(overlayID)
 	overlay.Attr("role", "dialog").Attr("aria-modal", "true").Attr("aria-labelledby", titleID).Attr("aria-describedby", messageID)
-	overlay.OnClick(JS(fmt.Sprintf("if(event.target===event.currentTarget){document.getElementById('%s').remove()}", escJS(overlayID))))
+	overlay.OnClick(UnsafeJS(fmt.Sprintf("if(event.target===event.currentTarget){document.getElementById('%s').remove()}", escJS(overlayID))))
 
 	inner := Div("bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-6 max-w-md w-full").Render(
 		H3("text-lg font-semibold text-gray-900 dark:text-white").ID(titleID).Text(title),
@@ -955,12 +955,12 @@ func ConfirmDialog(title, message string, confirmAction *Action, opts ...Confirm
 			Button("px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer").
 				ID(cancelID).Text(loc.Cancel).OnClick(cancel),
 			Button("px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 cursor-pointer").
-				Text(loc.Confirm).OnClick(confirmAction),
+				Text(loc.Confirm).OnClick(Seq(confirmAction, Remove(overlayID))),
 		),
 	)
 
 	overlay.Render(inner)
-	overlay.JS(fmt.Sprintf(`(function(){var o=document.getElementById('%s'),c=document.getElementById('%s');if(!o)return;if(c)c.focus();o.addEventListener('keydown',function(e){if(e.key==='Escape'){o.remove();return}if(e.key==='Tab'){var f=o.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');if(!f.length)return;var a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}}})})();`, escJS(overlayID), escJS(cancelID)))
+	overlay.UnsafeJS(fmt.Sprintf(`(function(){var o=document.getElementById('%s'),c=document.getElementById('%s');if(!o)return;if(c)c.focus();o.addEventListener('keydown',function(e){if(e.key==='Escape'){o.remove();return}if(e.key==='Tab'){var f=o.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');if(!f.length)return;var a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}}})})();`, escJS(overlayID), escJS(cancelID)))
 	return overlay
 }
 
@@ -1053,7 +1053,7 @@ func (d *DropdownBuilder) Build() *Node {
 	wrapper := Div(wrapCls).ID(wrapperID)
 
 	d.trigger.Attr("aria-haspopup", "menu").Attr("aria-expanded", "false")
-	d.trigger.OnClick(JS(fmt.Sprintf(
+	d.trigger.OnClick(UnsafeJS(fmt.Sprintf(
 		// Open with Escape/outside-click dismissal. Selecting a menu item also
 		// closes the menu: the capture-phase document listener sees the click
 		// before the item handler runs, hides the menu, and the item's own
@@ -1103,7 +1103,7 @@ func (d *DropdownBuilder) Build() *Node {
 
 	wrapper.Render(menu)
 
-	wrapper.JS(fmt.Sprintf(
+	wrapper.UnsafeJS(fmt.Sprintf(
 		`(function(){`+
 			`var w=document.getElementById('%s');`+
 			`var m=document.getElementById('%s');`+
@@ -1563,7 +1563,7 @@ func (t *TabsBuilder) Build() *Node {
 	}
 
 	js.WriteString("})();")
-	container.JS(js.String())
+	container.UnsafeJS(js.String())
 
 	return container
 }
@@ -1652,7 +1652,7 @@ func (t *TooltipBuilder) Wrap(trigger *Node) *Node {
 	wrapper.Render(tooltip)
 
 	if t.delay > 0 {
-		wrapper.JS(fmt.Sprintf(
+		wrapper.UnsafeJS(fmt.Sprintf(
 			`(function(){`+
 				`var w=document.getElementById('%s');`+
 				`var tip=document.getElementById('%s');`+
@@ -1741,7 +1741,7 @@ func ThemeSwitcher(opts ...ThemeSwitcherOpt) *Node {
 		escJS(loc.ThemeAuto), escJS(loc.ThemeLight), escJS(loc.ThemeDark),
 	)
 
-	return btn.JS(js)
+	return btn.UnsafeJS(js)
 }
 
 // tooltipArrow builds the CSS triangle arrow for a tooltip.

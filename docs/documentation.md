@@ -17,22 +17,21 @@
 5. [Node (DOM Builder)](#node-dom-builder)
 6. [Element Constructors](#element-constructors)
 7. [Actions & Events](#actions--events)
-8. [JS Compilation & DOM Swaps](#js-compilation--dom-swaps)
-9. [JS Helper Functions](#js-helper-functions)
-10. [Conditional Helpers](#conditional-helpers)
-11. [Result Effects](#result-effects)
-12. [Components](#components)
-13. [Form Builder](#form-builder)
-14. [Data Tables](#data-tables)
-15. [Collate (Data Panel)](#collate-data-panel)
-16. [Theme & Dark Mode](#theme--dark-mode)
-17. [Localization](#localization)
-18. [Page Loading Screen](#page-loading-screen)
-19. [Security](#security)
-20. [Examples](#examples)
-21. [Release](#release)
-22. [API Reference](#api-reference)
-23. [Server-driven Applications](#server-driven-applications)
+8. [DOM Swaps](#dom-swaps)
+9. [Conditional Helpers](#conditional-helpers)
+10. [Result Effects](#result-effects)
+11. [Components](#components)
+12. [Form Builder](#form-builder)
+13. [Data Tables](#data-tables)
+14. [Collate (Data Panel)](#collate-data-panel)
+15. [Theme & Dark Mode](#theme--dark-mode)
+16. [Localization](#localization)
+17. [Page Loading Screen](#page-loading-screen)
+18. [Security](#security)
+19. [Examples](#examples)
+20. [Release](#release)
+21. [API Reference](#api-reference)
+22. [Server-driven Applications](#server-driven-applications)
 
 ---
 
@@ -44,7 +43,7 @@ g-sui compiles Go node trees into **pure JavaScript** strings. The browser recei
 ┌──────────────────────────────────────────┐
 │  Server (Go)                             │
 │                                          │
-│  PageHandler → *Node tree → .ToJS()      │
+│  PageHandler → *Node tree → JS           │
 │        ↓                                 │
 │  Minimal HTML shell + <script> body      │
 │                                          │
@@ -237,25 +236,16 @@ app.Page("/about", func(ctx *ui.Context) *ui.Node {
 
 Registers external stylesheets and/or inline CSS rules for the current page only. On a full page load the tags are injected into the HTML `<head>` server-side (instant, no JS needed). On SPA navigations (WS actions) the same resources are injected into `<head>` via JS with deduplication so external links are not loaded twice. Pass `nil` for `urls` if you only need inline CSS, or `""` for `css` if you only need external links. This is a trusted raw API; never pass untrusted input.
 
-### JS (Per-Page via Context)
+### UnsafeHeadJS (Per-Page via Context)
 
 ```go
 app.Page("/dashboard", func(ctx *ui.Context) *ui.Node {
-    ctx.HeadJS(`
-        window.toggleMobileNav = function() {
-            var nav = document.getElementById('mobile-nav');
-            if (nav) nav.classList.toggle('hidden');
-        };
-        window.closeMobileNav = function() {
-            var nav = document.getElementById('mobile-nav');
-            if (nav && !nav.classList.contains('hidden')) nav.classList.add('hidden');
-        };
-    `)
+    ctx.UnsafeHeadJS(`window.analytics && analytics.page('dashboard');`)
     return ui.Div("").Text("Dashboard")
 })
 ```
 
-Registers a JavaScript block that runs once when the page loads. On a full page load the script is emitted as a `<script>` tag in `<head>`. On SPA navigations the code is prepended to the WS response so it executes before the DOM swap. Use this for page-level setup (global functions, event listeners, etc.) instead of the `Div("").JS(...)` workaround. This is a trusted raw API; never pass untrusted input.
+Registers a JavaScript block that runs once when the page loads. On a full page load the script is emitted as a `<script>` tag in `<head>`. On SPA navigations the code is prepended to the WS response so it executes before the DOM swap. Prefer [local actions](#local-actions) and [widgets](#widgets-third-party-javascript); for example, a mobile menu is `OnClick(ui.Toggle("mobile-nav"))`. This is a trusted raw API; never pass untrusted input.
 
 **When to use which:**
 
@@ -263,7 +253,7 @@ Registers a JavaScript block that runs once when the page loads. On a full page 
 |--------|-------|-----------|---------------|
 | `app.CSS(urls, css)` | Global (all pages) | Server-side `<head>` | N/A (rendered once) |
 | `ctx.HeadCSS(urls, css)` | Per-page | Server-side `<head>` on full load; JS injection on SPA nav | External links deduped by `href` |
-| `ctx.HeadJS(code)` | Per-page | `<script>` in `<head>` on full load; prepended JS on SPA nav | N/A |
+| `ctx.UnsafeHeadJS(code)` | Per-page | `<script>` in `<head>` on full load; prepended JS on SPA nav | N/A |
 
 ### Listen
 
@@ -292,12 +282,10 @@ Sets up HTTP handlers (page routes, WebSocket endpoint at `/__ws`, client script
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `WsData` | `() map[string]any` | Returns raw WebSocket data map |
-| `Body` | `(target any) error` | Unmarshals WS data into a struct |
 | `Push` | `(result Result) error` | Sends effects to THIS client immediately |
 
 | `CSS` | `(urls []string, css string)` | Registers per-page CSS (stylesheets and/or inline rules) |
-| `HeadJS` | `(code string)` | Registers per-page JavaScript for `<head>` |
+| `UnsafeHeadJS` | `(code string)` | Registers trusted per-page JavaScript for `<head>` |
 
 ### Typed Input Example
 
@@ -492,46 +480,133 @@ Use `App.Live` for per-tab counter state; see [live views](#live-views).
 ### Actions with Data
 
 ```go
-ui.Button("...").OnClick(&ui.Action{
-    Name: "invoice.view",
-    Data: map[string]any{"id": invoice.ID},
-})
+type ViewInput struct{ ID int }
+
+var viewInvoice ui.ActionRef[ViewInput]
+
+func Register(app *ui.App) {
+    viewInvoice = ui.RegisterAction(app, "invoice.view", handleView)
+}
+
+ui.Button("...").OnClick(viewInvoice.Call(ViewInput{ID: invoice.ID}))
 ```
+
+Register actions before pages that use them. Keep the returned `ActionRef` in a
+package variable and call it from render code.
 
 ### Actions with Collect (Form Values)
 
 ```go
-ui.Button("...").OnClick(&ui.Action{
-    Name:    "search.run",
-    Collect: []string{"search-input", "filter-select"},
-})
+ui.Button("...").OnClick(search.Call(SearchInput{}).Collect("search-input", "filter-select"))
 ```
 
-`Collect` reads `.value` from DOM elements by ID and sends them with the action call.
+`Collect` reads `.value` from DOM elements by ID and sends them with the action
+call. The values are decoded into the action input by field name or JSON tag.
 
-### Client-Side Actions
+### Local Actions
+
+Local actions change the page in the browser without a server round trip. Use
+them for menus, tabs, dialogs, toggles, copy buttons and other UI state that
+the server does not need to know about.
 
 ```go
-// Raw JS instead of WS call
-ui.Button("...").OnClick(ui.JS("history.back()"))
-ui.Button("...").OnClick(ui.JS("alert('Hello!')"))
+ui.Button("...").Text("Menu").OnClick(ui.Toggle("menu"))
+ui.Div("hidden ...").ID("menu").OnOutsideClick(ui.Hide("menu")).Render(...)
+
+ui.Button("...").Text("Delete").OnClick(ui.Confirm("Delete item?", deleteItem.Call(DeleteInput{ID: id})))
+ui.Button("...").Text("Copy").OnClick(ui.CopyFrom("api-key"))
+ui.Input("...").OnKey("Enter", search.Call(SearchInput{}).Collect("q")).OnKey("Escape", ui.SetValue("q", ""))
+ui.Div().Shortcut("mod+k", ui.Focus("q"))
 ```
+
+| Function | Description |
+| --- | --- |
+| `Show(id)` / `Hide(id)` / `Toggle(id)` | Change visibility (`hidden` attribute and class). The trigger gets `aria-expanded` and `aria-controls` |
+| `AddClass(id, cls)` / `RemoveClass(id, cls)` / `ToggleClass(id, cls)` | Change space-separated classes |
+| `SetAttr(id, name, value)` / `RemoveAttr(id, name)` / `ToggleAttr(id, name)` | Change attributes |
+| `SetText(id, text)` | Set text content |
+| `SetValue(id, value)` | Set an input value and fire `input` and `change` |
+| `Remove(id)` | Remove an element and run its cleanup |
+| `Focus(id)` | Focus an element and select its text |
+| `ScrollTo(id)` / `ScrollTop()` | Smooth scroll |
+| `OpenDialog(id)` / `CloseDialog(id)` | Open or close a `<dialog>` as a modal; other elements are shown or hidden |
+| `CopyText(text)` / `CopyFrom(id)` | Copy to the clipboard and show a toast |
+| `Notify(variant, message)` / `Toast(message)` | Show a notification |
+| `Navigate(path)` / `PatchURL(path, replace)` | Live navigation |
+| `Redirect(url)` / `Reload()` / `Back()` / `Print()` | Browser navigation |
+| `ResetForm(id)` / `SubmitForm(id)` | Reset or submit a form |
+| `TogglePassword(id)` | Show or hide a password |
+| `ToggleTheme()` / `SetTheme(mode)` | Change the theme (`light`, `dark`, `system`) |
+| `SetTitle(title)` | Set the document title |
+
+Compose actions:
+
+| Function | Description |
+| --- | --- |
+| `Seq(actions...)` | Run actions in order; nil actions are skipped |
+| `Confirm(message, action)` | Ask with a native confirm dialog, then run the action |
+| `Delay(d, action)` | Run the action after a duration |
+| `action.Collect(ids...)` | Send element values with the server calls in the action |
+
+Server calls and local steps mix freely, for example
+`ui.Seq(ui.Hide("menu"), save.Call(input))`. A click with a server call
+prevents the default browser action. A local click does not, so `NavLink`
+still navigates.
+
+### Node Behaviors
+
+| Method | Description |
+| --- | --- |
+| `OnClick(a)` / `OnSubmit(a)` / `OnChange(a)` / `On(event, a)` | Run an action on an event |
+| `OnInput(a, delay...)` | Run an action on input; server calls are debounced (200 ms by default) |
+| `OnKey(key, a)` | Run an action on a key press while focused. Keys: `Enter`, `Escape`, `ctrl+s`, `mod+k` (Ctrl or Cmd), `shift+/`, `space` |
+| `Shortcut(key, a)` | Page-wide key press while the node is mounted. Plain keys are ignored while typing |
+| `OnOutsideClick(a)` | Run an action on a click outside this visible node. Clicks on its toggle trigger are ignored |
+| `DragToScroll()` | Drag with the mouse to scroll horizontally |
+| `ActiveClass(active, inactive...)` | Classes for a link to the current page; sets `aria-current="page"` |
+| `ActivePrefix()` | Also mark the link active on nested paths |
+
+```go
+ui.NavLink("/users", "px-3 py-1 rounded").
+    ActiveClass("bg-blue-100 text-blue-700", "text-gray-700").
+    ActivePrefix().
+    Text("Users")
+```
+
+### Widgets (Third-Party JavaScript)
+
+Use a widget for a JavaScript library such as a chart or an editor. The mount
+function gets the element and the JSON props, and may return a cleanup
+function. Morphs keep the widget's DOM.
+
+```go
+app.Widget("chart", `function(el, props) {
+    var chart = new Chart(el, props);
+    return function() { chart.destroy(); };
+}`)
+
+ui.Widget("chart", ChartConfig{Type: "bar", Data: data}, "h-64")
+```
+
+### Raw JavaScript
+
+Prefer local actions, node behaviors and widgets. Raw JavaScript is a trusted
+last resort and must never contain user input:
+
+| API | Description |
+| --- | --- |
+| `UnsafeJS(code) *Action` | Raw JS action; `event` and `el` are in scope |
+| `node.UnsafeJS(code)` | Raw JS that runs when the node is inserted; `this` is the element |
+| `ctx.UnsafeHeadJS(code)` | Per-page JS in `<head>` |
 
 ---
 
-## JS Compilation & DOM Swaps
+## DOM Swaps
 
-Every `*Node` compiles to JavaScript. Five compilation strategies exist:
-
-| Method | Description |
-|--------|-------------|
-| `ToJS()` | Appends node to `document.body` |
-| `ToJSReplace(targetID)` | Replaces element with matching ID |
-| `ToJSAppend(parentID)` | Appends as child of parent element |
-| `ToJSPrepend(parentID)` | Prepends as first child |
-| `ToJSInner(targetID)` | Replaces innerHTML of target |
-
-All methods produce self-executing IIFEs. If the target element is not found, a warning is logged and `__ws.notfound` is called (which cancels any active Push goroutines for that connection).
+Server actions update the page with `Result` effects. Each node compiles to a
+self-executing JavaScript function. If the target element is not found, a
+warning is logged and `__ws.notfound` is called (which cancels any active Push
+goroutines for that connection).
 
 ### SVG Namespace
 
@@ -545,28 +620,6 @@ ui.RegisterAction(app, "item.add", func(ctx *ui.Context, _ struct{}) (ui.Result,
     return ui.Result{}.Append("item-list", newItem), nil
 })
 ```
-
----
-
-## JS Helper Functions
-
-These return JS strings for common DOM operations. Use them in action handlers.
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `Notify` | `(variant, message string) string` | Toast notification (success/error/error-reload/info) |
-| `Redirect` | `(url string) string` | Full page navigation (`window.location.href`) |
-| `Back` | `() *Action` | Browser back (`history.back()`) |
-| `SetTitle` | `(title string) string` | Update document title |
-| `RemoveEl` | `(id string) string` | Remove element by ID |
-| `SetText` | `(id, text string) string` | Set textContent by ID |
-| `SetAttr` | `(id, attr, value string) string` | Set attribute by ID |
-| `AddClass` | `(id, cls string) string` | Add CSS class by ID |
-| `RemoveClass` | `(id, cls string) string` | Remove CSS class by ID |
-| `Show` | `(id string) string` | Remove `hidden` class |
-| `Hide` | `(id string) string` | Add `hidden` class |
-| `Download` | `(filename, mimeType, base64Data string) string` | Trigger file download |
-| `DragToScroll` | `(id string) string` | Enable drag-to-scroll on element |
 
 ### Notification Variants
 
@@ -796,7 +849,7 @@ ui.NewStepProgress(2, 5).     // current step, total steps
 ui.ConfirmDialog(
     "Delete Invoice",
     "Are you sure? This cannot be undone.",
-    &ui.Action{Name: "invoice.delete", Data: map[string]any{"id": id}},
+    deleteInvoice.Call(DeleteInput{ID: id}), // both buttons close the dialog
     // optional: custom cancel action and/or locale
     ui.ConfirmOpt{
         Locale: &ui.ConfirmLocale{Cancel: "Zrusit", Confirm: "Potvrdit"},
@@ -821,7 +874,7 @@ ui.SkeletonForm()        // 4 label+input pairs + submit button
 ui.Markdown("prose dark:prose-invert", markdownContent)
 ```
 
-Renders markdown to HTML using goldmark. Uses `.JS()` to set innerHTML after mount. Goldmark's default safe renderer omits raw HTML and unsafe links such as `javascript:` URLs; do not enable unsafe markdown rendering for untrusted input.
+Renders markdown to HTML using goldmark. Sets innerHTML after mount. Goldmark's default safe renderer omits raw HTML and unsafe links such as `javascript:` URLs; do not enable unsafe markdown rendering for untrusted input.
 
 ### Icon
 
@@ -894,7 +947,7 @@ Declarative form builder with client-side and server-side validation.
 
 ```go
 form := ui.NewForm("contact-form").
-    Action("contact.submit").
+    Action(contactSubmit). // ui.ActionRef from RegisterAction
     Text("Full Name", "Name").Required().Placeholder("John Doe").Render().
     Email("Email Address", "Email").Required().Render().
     Phone("Phone", "Phone").Placeholder("+1 555-0100").Render().
@@ -983,7 +1036,7 @@ displays field errors for typed form submissions.
 
 `FormErrors` methods:
 
-Use `form.ShowErrors(errs)` to fill the error nodes created by `Build`, set `aria-invalid`, and focus the first invalid field after `Validate` returns server-side errors.
+Return `form.ShowErrors(errs)` (a `Result`) to fill the error nodes created by `Build`, set `aria-invalid`, and focus the first invalid field after `form.Validate(input)` returns server-side errors.
 
 Pressing Enter in a text input submits its owning form's submit button first; buttons outside the form are considered only when no form exists. Toasts include a dismiss button. Dark mode styles only the document baseline, so explicit Tailwind `dark:` classes remain authoritative.
 - `HasErrors() bool` -- true if any field has an error
@@ -1013,7 +1066,7 @@ type Invoice struct {
 }
 
 table := ui.NewDataTable[Invoice]("invoice-table").
-    Action("invoice.data").
+    Action(invoiceData). // ui.ActionRef from RegisterAction
     Head("Number").
     Head("Amount", "text-right").
     Head("Status").
@@ -1025,7 +1078,7 @@ table := ui.NewDataTable[Invoice]("invoice-table").
     }).
     Field(func(inv *Invoice) *ui.Node {
         return ui.Button("text-sm text-blue-600").Text("View").
-            OnClick(&ui.Action{Name: "invoice.view", Data: map[string]any{"id": inv.ID}})
+            OnClick(viewInvoice.Call(ViewInput{ID: inv.ID}))
     }).
     Sortable(0, 1, 2).
     Sort(0, "asc").
@@ -1043,7 +1096,7 @@ The `Col` method provides a single-call column definition combining header, cell
 
 ```go
 table := ui.NewDataTable[Invoice]("invoice-table").
-    Action("invoice.data").
+    Action(invoiceData). // ui.ActionRef from RegisterAction
     Col("Number", ui.ColOpt[Invoice]{
         Text:    func(inv *Invoice) *Node { return ui.Span().Text(inv.Number) },
         Sortable: true,
@@ -1169,7 +1222,7 @@ type Employee struct {
 }
 
 collate := ui.NewCollate[Employee]("employees-collate").
-    Action("employees.data").
+    Action(employeesData). // ui.ActionRef from RegisterAction
     Limit(10).
     Sort(
         ui.CollateSortField{Field: "name", Label: "Name"},
@@ -1321,6 +1374,8 @@ ui.ThemeSwitcher(ui.ThemeSwitcherOpt{
 The client exposes two globals:
 - `setTheme(mode)` -- "system", "light", or "dark"
 - `toggleTheme()` -- toggles between light and dark
+
+From Go, use the `ui.SetTheme(mode)` and `ui.ToggleTheme()` actions.
 
 ### Using Dark Mode in Components
 
@@ -1569,7 +1624,7 @@ window.addEventListener('gsui:reconnected', e => {
 });
 ```
 
-Other client helpers: `__ws.connected()`, `__ws.offline()`, `__ws.holds()`, `__ws.reconnect()`. All of these -- including `hold()` -- are available on the pre-client stub, so they are safe to call from `Node.JS` blocks and `ctx.HeadJS` that run before `/__ws.js` loads.
+Other client helpers: `__ws.connected()`, `__ws.offline()`, `__ws.holds()`, `__ws.reconnect()`. All of these -- including `hold()` -- are available on the pre-client stub, so they are safe to call from `Node.UnsafeJS` blocks and `ctx.UnsafeHeadJS` that run before `/__ws.js` loads.
 
 A hold defers a reload rather than cancelling it: when the last hold is released, the pending reload runs. The client dispatches `gsui:reloadpending` with `detail.reason` (`"server-restart"` or `"long-outage"`) at the moment the reload is postponed, so the page can warn the user or finish up. Always release holds in a `finally` block -- a leaked hold postpones the reload for the lifetime of the page.
 
@@ -1613,6 +1668,7 @@ go run example/main.go
 | `/table` | Table component demo |
 | `/collate` | Collate data panel with filter/sort, search, load-more, expandable detail |
 | `/others` | Miscellaneous component demos |
+| `/actions` | Local actions: menu, shortcuts, copy, dialog, theme, widget |
 
 ---
 
@@ -1649,7 +1705,8 @@ go get github.com/michalCapo/g-sui@v1.001
 | Type | Description |
 |------|-------------|
 | `Node` | DOM element that compiles to JavaScript |
-| `Action` | Server-side handler descriptor (or client-side JS) |
+| `Action` | What a node does on an event: server calls and local UI steps |
+| `ActionRef[T]` | Typed server action returned by `RegisterAction`; `Call(data)` builds an `Action` |
 | `App` | Application container (routes, actions, WS clients) |
 | `LayoutHandler` | `func(ctx *Context) *Node` |
 | `PageHandler` | `func(ctx *Context) *Node` |
@@ -1722,17 +1779,16 @@ go get github.com/michalCapo/g-sui@v1.001
 | `Handler` | `() http.Handler` | Returns mux for custom server setup |
 | `Listen` | `(addr string) error` | Start HTTP server |
 | `Broadcast` | `(result Result) error` | Send effects to all connected clients |
+| `Widget` | `(name, mount string)` | Register a client widget mount function |
 
 #### Context Methods
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `WsData` | `() map[string]any` | Returns raw WebSocket data map |
-| `Body` | `(target any) error` | Unmarshals WS data into a struct |
 | `Push` | `(result Result) error` | Sends effects to THIS client immediately |
 
 | `CSS` | `(urls []string, css string)` | Per-page CSS; `<head>` on full load, JS injection on SPA nav (links deduped) |
-| `HeadJS` | `(code string)` | Per-page JS; `<script>` in `<head>` on full load, prepended JS on SPA nav |
+| `UnsafeHeadJS` | `(code string)` | Trusted per-page JS; `<script>` in `<head>` on full load, prepended JS on SPA nav |
 
 #### Global Functions
 
@@ -1742,23 +1798,13 @@ go get github.com/michalCapo/g-sui@v1.001
 | `El(tag, class...)` | `*Node` | Create element |
 | `Target()` | `string` | Generate random DOM ID |
 
-| `JS(code)` | `*Action` | Client-side-only action |
+| `UnsafeJS(code)` | `*Action` | Trusted raw JS action |
 | `If(cond, node)` | `*Node` | Conditional render |
 | `Or(cond, yes, no)` | `*Node` | Binary conditional |
 | `Map[T](items, fn)` | `[]*Node` | Slice iteration |
-| `Notify(variant, msg)` | `string` | Toast JS |
-| `Redirect(url)` | `string` | Full redirect JS |
-| `Back()` | `*Action` | history.back() action |
-| `SetTitle(title)` | `string` | Document title JS |
-| `RemoveEl(id)` | `string` | Remove element JS |
-| `SetText(id, text)` | `string` | Set text JS |
-| `SetAttr(id, attr, val)` | `string` | Set attribute JS |
-| `AddClass(id, cls)` | `string` | Add class JS |
-| `RemoveClass(id, cls)` | `string` | Remove class JS |
-| `Show(id)` | `string` | Show element JS |
-| `Hide(id)` | `string` | Hide element JS |
-| `Download(name, mime, b64)` | `string` | File download JS |
-| `DragToScroll(id)` | `string` | Drag scroll JS |
+| `Seq`, `Confirm`, `Delay` | `*Action` | Compose actions; see [Local Actions](#local-actions) |
+| `Show`, `Hide`, `Toggle`, `Remove`, `SetText`, ... | `*Action` | Local UI actions; see [Local Actions](#local-actions) |
+| `Widget(name, props, class...)` | `*Node` | Mount a widget registered with `App.Widget` |
 | `NewForm(id)` | `*FormBuilder` | Form builder |
 | `NewDataTable[T](id)` | `*DataTable[T]` | Generic table |
 | `FilterPopup(col, label, type, opts, val)` | `*Node` | Standalone filter popup |
@@ -1964,18 +2010,18 @@ synchronization. Use subscriptions to push independent updates instead.
 
 ### Keyed updates and local interaction
 
-`ToJSMorph` and typed refreshes preserve elements by `Key` or ID. Keys must be
+`Result.Morph` and typed refreshes preserve elements by `Key` or ID. Keys must be
 unique among siblings. Dirty inputs keep their values; active inputs keep their
 selection. Add `Attr("data-gsui-reset", "")` to explicitly replace an input value.
 `Preserve()` leaves an external widget and its descendants under browser ownership.
 
-Legacy `Replace`/`Inner` remain destructive swaps. `Node.JS` and `Subscribe` setup
+`Replace` remains a destructive swap. `Node.UnsafeJS`, widgets and `Subscribe` setup
 run only on newly mounted nodes during morphs. To recreate a widget or change a
 subscription's captured parameters, change its key or explicitly replace it.
 
-`Toggle(id)`, `OpenDialog(id)` and `CloseDialog(id)` are local actions authored in
-Go. `node.OnInput(action, 250*time.Millisecond)` debounces server calls and cancels
-its timer on removal; `Action.Collect` supplies the field values. Ordinary server
+[Local actions](#local-actions) such as `Toggle(id)` and `OpenDialog(id)` are
+authored in Go. `node.OnInput(action, 250*time.Millisecond)` debounces server
+calls and cancels its timer on removal; `Action.Collect` supplies the field values. Ordinary server
 events use the same request/reply API.
 
 ### Typed tables

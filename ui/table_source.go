@@ -52,8 +52,8 @@ func RegisterTable[T any](app *App, id string, load func(*Context, TableQuery) (
 			Type      string `json:"type"`
 			FilterValue
 		}
-		if err := ctx.Body(&req); err != nil {
-			return Notify("error", "Invalid table query")
+		if err := ctx.body(&req); err != nil {
+			return Notify("error", "Invalid table query").script()
 		}
 		table := source.table()
 		query := source.query(ctx, table)
@@ -68,7 +68,7 @@ func RegisterTable[T any](app *App, id string, load func(*Context, TableQuery) (
 			} else {
 				filter, ok := table.filters[req.Col]
 				if !ok || string(filter.Type) != req.Type {
-					return Notify("error", "Unknown filter")
+					return Notify("error", "Unknown filter").script()
 				}
 				value := req.FilterValue
 				if value.Value == "" && len(value.Values) == 0 && value.From == "" && value.To == "" {
@@ -78,7 +78,7 @@ func RegisterTable[T any](app *App, id string, load func(*Context, TableQuery) (
 				}
 			}
 		default:
-			return Notify("error", "Unsupported table operation")
+			return Notify("error", "Unsupported table operation").script()
 		}
 		normalizeTableQuery(&query, table)
 		node, err := source.render(ctx, table, query)
@@ -92,13 +92,14 @@ func RegisterTable[T any](app *App, id string, load func(*Context, TableQuery) (
 		path, _ := json.Marshal(u.RequestURI())
 		// Content and URL are committed in one reply. Browser Back uses __nav to
 		// rebuild the full page from this same query, without a second registry.
-		return node.ToJSMorph(source.id) + fmt.Sprintf("__gsuiQueryDone(%s,%t);", path, req.Operation == "search")
+		return node.toJSMorph(source.id) + fmt.Sprintf("__gsuiQueryDone(%s,%t);", path, req.Operation == "search")
 	})
 	return source
 }
 
 func (source *TableSource[T]) table() *DataTable[T] {
-	table := NewDataTable[T](source.id).Action(source.action)
+	table := NewDataTable[T](source.id)
+	table.action = source.action
 	if source.configure != nil {
 		source.configure(table)
 	}

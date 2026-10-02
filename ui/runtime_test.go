@@ -77,7 +77,7 @@ func TestRuntimeSharedMiddleware(t *testing.T) {
 		t.Fatal(rr.Code)
 	}
 	js := runtimeCall(t, ws, "__nav", "", 1, map[string]any{"url": "/private"})
-	if renders.Load() != 0 || !strings.Contains(js, "window.location.href") {
+	if renders.Load() != 0 || !strings.Contains(js, "__gsui.redirect(") {
 		t.Fatal(js)
 	}
 	js = runtimeCall(t, ws, "inspect", "/public/42?q=yes", 1, nil)
@@ -110,7 +110,7 @@ func TestRuntimeNavigationContextAndCancellation(t *testing.T) {
 		t.Fatal("old page not cancelled")
 	}
 	js = runtimeCall(t, ws, "__nav", "/b", 3, map[string]any{"url": "/missing"})
-	if !strings.Contains(js, "window.location.href") {
+	if !strings.Contains(js, "__gsui.redirect(") {
 		t.Fatal("missing route must use HTTP", js)
 	}
 }
@@ -325,7 +325,7 @@ func TestRuntimeTypedActionValidationAndRefresh(t *testing.T) {
 		ctx.Session["name"] = input.Name
 		return Refresh("profile").Toast("Saved"), nil
 	})
-	if ref.Call(runtimeInput{Name: "test"}).Name != "rename" {
+	if ref.Call(runtimeInput{Name: "test"}).steps[0].call != "rename" {
 		t.Fatal("incorrect action reference")
 	}
 	ws := runtimeSocket(t, app)

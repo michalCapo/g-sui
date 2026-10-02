@@ -356,17 +356,17 @@ func renderDropdownSection() *r.Node {
 				r.NewButton("Actions").BtnColor(r.BtnBlue).Build(),
 			).
 				DropdownHeader("General").
-				DropdownItem("Edit Profile", r.JS("alert('Edit Profile')"), "edit").
-				DropdownItem("Account Settings", r.JS("alert('Account Settings')")).
+				DropdownItem("Edit Profile", r.Toast("Edit Profile"), "edit").
+				DropdownItem("Account Settings", r.Toast("Account Settings")).
 				DropdownDivider().
 				DropdownHeader("Danger Zone").
-				DropdownDanger("Delete Account", r.JS("alert('Delete Account')"), "delete").
+				DropdownDanger("Delete Account", r.Notify("error", "Delete Account"), "delete").
 				Build(),
 			r.NewDropdown(
 				r.NewButton("Options").BtnColor(r.BtnWhite).Build(),
 			).
-				DropdownItem("Share", r.JS("alert('Share')")).
-				DropdownItem("Download", r.JS("alert('Download')")).
+				DropdownItem("Share", r.Toast("Share")).
+				DropdownItem("Download", r.Toast("Download")).
 				Build(),
 		),
 	)
@@ -376,9 +376,20 @@ func renderDropdownSection() *r.Node {
 // Confirm Dialog
 // ---------------------------------------------------------------------------
 
-func renderConfirmDialogSection() *r.Node {
-	dialogTargetID := r.Target()
+const dialogTargetID = "showcase-dialog"
 
+var showcaseConfirm r.ActionRef[struct{}]
+
+// handleShowcaseConfirm returns the dialog from the server; it closes itself.
+func handleShowcaseConfirm(ctx *r.Context, _ struct{}) (r.Result, error) {
+	return r.Result{}.Append(dialogTargetID, r.ConfirmDialog(
+		"Delete this item?",
+		"This action cannot be undone. The item will be permanently removed.",
+		r.Toast("Confirmed!"),
+	)), nil
+}
+
+func renderConfirmDialogSection() *r.Node {
 	return r.Div().Render(
 		r.Div("text-2xl font-bold mb-4").Text("Confirm Dialog"),
 		r.Div("text-gray-600 text-sm mb-4").Text("Click the button below to show a confirmation dialog overlay."),
@@ -386,17 +397,12 @@ func renderConfirmDialogSection() *r.Node {
 		r.NewButton("Delete Item").
 			BtnColor(r.BtnRed).
 			BtnIcon("delete").
-			OnBtnClick(r.JS(
-				r.ConfirmDialog(
-					"Delete this item?",
-					"This action cannot be undone. The item will be permanently removed.",
-					r.JS("alert('Confirmed!');"+r.RemoveEl(dialogTargetID)),
-				).ToJSInner(dialogTargetID),
-			)).
+			OnBtnClick(showcaseConfirm.Call(struct{}{})).
 			Build(),
 	)
 }
 
 func RegisterShowcase(app *r.App) {
+	showcaseConfirm = r.RegisterAction(app, "showcase.confirm", handleShowcaseConfirm)
 	app.Page("/", Showcase)
 }

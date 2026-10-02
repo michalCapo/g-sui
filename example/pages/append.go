@@ -9,6 +9,8 @@ import (
 
 const appendListID = "append-list"
 
+var appendEnd, appendStart r.ActionRef[struct{}]
+
 func Append(ctx *r.Context) *r.Node {
 	return r.Div("max-w-5xl mx-auto flex flex-col gap-4").Render(
 		r.Div("text-2xl font-bold").Text("Append / Prepend Demo"),
@@ -16,10 +18,10 @@ func Append(ctx *r.Context) *r.Node {
 		r.Div("flex gap-2").Render(
 			r.Button("px-4 py-2 rounded cursor-pointer bg-blue-600 text-white hover:bg-blue-700 text-sm").
 				Text("Add at end").
-				OnClick(&r.Action{Name: "append.end"}),
+				OnClick(appendEnd.Call(struct{}{})),
 			r.Button("px-4 py-2 rounded cursor-pointer bg-green-600 text-white hover:bg-green-700 text-sm").
 				Text("Add at start").
-				OnClick(&r.Action{Name: "append.start"}),
+				OnClick(appendStart.Call(struct{}{})),
 		),
 		r.Div("space-y-2").ID(appendListID).Render(
 			r.Div("p-2 rounded border bg-white").Render(
@@ -46,7 +48,7 @@ func HandleAppendStart(ctx *r.Context, _ struct{}) (r.Result, error) {
 }
 
 func RegisterAppend(app *r.App) {
+	appendEnd = r.RegisterAction(app, "append.end", HandleAppendEnd)
+	appendStart = r.RegisterAction(app, "append.start", HandleAppendStart)
 	app.Page("/append", Append)
-	r.RegisterAction(app, "append.end", HandleAppendEnd)
-	r.RegisterAction(app, "append.start", HandleAppendStart)
 }

@@ -48,7 +48,7 @@ func main() {
 ```
 Server (Go)                          Browser
 ─────────────                        ───────
-PageHandler → *Node → .ToJS()   →   Minimal HTML + <script>
+PageHandler → *Node → JS        →   Minimal HTML + <script>
 RegisterAction → Result       ←→  WebSocket (__ws)
 ```
 
@@ -63,16 +63,22 @@ RegisterAction → Result       ←→  WebSocket (__ws)
 ## Features
 
 - Server-rendered UI with a Go DSL (60+ element constructors, SVG namespace support)
-- WebSocket actions with data payloads and field collection (`Collect`)
-- Five DOM swap strategies: `ToJS`, `ToJSReplace`, `ToJSAppend`, `ToJSPrepend`, `ToJSInner`
-- Typed `Result` effects for complex updates
+- Typed WebSocket actions with data payloads and field collection (`ref.Call(data).Collect(ids...)`)
+- Typed `Result` effects: `Morph`, `Replace`, `Append`, `Prepend`, `Remove`, `Refresh`, `Run`
 - Real-time server push via `ctx.Push()` and broadcast via `app.Broadcast()`
 - Custom HTTP routes: `app.GET()`, `app.POST()`, `app.DELETE()`
 - Layout system via `app.Layout()` and custom `Handler()` for embedding
 - SEO metadata: `app.Title`, `app.Description`, `app.HTMLHead`
 - Conditional rendering helpers: `If`, `Or`, `Map`
 - Toast notifications: success, error, error-reload, info
-- JS helpers: `Redirect`, `SetTitle`, `RemoveEl`, `SetText`, `SetAttr`, `AddClass`, `RemoveClass`, `Show`, `Hide`, `Download`, `DragToScroll`
+- Local UI actions without JavaScript: `Show`, `Hide`, `Toggle`, `ToggleClass`, `SetAttr`, `SetValue`, `Focus`, `OpenDialog`, `CopyText`, `Navigate`, `Seq`, `Confirm`, `Delay` and more
+- Node behaviors: `OnKey`, `Shortcut`, `OnOutsideClick`, `DragToScroll`, `ActiveClass`
+- `App.Widget` for third-party JS libraries with mount and cleanup
+
+## Writing UI with an LLM
+
+See [`AGENTS.md`](AGENTS.md). It maps common UI needs to g-sui APIs, so agents
+do not write raw JavaScript. Raw JS is only available through `Unsafe*` APIs.
 
 ### Components
 

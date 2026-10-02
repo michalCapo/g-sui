@@ -12,7 +12,7 @@ import (
 
 func TestElBasic(t *testing.T) {
 	n := Div("flex gap-4").ID("root").Text("hello")
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, "document.createElement('div')")
 	expect(t, js, ".id='root'")
@@ -23,7 +23,7 @@ func TestElBasic(t *testing.T) {
 
 func TestElNoClasses(t *testing.T) {
 	n := Div().ID("empty")
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, ".id='empty'")
 	notExpect(t, js, ".className=")
@@ -34,7 +34,7 @@ func TestElWithRender(t *testing.T) {
 		Span("child-1").Text("first"),
 		Span("child-2").Text("second"),
 	)
-	js := n.ToJS()
+	js := n.toJS()
 
 	count := strings.Count(js, "document.createElement")
 	if count != 3 {
@@ -46,14 +46,14 @@ func TestElWithRender(t *testing.T) {
 
 func TestClassAppend(t *testing.T) {
 	n := Div("flex").Class("gap-4")
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, ".className='flex gap-4'")
 }
 
 func TestElWithAttributes(t *testing.T) {
 	n := Input().Attr("type", "text").Attr("name", "username").Attr("placeholder", "Enter name")
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, "setAttribute('type','text')")
 	expect(t, js, "setAttribute('name','username')")
@@ -62,33 +62,27 @@ func TestElWithAttributes(t *testing.T) {
 
 func TestElWithStyles(t *testing.T) {
 	n := Div().Style("color", "red").Style("font-size", "16px")
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, ".style['color']='red'")
 	expect(t, js, ".style['font-size']='16px'")
 }
 
 func TestElWithOnClick(t *testing.T) {
-	n := Button("px-4 py-2").Text("Click me").OnClick(&Action{
-		Name: "counter.increment",
-		Data: map[string]any{"count": 0},
-	})
-	js := n.ToJS()
+	n := Button("px-4 py-2").Text("Click me").OnClick(call("counter.increment", map[string]any{"count": 0}))
+	js := n.toJS()
 
 	expect(t, js, "_bind(e0,'click'")
-	expect(t, js, "__ws.call('counter.increment'")
+	expect(t, js, `__ws.call("counter.increment"`)
+	expect(t, js, "event.preventDefault()")
 	expect(t, js, `"count":0`)
 }
 
 func TestElWithCollect(t *testing.T) {
-	n := Button().Text("Submit").OnClick(&Action{
-		Name:    "form.submit",
-		Data:    map[string]any{},
-		Collect: []string{"f-name", "f-email"},
-	})
-	js := n.ToJS()
+	n := Button().Text("Submit").OnClick(call("form.submit", map[string]any{}).Collect("f-name", "f-email"))
+	js := n.toJS()
 
-	expect(t, js, "__ws.call('form.submit'")
+	expect(t, js, `__ws.call("form.submit"`)
 	expect(t, js, `["f-name","f-email"]`)
 }
 
@@ -98,7 +92,7 @@ func TestNilChildrenSkipped(t *testing.T) {
 		nil,
 		Span().Text("also visible"),
 	)
-	js := n.ToJS()
+	js := n.toJS()
 
 	count := strings.Count(js, "document.createElement")
 	if count != 3 {
@@ -112,7 +106,7 @@ func TestIfHelper(t *testing.T) {
 		If(show, Span().Text("shown")),
 		If(!show, Span().Text("hidden")),
 	)
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, "'shown'")
 	notExpect(t, js, "'hidden'")
@@ -124,7 +118,7 @@ func TestOrHelper(t *testing.T) {
 		Span("text-green-500").Text("active"),
 		Span("text-red-500").Text("inactive"),
 	)
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, "'inactive'")
 	expect(t, js, "text-red-500")
@@ -138,7 +132,7 @@ func TestMapHelper(t *testing.T) {
 	})
 
 	parent := Ul().ID("list").Render(nodes...)
-	js := parent.ToJS()
+	js := parent.toJS()
 
 	expect(t, js, "'Apple'")
 	expect(t, js, "'Banana'")
@@ -153,7 +147,7 @@ func TestMapHelper(t *testing.T) {
 
 func TestToJSReplace(t *testing.T) {
 	n := Div().ID("new-counter").Text("42")
-	js := n.ToJSReplace("old-counter")
+	js := n.toJSReplace("old-counter")
 
 	expect(t, js, "getElementById('old-counter')")
 	expect(t, js, "replaceWith(")
@@ -161,7 +155,7 @@ func TestToJSReplace(t *testing.T) {
 
 func TestToJSAppend(t *testing.T) {
 	n := Li().Text("new item")
-	js := n.ToJSAppend("list")
+	js := n.toJSAppend("list")
 
 	expect(t, js, "getElementById('list')")
 	expect(t, js, "_p.appendChild(")
@@ -169,7 +163,7 @@ func TestToJSAppend(t *testing.T) {
 
 func TestToJSPrepend(t *testing.T) {
 	n := Li().Text("first item")
-	js := n.ToJSPrepend("list")
+	js := n.toJSPrepend("list")
 
 	expect(t, js, "getElementById('list')")
 	expect(t, js, "_p.prepend(")
@@ -177,7 +171,7 @@ func TestToJSPrepend(t *testing.T) {
 
 func TestToJSInner(t *testing.T) {
 	n := Span().Text("replaced content")
-	js := n.ToJSInner("container")
+	js := n.toJSInner("container")
 
 	expect(t, js, "getElementById('container')")
 	expect(t, js, "_t.innerHTML=''")
@@ -188,53 +182,71 @@ func TestToJSInner(t *testing.T) {
 // Helper function tests
 // ---------------------------------------------------------------------------
 
-func TestNotify(t *testing.T) {
-	js := Notify("success", "Saved!")
-	expect(t, js, "'Saved!'")
-	expect(t, js, "#16a34a")      // success accent color
-	expect(t, js, "#dcfce7")      // success background
-	expect(t, js, "__messages__") // toast container
-	expect(t, js, "setTimeout")
+func TestLocalActions(t *testing.T) {
+	cases := map[string]struct {
+		action *Action
+		want   string
+	}{
+		"Notify":      {Notify("success", "Saved!"), `__gsui.notify(el,"success","Saved!");`},
+		"Redirect":    {Redirect("/dashboard"), `__gsui.redirect(el,"/dashboard");`},
+		"SetTitle":    {SetTitle("New Title"), `__gsui.title(el,"New Title");`},
+		"Remove":      {Remove("old-item"), `__gsui.remove(el,"old-item");`},
+		"SetText":     {SetText("counter", "42"), `__gsui.setText(el,"counter","42");`},
+		"AddClass":    {AddClass("btn", "active"), `__gsui.addClass(el,"btn","active");`},
+		"RemoveClass": {RemoveClass("btn", "active"), `__gsui.removeClass(el,"btn","active");`},
+		"Show":        {Show("panel"), `__gsui.show(el,"panel");`},
+		"Hide":        {Hide("panel"), `__gsui.hide(el,"panel");`},
+		"Toggle":      {Toggle("menu"), `__gsui.toggle(el,"menu");`},
+		"PatchURL":    {PatchURL("/q?x=1", true), `__gsui.nav(el,"/q?x=1",true,true);`},
+	}
+	for name, c := range cases {
+		if got := c.action.code(); got != c.want {
+			t.Errorf("%s: got %s, want %s", name, got, c.want)
+		}
+	}
 }
 
-func TestRedirect(t *testing.T) {
-	js := Redirect("/dashboard")
-	expect(t, js, "window.location.href='/dashboard'")
+func TestLocalClickDoesNotPreventDefault(t *testing.T) {
+	js := NavLink("/x").OnClick(Hide("menu")).toJS()
+	notExpect(t, js, "preventDefault")
 }
 
-func TestSetTitle(t *testing.T) {
-	js := SetTitle("New Title")
-	expect(t, js, "document.title='New Title'")
+func TestActionComposition(t *testing.T) {
+	save := call("item.save", map[string]any{"id": 1})
+	js := Button().OnClick(Seq(Hide("menu"), Confirm("Sure?", save.Collect("name")))).toJS()
+	expect(t, js, `__gsui.hide(el,"menu");if(confirm("Sure?")){__ws.call("item.save",{"id":1},["name"],el);}`)
+	expect(t, js, "event.preventDefault()")
+
+	js = Input().OnKey("Enter", save).OnKey("Escape", Hide("menu")).toJS()
+	expect(t, js, `if(__gsui.key(event,"Enter"))`)
+	expect(t, js, `if(__gsui.key(event,"Escape"))`)
+
+	js = Input().OnInput(save).toJS()
+	expect(t, js, "__gsui.debounce(el,200,function(){")
 }
 
-func TestRemoveEl(t *testing.T) {
-	js := RemoveEl("old-item")
-	expect(t, js, "getElementById('old-item')")
-	expect(t, js, "e.remove()")
+func TestNodeBehaviors(t *testing.T) {
+	js := Div().ID("menu").OnOutsideClick(Hide("menu")).Shortcut("Escape", Hide("menu")).DragToScroll().toJS()
+	expect(t, js, `__gsui.outside(this,function(event,el){__gsui.hide(el,"menu");});`)
+	expect(t, js, `__gsui.shortcut(this,"Escape",function(event,el){__gsui.hide(el,"menu");});`)
+	expect(t, js, `__gsui.drag(this);`)
+
+	js = NavLink("/users", "px-2").ActiveClass("font-bold", "text-gray-500").ActivePrefix().toJS()
+	expect(t, js, "setAttribute('data-gsui-active','font-bold')")
+	expect(t, js, "setAttribute('data-gsui-inactive','text-gray-500')")
+	expect(t, js, "__gsui.active(this);")
+
+	js = Widget("chart", map[string]any{"points": []int{1, 2}}).toJS()
+	expect(t, js, `__gsui.mount(this,"chart",{"points":[1,2]});`)
+	expect(t, js, "data-gsui-preserve")
 }
 
-func TestSetText(t *testing.T) {
-	js := SetText("counter", "42")
-	expect(t, js, "getElementById('counter')")
-	expect(t, js, "e.textContent='42'")
-}
-
-func TestAddClass(t *testing.T) {
-	js := AddClass("btn", "active")
-	expect(t, js, "classList.add('active')")
-}
-
-func TestRemoveClass(t *testing.T) {
-	js := RemoveClass("btn", "active")
-	expect(t, js, "classList.remove('active')")
-}
-
-func TestShowHide(t *testing.T) {
-	js := Show("panel")
-	expect(t, js, "classList.remove('hidden')")
-
-	js = Hide("panel")
-	expect(t, js, "classList.add('hidden')")
+func TestResultRun(t *testing.T) {
+	js, err := Result{}.Run(CloseDialog("edit"), Focus("name")).build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(t, js, `(function(event,el){__gsui.close(el,"edit");__gsui.focus(el,"name");})(null,null);`)
 }
 
 // ---------------------------------------------------------------------------
@@ -250,8 +262,7 @@ func TestResultEffects(t *testing.T) {
 	}
 
 	expect(t, js, "replaceWith(")
-	expect(t, js, "'Done!'")
-	expect(t, js, "__messages__")
+	expect(t, js, `__gsui.notify(el,"success","Done!")`)
 }
 
 // ---------------------------------------------------------------------------
@@ -260,13 +271,13 @@ func TestResultEffects(t *testing.T) {
 
 func TestEscapeQuotes(t *testing.T) {
 	n := Span().Text("it's a test")
-	js := n.ToJS()
+	js := n.toJS()
 	expect(t, js, `it\'s a test`)
 }
 
 func TestEscapeNewlines(t *testing.T) {
 	n := Span().Text("line1\nline2")
-	js := n.ToJS()
+	js := n.toJS()
 	expect(t, js, `line1\nline2`)
 }
 
@@ -279,31 +290,25 @@ func TestCounterExample(t *testing.T) {
 	counterNode := Div("flex gap-4 items-center p-8").ID("counter").Render(
 		Button("w-10 h-10 rounded bg-red-600 text-white text-xl font-bold").
 			Text("-").
-			OnClick(&Action{
-				Name: "counter.dec",
-				Data: map[string]any{"Count": count},
-			}),
+			OnClick(call("counter.dec", map[string]any{"Count": count})),
 		Span("text-4xl font-mono w-20 text-center").
 			ID("counter-val").
 			Text(fmt.Sprintf("%d", count)),
 		Button("w-10 h-10 rounded bg-blue-600 text-white text-xl font-bold").
 			Text("+").
-			OnClick(&Action{
-				Name: "counter.inc",
-				Data: map[string]any{"Count": count},
-			}),
+			OnClick(call("counter.inc", map[string]any{"Count": count})),
 	)
 
-	js := counterNode.ToJS()
+	js := counterNode.toJS()
 
 	expect(t, js, "document.createElement('div')")
 	expect(t, js, "document.createElement('button')")
 	expect(t, js, "document.createElement('span')")
-	expect(t, js, "'counter.dec'")
-	expect(t, js, "'counter.inc'")
+	expect(t, js, `"counter.dec"`)
+	expect(t, js, `"counter.inc"`)
 	expect(t, js, "'5'")
 
-	jsReplace := counterNode.ToJSReplace("counter")
+	jsReplace := counterNode.toJSReplace("counter")
 	expect(t, jsReplace, "getElementById('counter')")
 	expect(t, jsReplace, "replaceWith(")
 
@@ -329,16 +334,12 @@ func TestFormExample(t *testing.T) {
 		),
 		Button("w-full bg-blue-600 text-white rounded py-2 font-bold").
 			Text("Sign In").
-			OnClick(&Action{
-				Name:    "auth.login",
-				Data:    map[string]any{},
-				Collect: []string{"f-email", "f-pass"},
-			}),
+			OnClick(call("auth.login", map[string]any{}).Collect("f-email", "f-pass")),
 	)
 
-	js := formNode.ToJS()
+	js := formNode.toJS()
 
-	expect(t, js, "'auth.login'")
+	expect(t, js, `"auth.login"`)
 	expect(t, js, `["f-email","f-pass"]`)
 	expect(t, js, "setAttribute('type','email')")
 	expect(t, js, "setAttribute('type','password')")
@@ -352,7 +353,7 @@ func TestFormExample(t *testing.T) {
 
 func TestInputWithClasses(t *testing.T) {
 	n := Input("w-full border rounded").Attr("type", "text")
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, ".className='w-full border rounded'")
 	expect(t, js, "setAttribute('type','text')")
@@ -363,8 +364,8 @@ func TestInputWithClasses(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRawJSDeferredAfterAppend(t *testing.T) {
-	n := Div().ID("container").JS("document.getElementById('container').dataset.ready='1';")
-	js := n.ToJS()
+	n := Div().ID("container").UnsafeJS("document.getElementById('container').dataset.ready='1';")
+	js := n.toJS()
 
 	// The rawJS must appear AFTER the appendChild call
 	appendIdx := strings.Index(js, "document.body.appendChild(")
@@ -381,8 +382,8 @@ func TestRawJSDeferredAfterAppend(t *testing.T) {
 }
 
 func TestRawJSDeferredInner(t *testing.T) {
-	n := Div().ID("child").JS("document.getElementById('child').style.color='red';")
-	js := n.ToJSInner("target")
+	n := Div().ID("child").UnsafeJS("document.getElementById('child').style.color='red';")
+	js := n.toJSInner("target")
 
 	// The rawJS must appear AFTER the _t.appendChild call
 	appendIdx := strings.Index(js, "_t.appendChild(")
@@ -399,13 +400,13 @@ func TestRawJSDeferredInner(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// RawJS `this` binding: `.JS()` code can use `this` to reference the element
+// RawJS `this` binding: `.UnsafeJS()` code can use `this` to reference the element
 // ---------------------------------------------------------------------------
 
 func TestRawJSThisBinding(t *testing.T) {
 	n := El("svg", "w-6 h-6").Attr("viewBox", "0 0 24 24").
-		JS("this.innerHTML='<circle cx=\"12\" cy=\"12\" r=\"10\"/>'")
-	js := n.ToJS()
+		UnsafeJS("this.innerHTML='<circle cx=\"12\" cy=\"12\" r=\"10\"/>'")
+	js := n.toJS()
 
 	// Must use .call(eN) so `this` is the element
 	expect(t, js, ".call(e0)")
@@ -421,11 +422,11 @@ func TestRawJSThisBinding(t *testing.T) {
 }
 
 func TestRawJSThisBindingNested(t *testing.T) {
-	// Child node with .JS() — `this` should reference the child (e1), not parent (e0)
+	// Child node with .UnsafeJS() — `this` should reference the child (e1), not parent (e0)
 	n := Div("parent").Render(
-		Span("child").JS("this.dataset.init='1'"),
+		Span("child").UnsafeJS("this.dataset.init='1'"),
 	)
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, ".call(e1)")
 	notExpect(t, js, ".call(e0)")
@@ -437,7 +438,7 @@ func TestRawJSThisBindingNested(t *testing.T) {
 
 func TestSVGUsesCreateElementNS(t *testing.T) {
 	n := SVG("w-6 h-6").Attr("viewBox", "0 0 24 24")
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, "createElementNS('http://www.w3.org/2000/svg','svg')")
 	notExpect(t, js, "createElement('svg')")
@@ -451,7 +452,7 @@ func TestSVGChildrenInheritNamespace(t *testing.T) {
 		El("path").Attr("d", "M0 0L10 10"),
 		El("circle").Attr("cx", "5").Attr("cy", "5").Attr("r", "3"),
 	)
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, "createElementNS('http://www.w3.org/2000/svg','svg')")
 	expect(t, js, "createElementNS('http://www.w3.org/2000/svg','path')")
@@ -462,7 +463,7 @@ func TestSVGChildrenInheritNamespace(t *testing.T) {
 
 func TestNonSVGStillUsesCreateElement(t *testing.T) {
 	n := Div("flex").Render(Span("text"))
-	js := n.ToJS()
+	js := n.toJS()
 
 	expect(t, js, "createElement('div')")
 	expect(t, js, "createElement('span')")
@@ -471,7 +472,10 @@ func TestNonSVGStillUsesCreateElement(t *testing.T) {
 
 func TestFormShowErrorsUsesFieldErrorIDs(t *testing.T) {
 	f := NewForm("contact").Text("Email", "email").Required().Render().Checkbox("Terms", "terms").Required().Render()
-	js := f.ShowErrors(FormErrors{"email": "already registered"})
+	js, err := f.ShowErrors(FormErrors{"email": "already registered"}).build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	expect(t, js, "err-contact-email")
 	expect(t, js, "err-contact-terms")
 	expect(t, js, "already registered")

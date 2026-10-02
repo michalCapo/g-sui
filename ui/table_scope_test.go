@@ -9,9 +9,9 @@ type scopeRow struct{ Name string }
 
 func TestTwoTablesHaveScopedFilterControlIDs(t *testing.T) {
 	build := func(id string) string {
-		dt := NewDataTable[scopeRow](id).Action("t.data").
+		dt := NewDataTable[scopeRow](id).Action(ActionRef[map[string]any]{name: "t.data"}).
 			Col("Name", ColOpt[scopeRow]{Filter: FilterTypeText, Text: func(r *scopeRow) *Node { return Span().Text(r.Name) }})
-		return dt.Render([]*scopeRow{{Name: "x"}}).ToJS()
+		return dt.Render([]*scopeRow{{Name: "x"}}).toJS()
 	}
 	a, b := build("tblA"), build("tblB")
 	if !strings.Contains(a, "tblA-filter-0-") {

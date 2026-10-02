@@ -12,9 +12,7 @@ package ui
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 )
 
@@ -34,25 +32,6 @@ type Node struct {
 	events   map[string]*Action
 	rawJS    string // arbitrary JS executed after this node is mounted
 	void     bool   // self-closing element (input, img, br, hr)
-}
-
-// Action describes a server-side handler invoked via WebSocket,
-// or a client-side JS snippet when created via JS().
-type Action struct {
-	Name    string         // e.g. "counter.increment"
-	Data    map[string]any // state payload sent with the call
-	Collect []string       // element IDs whose .value to collect before calling
-	rawJS   string         // if set, execute client-side JS instead of WS call
-}
-
-// JS creates a client-side-only Action that executes raw JavaScript
-// instead of calling the server via WebSocket.
-//
-// This is a trusted raw API: never pass untrusted/user-controlled input to it.
-//
-//	r.Button("...").OnClick(r.JS("history.back()"))
-func JS(code string) *Action {
-	return &Action{rawJS: code}
 }
 
 // ---------------------------------------------------------------------------
@@ -261,13 +240,13 @@ func (n *Node) Render(children ...*Node) *Node {
 	return n
 }
 
-// OnClick attaches a click event that calls a server action via WS.
+// OnClick runs action on click.
 func (n *Node) OnClick(action *Action) *Node { return n.On("click", action) }
 
-// OnSubmit attaches a submit event action.
+// OnSubmit runs action on submit. Native form submission is prevented.
 func (n *Node) OnSubmit(action *Action) *Node { return n.On("submit", action) }
 
-// On attaches a named event to a server action.
+// On runs action on a DOM event. It replaces an earlier action for the event.
 func (n *Node) On(event string, action *Action) *Node {
 	if action == nil {
 		return n
@@ -279,10 +258,12 @@ func (n *Node) On(event string, action *Action) *Node {
 	return n
 }
 
-// JS sets raw JavaScript to execute after this node is appended to the DOM.
+// UnsafeJS runs raw JavaScript after this node is inserted; `this` is the
+// element. Prefer Node behaviors (OnKey, Shortcut, OnOutsideClick, ...) and
+// Widget; use this only for browser APIs they do not cover.
 //
 // This is a trusted raw API: never pass untrusted/user-controlled input to it.
-func (n *Node) JS(raw string) *Node { n.rawJS = raw; return n }
+func (n *Node) UnsafeJS(raw string) *Node { n.rawJS += raw; return n }
 
 // ---------------------------------------------------------------------------
 // Conditional helpers
@@ -334,9 +315,9 @@ func Target() string {
 // JS Compilation
 // ---------------------------------------------------------------------------
 
-// ToJS compiles the node tree into a self-executing JavaScript function
+// toJS compiles the node tree into a self-executing JavaScript function
 // that builds and appends the entire tree to document.body.
-func (n *Node) ToJS() string {
+func (n *Node) toJS() string {
 	var b strings.Builder
 	b.WriteString("(function(){")
 	counter := 0
@@ -350,9 +331,9 @@ func (n *Node) ToJS() string {
 	return b.String()
 }
 
-// ToJSReplace compiles JS that replaces an existing DOM element by its ID.
+// toJSReplace compiles JS that replaces an existing DOM element by its ID.
 // The old element is found by ID, the new tree is built, and replaceWith() is called.
-func (n *Node) ToJSReplace(targetID string) string {
+func (n *Node) toJSReplace(targetID string) string {
 	var b strings.Builder
 	b.WriteString("(function(){")
 	b.WriteString(fmt.Sprintf("var _t=document.getElementById('%s');", escJS(targetID)))
@@ -368,8 +349,8 @@ func (n *Node) ToJSReplace(targetID string) string {
 	return b.String()
 }
 
-// ToJSAppend compiles JS that appends this node as a child of the target element.
-func (n *Node) ToJSAppend(parentID string) string {
+// toJSAppend compiles JS that appends this node as a child of the target element.
+func (n *Node) toJSAppend(parentID string) string {
 	var b strings.Builder
 	b.WriteString("(function(){")
 	b.WriteString(fmt.Sprintf("var _p=document.getElementById('%s');", escJS(parentID)))
@@ -385,8 +366,8 @@ func (n *Node) ToJSAppend(parentID string) string {
 	return b.String()
 }
 
-// ToJSPrepend compiles JS that prepends this node as the first child.
-func (n *Node) ToJSPrepend(parentID string) string {
+// toJSPrepend compiles JS that prepends this node as the first child.
+func (n *Node) toJSPrepend(parentID string) string {
 	var b strings.Builder
 	b.WriteString("(function(){")
 	b.WriteString(fmt.Sprintf("var _p=document.getElementById('%s');", escJS(parentID)))
@@ -402,9 +383,9 @@ func (n *Node) ToJSPrepend(parentID string) string {
 	return b.String()
 }
 
-// ToJSInner compiles JS that replaces the innerHTML of a target element
+// toJSInner compiles JS that replaces the innerHTML of a target element
 // with this node (sets target's children to just this node).
-func (n *Node) ToJSInner(targetID string) string {
+func (n *Node) toJSInner(targetID string) string {
 	var b strings.Builder
 	b.WriteString("(function(){")
 	b.WriteString(fmt.Sprintf("var _t=document.getElementById('%s');", escJS(targetID)))
@@ -478,48 +459,11 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 		if action == nil {
 			continue
 		}
-		if action.rawJS != "" {
-			// Client-side only: raw JS, no WS call
-			fmt.Fprintf(b,
-				"_bind(%s,'%s',function(event){%s});",
-				varName, escJS(event), action.rawJS,
-			)
-		} else if len(action.Collect) > 0 {
-			collectJSON, err := json.Marshal(action.Collect)
-			if err != nil {
-				log.Printf("gsui: marshal action collect: %v", err)
-				collectJSON = []byte("[]")
-			}
-			dataJSON, err := json.Marshal(action.Data)
-			if err != nil {
-				log.Printf("gsui: marshal action data: %v", err)
-				dataJSON = []byte("{}")
-			}
-			prevent := ""
-			busy := ""
-			if event == "click" || event == "submit" {
-				prevent = "event.preventDefault();"
-			}
-			fmt.Fprintf(b,
-				"_bind(%s,'%s',function(event){%s%s__ws.call('%s',%s,%s,event.currentTarget)});",
-				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON), string(collectJSON),
-			)
-		} else {
-			dataJSON, err := json.Marshal(action.Data)
-			if err != nil {
-				log.Printf("gsui: marshal action data: %v", err)
-				dataJSON = []byte("{}")
-			}
-			prevent := ""
-			busy := ""
-			if event == "click" || event == "submit" {
-				prevent = "event.preventDefault();"
-			}
-			fmt.Fprintf(b,
-				"_bind(%s,'%s',function(event){%s%s__ws.call('%s',%s,null,event.currentTarget)});",
-				varName, escJS(event), prevent, busy, escJS(action.Name), string(dataJSON),
-			)
+		prevent := ""
+		if event == "submit" || (event == "click" && action.server()) {
+			prevent = "event.preventDefault();"
 		}
+		fmt.Fprintf(b, "_bind(%s,'%s',function(event){var el=event.currentTarget;%s%s});", varName, escJS(event), prevent, action.code())
 	}
 
 	// Children
@@ -536,138 +480,6 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 	}
 
 	return varName
-}
-
-// ---------------------------------------------------------------------------
-// JS Helper Functions (return JS strings for common DOM operations)
-// ---------------------------------------------------------------------------
-
-// Notify returns JS that shows a toast notification styled with a left
-// accent border, colored dot, and auto-dismiss. Supports "success", "error",
-// "error-reload" (persistent with Reload button), and "info" (default) variants.
-func Notify(variant, message string) string {
-	return fmt.Sprintf(
-		`(function(){`+
-			// Ensure __messages__ container exists
-			`var box=document.getElementById('__messages__');`+
-			`if(!box){box=document.createElement('div');box.id='__messages__';`+
-			`box.style.cssText='position:fixed;top:0;right:0;padding:8px;z-index:9999;pointer-events:none';`+
-			`document.body.appendChild(box);}`+
-			// Create notification element
-			`var n=document.createElement('div');`+
-			`n.style.cssText='display:flex;align-items:center;gap:10px;padding:12px 16px;margin:8px;border-radius:12px;min-height:44px;width:calc(100vw - 32px);max-width:380px;box-shadow:0 6px 18px rgba(0,0,0,0.08);border:1px solid;font-weight:600;font-family:inherit;font-size:14px;opacity:0;transform:translateX(20px);transition:opacity 200ms,transform 200ms;pointer-events:auto';`+
-			// Variant-specific colors (dark-mode aware)
-			`var v='%s',accent='#4f46e5',timeout=5000,dk=document.documentElement.classList.contains('dark');`+
-			`if(v==='success'){accent='#16a34a';if(dk){n.style.background='#052e16';n.style.color='#86efac';n.style.borderColor='#14532d'}else{n.style.background='#dcfce7';n.style.color='#166534';n.style.borderColor='#bbf7d0'}}`+
-			`else if(v==='error'||v==='error-reload'){accent='#dc2626';if(dk){n.style.background='#450a0a';n.style.color='#fca5a5';n.style.borderColor='#7f1d1d'}else{n.style.background='#fee2e2';n.style.color='#991b1b';n.style.borderColor='#fecaca'};if(v==='error-reload')timeout=88000}`+
-			`else{if(dk){n.style.background='#1e1b4b';n.style.color='#a5b4fc';n.style.borderColor='#312e81'}else{n.style.background='#eef2ff';n.style.color='#3730a3';n.style.borderColor='#e0e7ff'}}`+
-			`n.style.borderLeft='4px solid '+accent;`+
-			// Dot indicator
-			`var dot=document.createElement('span');dot.style.cssText='width:10px;height:10px;border-radius:9999px;flex-shrink:0;background:'+accent;`+
-			// Message text
-			`var t=document.createElement('span');t.style.flex='1';t.textContent='%s';`+
-			`n.appendChild(dot);n.appendChild(t);var close=document.createElement('button');close.textContent='×';close.setAttribute('aria-label','Dismiss notification');close.style.cssText='border:0;background:transparent;color:inherit;font-size:20px;line-height:1;cursor:pointer;border-radius:6px';close.className='focus:outline-none focus-visible:ring-2 focus-visible:ring-current';close.onclick=function(){if(n.parentNode)n.parentNode.removeChild(n)};n.appendChild(close);`+
-			// Reload button for error-reload
-			`if(v==='error-reload'){var btn=document.createElement('button');btn.textContent='Reload';`+
-			`btn.style.cssText='background:#991b1b;color:#fff;border:none;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px';`+
-			`btn.onclick=function(){try{location.reload()}catch(_){}};n.appendChild(btn)}`+
-			// Mount and animate in
-			`box.appendChild(n);`+
-			`requestAnimationFrame(function(){n.style.opacity='1';n.style.transform='translateX(0)'});`+
-			// Auto-dismiss with fade out
-			`setTimeout(function(){try{n.style.opacity='0';n.style.transform='translateX(20px)';`+
-			`setTimeout(function(){try{if(n&&n.parentNode)n.parentNode.removeChild(n)}catch(_){}},200)}catch(_){}},timeout)`+
-			`})();`,
-		escJS(variant), escJS(message),
-	)
-}
-
-// Redirect returns JS that navigates to a new URL (full page reload).
-// The body is hidden for 200ms before navigating for a smooth transition.
-func Redirect(url string) string {
-	return fmt.Sprintf("document.body.style.visibility='hidden';setTimeout(function(){window.location.href='%s'},200);", escJS(url))
-}
-
-// Back returns JS that navigates back in browser history (history.back()).
-func Back() *Action {
-	// return "history.back();"
-	return JS("history.back()")
-}
-
-// SetTitle returns JS that updates the document title.
-func SetTitle(title string) string {
-	return fmt.Sprintf("document.title='%s';", escJS(title))
-}
-
-// RemoveEl returns JS that removes an element by ID.
-func RemoveEl(id string) string {
-	return fmt.Sprintf("(function(){var e=document.getElementById('%s');if(!e){console.warn('[g-sui] remove: element #%s not found');__ws.notfound('%s');return;}if(window.__gsuiDispose)__gsuiDispose(e);e.remove()})();", escJS(id), escJS(id), escJS(id))
-}
-
-// SetText returns JS that sets the textContent of an element by ID.
-func SetText(id, text string) string {
-	return fmt.Sprintf("(function(){var e=document.getElementById('%s');if(!e){console.warn('[g-sui] setText: element #%s not found');__ws.notfound('%s');return;}e.textContent='%s'})();", escJS(id), escJS(id), escJS(id), escJS(text))
-}
-
-// SetAttr returns JS that sets an attribute on an element by ID.
-func SetAttr(id, attr, value string) string {
-	return fmt.Sprintf("(function(){var e=document.getElementById('%s');if(!e){console.warn('[g-sui] setAttr: element #%s not found');__ws.notfound('%s');return;}e.setAttribute('%s','%s')})();", escJS(id), escJS(id), escJS(id), escJS(attr), escJS(value))
-}
-
-// AddClass returns JS that adds a CSS class to an element.
-func AddClass(id, cls string) string {
-	return fmt.Sprintf("(function(){var e=document.getElementById('%s');if(!e){console.warn('[g-sui] addClass: element #%s not found');__ws.notfound('%s');return;}e.classList.add('%s')})();", escJS(id), escJS(id), escJS(id), escJS(cls))
-}
-
-// RemoveClass returns JS that removes a CSS class from an element.
-func RemoveClass(id, cls string) string {
-	return fmt.Sprintf("(function(){var e=document.getElementById('%s');if(!e){console.warn('[g-sui] removeClass: element #%s not found');__ws.notfound('%s');return;}e.classList.remove('%s')})();", escJS(id), escJS(id), escJS(id), escJS(cls))
-}
-
-// Show returns JS that removes the 'hidden' class (shows the element).
-func Show(id string) string {
-	return fmt.Sprintf("(function(){var e=document.getElementById('%s');if(!e){console.warn('[g-sui] show: element #%s not found');__ws.notfound('%s');return;}e.classList.remove('hidden')})();", escJS(id), escJS(id), escJS(id))
-}
-
-// Hide returns JS that adds the 'hidden' class (hides the element).
-func Hide(id string) string {
-	return fmt.Sprintf("(function(){var e=document.getElementById('%s');if(!e){console.warn('[g-sui] hide: element #%s not found');__ws.notfound('%s');return;}e.classList.add('hidden')})();", escJS(id), escJS(id), escJS(id))
-}
-
-// Download returns JS that triggers a file download.
-func Download(filename, mimeType, base64Data string) string {
-	base64Data = strings.Map(func(r rune) rune {
-		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '+' || r == '/' || r == '=' {
-			return r
-		}
-		return -1
-	}, base64Data)
-	return fmt.Sprintf(
-		"(function(){var a=document.createElement('a');a.href='data:%s;base64,%s';a.download='%s';document.body.appendChild(a);a.click();a.remove()})();",
-		escJS(mimeType), escJS(base64Data), escJS(filename),
-	)
-}
-
-// DragToScroll returns JS that enables mouse-drag horizontal scrolling
-// on the element with the given ID. Interactive children (input, select,
-// button, a, .dt-filter-dropdown) are excluded from triggering the drag.
-func DragToScroll(id string) string {
-	return fmt.Sprintf(
-		"(function(){"+
-			"var el=document.getElementById('%s');if(!el){console.warn('[g-sui] dragToScroll: element #%s not found');__ws.notfound('%s');return;}"+
-			"var down=false,sx=0,sl=0;"+
-			"el.addEventListener('mousedown',function(e){"+
-			"if(e.target.closest('input,select,button,a,.dt-filter-dropdown'))return;"+
-			"down=true;sx=e.pageX-el.offsetLeft;sl=el.scrollLeft;"+
-			"el.style.cursor='grabbing';el.style.userSelect='none';});"+
-			"document.addEventListener('mouseup',function(){"+
-			"if(!down)return;down=false;el.style.cursor='grab';el.style.removeProperty('user-select');});"+
-			"document.addEventListener('mousemove',function(e){"+
-			"if(!down)return;e.preventDefault();"+
-			"el.scrollLeft=sl-(e.pageX-el.offsetLeft-sx);});"+
-			"})();",
-		escJS(id), escJS(id), escJS(id),
-	)
 }
 
 // ---------------------------------------------------------------------------

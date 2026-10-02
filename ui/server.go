@@ -61,6 +61,7 @@ type App struct {
 	layout      LayoutHandler
 	setupOnce   sync.Once
 	middleware  []func(http.Handler) http.Handler
+	widgets     map[string]string
 	pageHandler http.Handler
 	// Authorize runs for initial pages, live navigation and every user action.
 	// An empty action name denotes a page render. Check object permissions in
@@ -287,7 +288,7 @@ func (app *App) setupRoutes() {
 			Name string `json:"name"`
 			Key  string `json:"key"`
 		}
-		if ctx.Body(&req) == nil {
+		if ctx.body(&req) == nil {
 			app.cancelSubscription(ctx.wsConn, req.Name, req.Key)
 		}
 		return ""
@@ -300,7 +301,7 @@ func (app *App) setupRoutes() {
 		var req struct {
 			Subscription string `json:"subscription"`
 		}
-		if ctx.Body(&req) == nil && req.Subscription != "" {
+		if ctx.body(&req) == nil && req.Subscription != "" {
 			app.cancelSubscription(ctx.wsConn, "", req.Subscription)
 		}
 		return ""
@@ -466,7 +467,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 	}
 
 	// Compile to JS
-	jsBody := root.ToJS()
+	jsBody := root.toJS()
 
 	// Respond with minimal HTML shell
 	faviconTag := ""
@@ -515,6 +516,8 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <script>%s
 %s
+%s
+%s
 %s</script>
 
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" data-gsui-style-engine async onload="this.dataset.gsuiLoaded='true'" onerror="this.dataset.gsuiLoaded='error'"></script>
@@ -535,7 +538,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 %s
 </script>
 </body>
-</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
+</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS(), localJS, app.widgetJS(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -612,7 +615,7 @@ func (app *App) wsConfigJS() string {
 
 // wsStubJS installs a queuing stub for __ws synchronously in <head>. The real
 // client (/__ws.js) loads with defer and therefore runs AFTER the inline body
-// script, so page-load JS (Node.JS blocks, ctx.HeadJS) that calls __ws would
+// script, so page-load JS (Node.UnsafeJS blocks, ctx.UnsafeHeadJS) that calls __ws would
 // otherwise hit "__ws is not defined". The stub queues those calls; the real
 // client replays and replaces it when it initializes.
 // Sending methods queue and are replayed; state methods answer immediately so
@@ -703,7 +706,7 @@ var __offline=(function(){
     var o=document.createElement('div');o.id='__offline__';
     // Badge only: never covers the page and never blocks input, so work in
     // progress (uploads, typing, drag & drop) keeps running while offline.
-    o.style.cssText='position:fixed;top:12px;left:12px;z-index:60;pointer-events:none;opacity:0;transition:opacity 160ms ease-out';
+    o.style.cssText='position:fixed;top:12px;left:12px;z-index:2147483647;pointer-events:none;opacity:0;transition:opacity 160ms ease-out';
     var b=document.createElement('div');
     b.className='flex items-center gap-2 rounded-full px-3 py-1 text-white shadow-lg ring-1 ring-white/30';
     b.style.background='linear-gradient(135deg,#ef4444,#ec4899)';
@@ -1157,7 +1160,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		app.mu.RUnlock()
 
 		if !ok {
-			errJS := Notify("error", fmt.Sprintf("Unknown action: %s", msg.Act))
+			errJS := Notify("error", fmt.Sprintf("Unknown action: %s", msg.Act)).script()
 			errJS = runtimeReply(msg.ID, msg.Version, errJS)
 			if err := app.send(ws, errJS); err != nil {
 				log.Printf("gsui: ws send error: %v", err)
@@ -1184,16 +1187,16 @@ func (app *App) handleWS(ws *websocket.Conn) {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("gsui: panic in action %q: %v\n%s", msg.Act, r, debug.Stack())
-					resp = Notify("error", "Server error")
+					resp = Notify("error", "Server error").script()
 				}
 			}()
 			if err := app.prepareAction(ctx, msg); err != nil {
-				return Notify("error", "Request denied or page expired")
+				return Notify("error", "Request denied or page expired").script()
 			}
 			return handler(ctx)
 		}()
 
-		// Prepend any per-page CSS/JS injection from ctx.HeadCSS()/ctx.HeadJS()
+		// Prepend any per-page CSS/JS injection from ctx.HeadCSS()/ctx.UnsafeHeadJS()
 		var prefix string
 		if cssJS := ctx.cssInjectJS(); cssJS != "" {
 			prefix += cssJS
@@ -1240,13 +1243,7 @@ type Context struct {
 	user         any
 	after        []func()
 	headCSS      []string // per-page <style>/<link> tags collected via ctx.HeadCSS()
-	headJS       []string // per-page <script> blocks collected via ctx.HeadJS()
-}
-
-// WsData returns the raw WebSocket data map. Useful for passing to
-// form validation (FormBuilder.Validate) before deserializing into a struct.
-func (ctx *Context) WsData() map[string]any {
-	return ctx.wsData
+	headJS       []string // per-page <script> blocks collected via ctx.UnsafeHeadJS()
 }
 
 // HeadCSS registers external stylesheets and/or inline CSS rules for the
@@ -1275,23 +1272,13 @@ func (ctx *Context) HeadCSS(urls []string, css string) {
 	}
 }
 
-// HeadJS registers a JavaScript block that runs once when the page loads.
-// On a full page load the script is emitted as a <script> tag in <head>.
-// On SPA navigations the code is prepended to the WS response so it
-// executes before the DOM swap.
+// UnsafeHeadJS registers a JavaScript block that runs once when the page
+// loads. On a full page load it is a <script> in <head>. On live navigation it
+// runs before the DOM swap. Prefer Actions, Node behaviors and App.Widget;
+// use this only for page setup they do not cover.
 //
 // This is a trusted raw API: never pass untrusted/user-controlled input to it.
-//
-// Use this for page-level setup (global functions, event listeners, etc.)
-// instead of the Div("").JS(`...`) pattern.
-//
-//	ctx.HeadJS(`
-//	    window.toggleMobileNav = function() {
-//	        var nav = document.getElementById('mobile-nav');
-//	        if (nav) nav.classList.toggle('hidden');
-//	    };
-//	`)
-func (ctx *Context) HeadJS(code string) {
+func (ctx *Context) UnsafeHeadJS(code string) {
 	if code != "" {
 		ctx.headJS = append(ctx.headJS, code)
 	}
@@ -1360,7 +1347,7 @@ func (ctx *Context) jsInjectJS() string {
 	return strings.Join(ctx.headJS, "\n")
 }
 
-func (ctx *Context) Body(target any) error {
+func (ctx *Context) body(target any) error {
 	if ctx.wsData == nil {
 		return nil
 	}

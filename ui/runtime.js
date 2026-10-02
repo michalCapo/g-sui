@@ -60,6 +60,7 @@
       if (old.getAttribute(attr.name) !== attr.value) old.setAttribute(attr.name, attr.value);
     });
     bind(old, fresh);
+    if (old.hasAttribute('data-gsui-active') && window.__gsui) __gsui.active(old);
     if(busy){old.setAttribute('aria-busy','true');if(old.tagName==='BUTTON')old.disabled=true;old.classList.add('gsui-busy','opacity-60','cursor-wait')}
     children(old, fresh);
     if (input) {

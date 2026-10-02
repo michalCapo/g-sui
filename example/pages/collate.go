@@ -78,7 +78,7 @@ func CollatePage(ctx *r.Context) *r.Node {
 
 func newCollate() *r.Collate[Employee] {
 	return r.NewCollate[Employee](employeesCollateID).
-		Action("collate.data").
+		Action(collateData).
 		Limit(8).
 		Sort(
 			r.CollateSortField{Field: "name", Label: "Name"},
@@ -465,7 +465,9 @@ func exportEmployeesCSV(employees []*Employee) (r.Result, error) {
 	return r.Result{}.Download("employees.csv", "text/csv", b64), nil
 }
 
+var collateData r.ActionRef[CollateDataRequest]
+
 func RegisterCollate(app *r.App) {
+	collateData = r.RegisterAction(app, "collate.data", handleCollateData)
 	app.Page("/collate", CollatePage)
-	r.RegisterAction(app, "collate.data", handleCollateData)
 }

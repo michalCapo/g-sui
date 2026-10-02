@@ -395,11 +395,11 @@ func (dt *DataTable[T]) FieldText(fn func(*T) string, cls ...string) *DataTable[
 // Feature configuration methods
 // ---------------------------------------------------------------------------
 
-// Action sets the single WS action name for all table operations (search, sort, page, export).
+// Action sets the server action for all table operations (search, sort, page, export).
 // The action will receive: {operation, search, page, sort, dir}
 // where operation is one of: "search", "sort", "page", "export"
-func (dt *DataTable[T]) Action(actionName string) *DataTable[T] {
-	dt.action = actionName
+func (dt *DataTable[T]) Action(action AnyActionRef) *DataTable[T] {
+	dt.action = action.actionName()
 	return dt
 }
 
@@ -611,8 +611,8 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 	).ID(searchID).
 		Attr("placeholder", dt.loc().Search).
 		Attr("value", dt.searchValue).
-		On("keydown", JS(dt.searchEnterJS(searchID))).
-		On("search", JS(dt.searchImmediateJS(searchID)))
+		On("keydown", UnsafeJS(dt.searchEnterJS(searchID))).
+		On("search", UnsafeJS(dt.searchImmediateJS(searchID)))
 
 	searchWrap := Div("relative inline-flex items-center").Render(searchIcon, searchInput)
 	filterBarItems = append(filterBarItems, searchWrap)
@@ -646,7 +646,7 @@ func (dt *DataTable[T]) renderToolbar() *Node {
 		resetBtn := Button(
 			"text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 " +
 				"cursor-pointer transition-colors",
-		).Text(dt.loc().Reset).OnClick(JS(dt.resetFiltersJS()))
+		).Text(dt.loc().Reset).OnClick(UnsafeJS(dt.resetFiltersJS()))
 		filterBarItems = append(filterBarItems, resetBtn)
 	}
 
@@ -666,7 +666,7 @@ func (dt *DataTable[T]) renderFilterBadge(badge FilterBadge) *Node {
 				"focus:outline-none text-base leading-none",
 		).Attr("type", "button").
 			Attr("aria-label", "Remove filter").
-			OnClick(JS(badge.OnRemove)).
+			OnClick(UnsafeJS(badge.OnRemove)).
 			Text("×"),
 	)
 }
@@ -840,7 +840,7 @@ func (dt *DataTable[T]) renderTable(data []*T) *Node {
 				headerParts = append(headerParts, indicator)
 
 				// Sort click on the whole th
-				th.OnClick(JS(dt.sortClickJS(i)))
+				th.OnClick(UnsafeJS(dt.sortClickJS(i)))
 				th.Class(" cursor-pointer select-none")
 				ariaSort := "none"
 				if dt.sortCol == i {
@@ -968,7 +968,7 @@ func (dt *DataTable[T]) buildRows(data []*T) []*Node {
 
 			// Row is clickable to toggle detail
 			tr.Class(" cursor-pointer")
-			tr.OnClick(JS(toggleJS))
+			tr.OnClick(UnsafeJS(toggleJS))
 
 			// Add chevron indicator cell
 			chevron := Span("text-base leading-none text-gray-400 dark:text-gray-500 transition-transform duration-200").
@@ -1006,7 +1006,7 @@ func (dt *DataTable[T]) buildRows(data []*T) []*Node {
 }
 
 // RenderRows builds only the <tr> rows (no wrapper, no thead, no toolbar).
-// Use with ToJSAppend to the tbody ID (dt.id + "-tbody") for "load more".
+// Use with Result.Append on the tbody ID (dt.id + "-tbody") for "load more".
 func (dt *DataTable[T]) RenderRows(data []*T) []*Node {
 	return dt.buildRows(data)
 }
@@ -1040,7 +1040,7 @@ func (dt *DataTable[T]) renderFilterIcon(colIdx int) *Node {
 	btn := Button("inline-flex items-center focus:outline-none ml-0.5").
 		Attr("type", "button").
 		Attr("aria-label", "Filter column").Attr("aria-haspopup", "dialog").
-		OnClick(JS(fmt.Sprintf(
+		OnClick(UnsafeJS(fmt.Sprintf(
 			"event.stopPropagation();var p=document.getElementById('%s'),b=this;"+
 				"if(p.style.display==='none'||!p.style.display){"+
 				"document.querySelectorAll('[id^=\"%s-filter-popup-\"]').forEach(function(el){el.style.display='none'});"+
@@ -1098,17 +1098,17 @@ func (dt *DataTable[T]) renderFilterPopupInline(colIdx int) *Node {
 			"px-3 py-1.5 text-xs font-medium rounded-md cursor-pointer "+
 				"bg-gray-900 dark:bg-gray-700 text-white dark:text-gray-100 "+
 				"hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors",
-		).Text(dt.loc().Apply).OnClick(JS(dt.applyFilterJS(colIdx))),
+		).Text(dt.loc().Apply).OnClick(UnsafeJS(dt.applyFilterJS(colIdx))),
 		Button(
 			"text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text(dt.loc().Cancel).OnClick(JS(fmt.Sprintf(
+		).Text(dt.loc().Cancel).OnClick(UnsafeJS(fmt.Sprintf(
 			"event.stopPropagation();document.getElementById('%s').style.display='none'",
 			escJS(popupID),
 		))),
 	)
 
 	// Stop click propagation on popup itself (prevent sort)
-	popup.OnClick(JS("event.stopPropagation()"))
+	popup.OnClick(UnsafeJS("event.stopPropagation()"))
 
 	return popup.Render(header, content, actions)
 }
@@ -1128,8 +1128,10 @@ func scopeTableFilterIDs(node *Node, tableID string, colIdx int) {
 		node.rawJS = strings.ReplaceAll(node.rawJS, old, newPrefix)
 	}
 	for _, action := range node.events {
-		if action != nil && action.rawJS != "" {
-			action.rawJS = strings.ReplaceAll(action.rawJS, old, newPrefix)
+		if action != nil {
+			for i := range action.steps {
+				action.steps[i].js = strings.ReplaceAll(action.steps[i].js, old, newPrefix)
+			}
 		}
 	}
 	for _, child := range node.children {
@@ -1255,7 +1257,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 			"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 			"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
 
-		pdfBtn := Button(exportBtnCls).Attr("aria-label", "Export PDF").OnClick(JS(dt.exportPdfJS())).Render(
+		pdfBtn := Button(exportBtnCls).Attr("aria-label", "Export PDF").OnClick(UnsafeJS(dt.exportPdfJS())).Render(
 			Span("text-base leading-none").
 				Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 				Text("picture_as_pdf"),
@@ -1263,7 +1265,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 		)
 		footerItems = append(footerItems, pdfBtn)
 
-		exportBtn := Button(exportBtnCls).Attr("aria-label", "Export Excel").OnClick(JS(dt.exportJS())).Render(
+		exportBtn := Button(exportBtnCls).Attr("aria-label", "Export Excel").OnClick(UnsafeJS(dt.exportJS())).Render(
 			Span("text-base leading-none").
 				Style("font-family", "Material Icons Round").Attr("aria-hidden", "true").
 				Text("grid_on"),
@@ -1290,7 +1292,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 				"border border-gray-300 dark:border-gray-600 "+
 				"bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 "+
 				"hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors",
-		).Attr("aria-label", "Reset pagination").Text("×").OnClick(JS(dt.resetPagingJS()))
+		).Attr("aria-label", "Reset pagination").Text("×").OnClick(UnsafeJS(dt.resetPagingJS()))
 		footerItems = append(footerItems, resetBtn)
 	}
 
@@ -1300,7 +1302,7 @@ func (dt *DataTable[T]) renderFooter() *Node {
 				"border border-gray-300 dark:border-gray-600 " +
 				"bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 " +
 				"hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-		).Text(dt.loc().LoadMore).OnClick(JS(dt.loadMoreJS()))
+		).Text(dt.loc().LoadMore).OnClick(UnsafeJS(dt.loadMoreJS()))
 		footerItems = append(footerItems, loadMoreBtn)
 	}
 
@@ -1344,12 +1346,12 @@ func (dt *DataTable[T]) RenderFooter() *Node {
 	return dt.renderFooter()
 }
 
-// TbodyID returns the ID of the tbody element for use with ToJSAppend.
+// TbodyID returns the ID of the tbody element for use with Result.Append.
 func (dt *DataTable[T]) TbodyID() string {
 	return dt.id + "-tbody"
 }
 
-// FooterID returns the ID of the footer element for use with ToJSReplace.
+// FooterID returns the ID of the footer element for use with Result.Replace.
 func (dt *DataTable[T]) FooterID() string {
 	return dt.id + "-footer"
 }
@@ -1398,10 +1400,10 @@ func FilterPopup(colIdx int, colLabel string, filterType FilterType, options []s
 			"px-3 py-1.5 text-xs font-medium rounded-md cursor-pointer "+
 				"bg-gray-900 dark:bg-gray-700 text-white dark:text-gray-100 "+
 				"hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors",
-		).Text(loc.Apply).OnClick(JS(fmt.Sprintf("applyFilter(%d)", colIdx))),
+		).Text(loc.Apply).OnClick(UnsafeJS(fmt.Sprintf("applyFilter(%d)", colIdx))),
 		Button(
 			"text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text(loc.Cancel).OnClick(JS(fmt.Sprintf(
+		).Text(loc.Cancel).OnClick(UnsafeJS(fmt.Sprintf(
 			"document.getElementById('filter-popup-%d').style.display='none'", colIdx,
 		))),
 	)
@@ -1495,7 +1497,7 @@ func renderQuickDateBtn(colIdx int, label, rangeType string) *Node {
 		"px-2 py-1 text-[10px] rounded-full border border-gray-200 dark:border-gray-600 " +
 			"bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 " +
 			"hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer",
-	).Text(label).OnClick(JS(fmt.Sprintf(
+	).Text(label).OnClick(UnsafeJS(fmt.Sprintf(
 		"(function(){"+
 			"var d=new Date(),y=d.getFullYear(),m=d.getMonth(),day=d.getDate(),f,t;"+
 			"function fmt(dt){return dt.toISOString().slice(0,10)}"+
@@ -1556,7 +1558,7 @@ func renderQuickMonthBtn(colIdx int, label, rangeType string) *Node {
 		"px-2 py-1 text-[10px] rounded-full border border-gray-200 dark:border-gray-600 " +
 			"bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 " +
 			"hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer",
-	).Text(label).OnClick(JS(fmt.Sprintf(
+	).Text(label).OnClick(UnsafeJS(fmt.Sprintf(
 		"(function(){"+
 			"var d=new Date(),y=d.getFullYear(),m=d.getMonth(),f,t;"+
 			"function fmt(yr,mo){return yr+'-'+String(mo).padStart(2,'0')}"+
@@ -1636,7 +1638,7 @@ func renderNumberFilter(loc *TableLocale, colIdx int, currentValue *FilterValue)
 		Render(INumber(inputCls).ID(toID).Attr("placeholder", loc.To).Attr("value", to))
 
 	// Toggle "to" field visibility and "from" placeholder based on operator
-	opSelect.On("change", JS(fmt.Sprintf(
+	opSelect.On("change", UnsafeJS(fmt.Sprintf(
 		"var isRange=this.value==='range';"+
 			"document.getElementById('%s').style.display=isRange?'flex':'none';"+
 			fmt.Sprintf("document.getElementById('%%s').placeholder=isRange?'%s':'%s';", escJS(loc.From), escJS(loc.Value)),
@@ -1660,12 +1662,12 @@ func renderSelectFilter(loc *TableLocale, colIdx int, options []string, currentV
 	header := Div("flex items-center justify-between mb-2").Render(
 		Button(
 			"text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text(loc.SelectAll).OnClick(JS(fmt.Sprintf(
+		).Text(loc.SelectAll).OnClick(UnsafeJS(fmt.Sprintf(
 			"document.querySelectorAll('[id^=\"filter-%d-opt-\"]').forEach(function(c){c.checked=true})", colIdx,
 		))),
 		Button(
 			"text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer",
-		).Text(loc.ClearSelect).OnClick(JS(fmt.Sprintf(
+		).Text(loc.ClearSelect).OnClick(UnsafeJS(fmt.Sprintf(
 			"document.querySelectorAll('[id^=\"filter-%d-opt-\"]').forEach(function(c){c.checked=false})", colIdx,
 		))),
 	)

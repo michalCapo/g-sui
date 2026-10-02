@@ -122,12 +122,12 @@ const assert = require('node:assert/strict');
     await page.waitForFunction(old=>document.getElementById('live-clock').textContent!==old,reconnectedClock);
     assert.equal(await page.evaluate(() => window.navigationSentinel),'preserved');
     const menu=page.getByRole('navigation',{name:'Main navigation'});
-    const paths=await menu.locator('a[data-nav-path]').evaluateAll(links=>links.map(a=>a.getAttribute('href')));
+    const paths=await menu.locator('a[data-gsui-active]').evaluateAll(links=>links.map(a=>a.getAttribute('href')));
     for(const path of paths) {
-      await menu.locator(`a[data-nav-path="${path}"]`).click();
+      await menu.locator(`a[href="${path}"]`).click();
       await page.waitForURL(base+path);
       assert.equal(await page.evaluate(()=>window.navigationSentinel),'preserved');
-      assert.equal(await menu.locator(`[data-nav-path="${path}"]`).getAttribute('aria-current'),'page');
+      assert.equal(await menu.locator(`a[href="${path}"]`).getAttribute('aria-current'),'page');
     }
     await menu.getByRole('link',{name:'Routes',exact:true}).click();
     await page.getByRole('link',{name:'View User 123',exact:true}).click();

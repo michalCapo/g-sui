@@ -58,10 +58,7 @@ func SelectPage(ctx *r.Context) *r.Node {
 			r.Div("w-64").Render(
 				labeled("Choose",
 					r.Select(selectCls).Attr("name", "ChooseField").ID(selectChooseID).
-						On("change", &r.Action{
-							Name:    "select.change",
-							Collect: []string{selectChooseID},
-						}).
+						OnChange(selectChange.Call(selectChangeInput{}).Collect(selectChooseID)).
 						Render(
 							r.Option().Attr("value", "").Text("Pick one"),
 							r.Option().Attr("value", "One").Text("One"),
@@ -115,7 +112,11 @@ func SelectPage(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleSelectChange(ctx *r.Context, data struct{ ChooseField string }) (r.Result, error) {
+type selectChangeInput struct{ ChooseField string }
+
+var selectChange r.ActionRef[selectChangeInput]
+
+func HandleSelectChange(ctx *r.Context, data selectChangeInput) (r.Result, error) {
 	val := data.ChooseField
 	if val == "" {
 		val = "(none)"
@@ -126,5 +127,5 @@ func HandleSelectChange(ctx *r.Context, data struct{ ChooseField string }) (r.Re
 
 func RegisterSelect(app *r.App) {
 	app.Page("/select", SelectPage)
-	r.RegisterAction(app, "select.change", HandleSelectChange)
+	selectChange = r.RegisterAction(app, "select.change", HandleSelectChange)
 }

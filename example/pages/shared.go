@@ -23,6 +23,8 @@ func (input *sharedInput) Validate() error {
 	return nil
 }
 
+var sharedSubmit, sharedReset r.ActionRef[sharedInput]
+
 func sharedForm(formID, title, description string) *r.Node {
 	inputCls := "w-full border border-gray-300 rounded px-3 py-2 text-sm"
 
@@ -38,14 +40,10 @@ func sharedForm(formID, title, description string) *r.Node {
 		r.Div("flex flex-row gap-4 justify-end").Render(
 			r.Button("rounded-lg hover:text-red-700 hover:underline text-gray-400 px-3 py-1 cursor-pointer text-sm").
 				Text("Reset").
-				OnClick(&r.Action{Name: "shared.reset", Data: map[string]any{"formID": formID}}),
+				OnClick(sharedReset.Call(sharedInput{FormID: formID})),
 			r.Button("rounded-lg px-4 py-2 bg-blue-600 text-white cursor-pointer hover:bg-blue-700 text-sm").
 				Text("Submit").
-				OnClick(&r.Action{
-					Name:    "shared.submit",
-					Data:    map[string]any{"formID": formID},
-					Collect: []string{formID + "-title", formID + "-desc"},
-				}),
+				OnClick(sharedSubmit.Call(sharedInput{FormID: formID}).Collect(formID+"-title", formID+"-desc")),
 		),
 	)
 }
@@ -90,7 +88,7 @@ func HandleSharedReset(ctx *r.Context, data sharedInput) (r.Result, error) {
 }
 
 func RegisterShared(app *r.App) {
+	sharedSubmit = r.RegisterAction(app, "shared.submit", HandleSharedSubmit)
+	sharedReset = r.RegisterAction(app, "shared.reset", HandleSharedReset)
 	app.Page("/shared", Shared)
-	r.RegisterAction(app, "shared.submit", HandleSharedSubmit)
-	r.RegisterAction(app, "shared.reset", HandleSharedReset)
 }

@@ -51,7 +51,7 @@ func Text(ctx *r.Context) *r.Node {
 		row("Autocomplete", labeledInput("Name (autocomplete)", r.IText(inputCls).Attr("autocomplete", "name"))),
 		row("Pattern (email-like)", labeledInput("Email", r.IEmail(inputCls).Attr("pattern", "[^@]+@[^@]+\\.[^@]+").Attr("placeholder", "user@example.com"))),
 		row("Type switch (password)", labeledInput("Password-like", r.IPassword(inputCls))),
-		row("Change handler", labeledInput("On change, log value", r.IText(inputCls).OnClick(r.JS("console.log('clicked input')")))),
+		row("Change handler", labeledInput("On change, show toast", r.IText(inputCls).OnChange(r.Toast("Value changed")))),
 	)
 
 	return r.Div("max-w-5xl mx-auto flex flex-col gap-6").Render(

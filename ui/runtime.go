@@ -145,28 +145,28 @@ type navigationRequest struct {
 
 func (app *App) navigate(ctx *Context) string {
 	var req navigationRequest
-	if err := ctx.Body(&req); err != nil {
-		return Notify("error", "Invalid navigation")
+	if err := ctx.body(&req); err != nil {
+		return Notify("error", "Invalid navigation").script()
 	}
 	r, err := pageRequest(ctx.Request, req.URL)
 	if err != nil {
-		return Notify("error", "Invalid navigation")
+		return Notify("error", "Invalid navigation").script()
 	}
 	handler, matched, ok := app.matchPage(r)
 	// HTTP owns redirects, 404s, and middleware responses, including Set-Cookie.
 	if !ok {
-		return Redirect(req.URL)
+		return Redirect(req.URL).script()
 	}
 	ctx.setRequest(matched)
 	if err := app.authorize(ctx, ""); err != nil {
-		return Redirect(req.URL)
+		return Redirect(req.URL).script()
 	}
 	app.mu.RLock()
 	st := app.connStates[ctx.wsConn]
 	previous := st.request
 	app.mu.RUnlock()
 	if req.Patch && (previous == nil || previous.Pattern != matched.Pattern) {
-		return Redirect(req.URL)
+		return Redirect(req.URL).script()
 	}
 	if !req.Patch {
 		app.cancelConn(ctx.wsConn)
@@ -181,20 +181,20 @@ func (app *App) navigate(ctx *Context) string {
 	app.mu.Unlock()
 	node := handler(ctx)
 	if node == nil {
-		return Notify("error", "Page could not be rendered")
+		return Notify("error", "Page could not be rendered").script()
 	}
 	var js string
 	if req.Patch {
 		if app.layout != nil {
-			js = node.ToJSMorphInner("__content__")
+			js = node.toJSMorphInner("__content__")
 		} else {
 			js = node.toJSMorphBody()
 		}
 	} else {
 		if app.layout != nil {
-			js = node.ToJSInner("__content__")
+			js = node.toJSInner("__content__")
 		} else {
-			js = "if(window.__gsuiDispose)__gsuiDispose(document.body);document.body.replaceChildren();" + node.ToJS()
+			js = "if(window.__gsuiDispose)__gsuiDispose(document.body);document.body.replaceChildren();" + node.toJS()
 		}
 	}
 	data, _ := json.Marshal(req)
@@ -256,7 +256,7 @@ func (app *App) Close() error {
 func (app *App) Subscription(name string, run func(*Context) error) {
 	app.action(name, func(ctx *Context) string {
 		if ctx.subscription == "" {
-			return Notify("error", "Subscription required")
+			return Notify("error", "Subscription required").script()
 		}
 		ctx.after = append(ctx.after, func() {
 			go func() {
@@ -295,15 +295,6 @@ func NavLink(path string, class ...string) *Node {
 	return A(class...).Attr("href", path).Attr("data-gsui-nav", "")
 }
 
-// Navigate mounts a destination page and updates browser history after render.
-func Navigate(path string) string { return fmt.Sprintf("__ws.navigate('%s');", escJS(path)) }
-
-// PatchURL updates parameters within the same route, preserving the live view.
-// replace=true replaces the current history entry (useful for search input).
-func PatchURL(path string, replace bool) string {
-	return fmt.Sprintf("__ws.navigate('%s',{patch:true,replace:%t});", escJS(path), replace)
-}
-
 // Key gives a node stable identity during a morph. Keys must be unique among
 // siblings. IDs also act as keys. Preserve opts an external widget out of morphs.
 func (n *Node) Key(key string) *Node { return n.Attr("data-gsui-key", key) }
@@ -312,39 +303,17 @@ func Region(name string, content *Node) *Node {
 	return Div().ID(name).Attr("data-gsui-region", "").Render(content)
 }
 
-// OnInput sends a debounced server action (default 200ms). Collect field IDs
-// through Action.Collect as usual. Removing the input cancels its timer.
+// OnInput runs action on input. Server calls are debounced (default 200ms);
+// removing the input cancels the timer. Local actions run at once.
 func (n *Node) OnInput(action *Action, delay ...time.Duration) *Node {
-	if action == nil {
-		return n
-	}
-	if action.rawJS != "" {
+	if action == nil || !action.server() {
 		return n.On("input", action)
 	}
 	wait := 200 * time.Millisecond
 	if len(delay) > 0 {
 		wait = delay[0]
 	}
-	data, err := json.Marshal(action.Data)
-	if err != nil {
-		panic(err)
-	}
-	collect, err := json.Marshal(action.Collect)
-	if err != nil {
-		panic(err)
-	}
-	return n.On("input", JS(fmt.Sprintf("var el=event.currentTarget;clearTimeout(el.__gsuiInputTimer);if(!el.__gsuiInputCleanup){el.__gsuiInputCleanup=true;(el.__gsuiCleanup||(el.__gsuiCleanup=[])).push(function(){clearTimeout(el.__gsuiInputTimer)})}el.__gsuiInputTimer=setTimeout(function(){__ws.call('%s',%s,%s,null)},%d);", escJS(action.Name), data, collect, max(wait.Milliseconds(), 0))))
-}
-
-// Toggle and dialog helpers run locally; business actions still run in Go.
-func Toggle(id string) *Action {
-	return JS(fmt.Sprintf("var el=document.getElementById('%s');if(el){el.hidden=!el.hidden;event.currentTarget.setAttribute('aria-expanded',String(!el.hidden))}", escJS(id)))
-}
-func OpenDialog(id string) *Action {
-	return JS(fmt.Sprintf("var el=document.getElementById('%s');if(el&&!el.open)el.showModal();", escJS(id)))
-}
-func CloseDialog(id string) *Action {
-	return JS(fmt.Sprintf("var el=document.getElementById('%s');if(el)el.close();", escJS(id)))
+	return n.On("input", wrap(action, "__gsui.debounce(el,"+fmt.Sprint(max(wait.Milliseconds(), 0))+",function(){", "});"))
 }
 
 // Result describes server effects without requiring handlers to build JS.
@@ -360,22 +329,26 @@ func (r Result) effect(fn func(*Context) (string, error)) Result {
 func (r Result) Toast(message string) Result {
 	return r.Notify("success", message)
 }
-func (r Result) Navigate(path string) Result {
-	return r.effect(func(*Context) (string, error) { return Navigate(path), nil })
-}
+func (r Result) Navigate(path string) Result { return r.Run(Navigate(path)) }
 func (r Result) PatchURL(path string, replace bool) Result {
-	return r.effect(func(*Context) (string, error) { return PatchURL(path, replace), nil })
+	return r.Run(PatchURL(path, replace))
+}
+
+// Run runs local actions in the browser, e.g. Run(ui.CloseDialog("edit")).
+func (r Result) Run(actions ...*Action) Result {
+	js := Seq(actions...).script()
+	return r.effect(func(*Context) (string, error) { return js, nil })
 }
 func (r Result) Morph(id string, node *Node) Result {
 	return r.effect(func(*Context) (string, error) {
 		if node == nil {
 			return "", errors.New("nil node")
 		}
-		return node.ToJSMorph(id), nil
+		return node.toJSMorph(id), nil
 	})
 }
 func (r Result) Remove(id string) Result {
-	return r.effect(func(*Context) (string, error) { return RemoveEl(id), nil })
+	return r.Run(Remove(id))
 }
 
 // Refresh reruns the current page and morphs only the named regions. Page
@@ -401,7 +374,7 @@ func (r Result) Refresh(regions ...string) Result {
 			if n == nil {
 				return "", fmt.Errorf("region %q not found", id)
 			}
-			b.WriteString(n.ToJSMorph(id))
+			b.WriteString(n.toJSMorph(id))
 		}
 		return b.String(), nil
 	})
@@ -437,6 +410,13 @@ func (r Result) build(ctx *Context) (string, error) {
 // ActionRef is a typed action handle. Register once during application setup.
 type ActionRef[T any] struct{ name string }
 
+// AnyActionRef is any ActionRef. Builders such as NewForm and NewDataTable
+// accept it and send their own payload.
+type AnyActionRef interface{ actionName() string }
+
+func (a ActionRef[T]) actionName() string { return a.name }
+
+// Call returns an Action that calls the server handler with input.
 func (a ActionRef[T]) Call(input T) *Action {
 	b, err := json.Marshal(input)
 	if err != nil {
@@ -446,7 +426,7 @@ func (a ActionRef[T]) Call(input T) *Action {
 	if err := json.Unmarshal(b, &data); err != nil {
 		panic("action input must be a JSON object")
 	}
-	return &Action{Name: a.name, Data: data}
+	return call(a.name, data)
 }
 
 // RegisterAction decodes input, calls optional Validate() error on *T, and
@@ -454,8 +434,8 @@ func (a ActionRef[T]) Call(input T) *Action {
 func RegisterAction[T any](app *App, name string, handler func(*Context, T) (Result, error)) ActionRef[T] {
 	app.action(name, func(ctx *Context) string {
 		var input T
-		if err := ctx.Body(&input); err != nil {
-			return Notify("error", "Invalid input")
+		if err := ctx.body(&input); err != nil {
+			return Notify("error", "Invalid input").script()
 		}
 		if valid, ok := any(&input).(interface{ Validate() error }); ok {
 			if err := valid.Validate(); err != nil {
@@ -487,7 +467,7 @@ func actionError(ctx *Context, err error) string {
 		return fmt.Sprintf("__gsuiFormErrors('%s',%s);", escJS(form), b)
 	}
 	log.Printf("gsui: action failed: %v", err)
-	return Notify("error", "Unable to complete the request")
+	return Notify("error", "Unable to complete the request").script()
 }
 
 // TypedForm uses native form submission and input constraints. Supply ordinary
@@ -500,23 +480,22 @@ func FormFor[T any](id string, class ...string) *TypedForm[T] {
 }
 func (f *TypedForm[T]) Render(children ...*Node) *TypedForm[T] { f.node.Render(children...); return f }
 func (f *TypedForm[T]) Submit(action ActionRef[T]) *Node {
-	return f.node.Attr("data-gsui-form", "").OnSubmit(JS(fmt.Sprintf("event.preventDefault();__gsuiSubmit(event,'%s');", escJS(action.name))))
+	return f.node.Attr("data-gsui-form", "").OnSubmit(UnsafeJS(fmt.Sprintf("__gsuiSubmit(event,'%s');", escJS(action.name))))
 }
 
 // Title sets the title used after live navigation. For initial HTTP metadata,
 // use App.Title; the marker also updates the initial document after mounting.
 func (n *Node) Title(title string) *Node {
 	n.Attr("data-gsui-title", title)
-	n.rawJS += SetTitle(title)
-	return n
+	return n.mount("title", title)
 }
 
-// ToJSMorph updates an element while preserving keyed descendants and dirty
-// inputs. Node.JS/Subscribe setup runs only for newly inserted nodes.
-func (n *Node) ToJSMorph(id string) string {
+// toJSMorph updates an element while preserving keyed descendants and dirty
+// inputs. Node.UnsafeJS/Subscribe setup runs only for newly inserted nodes.
+func (n *Node) toJSMorph(id string) string {
 	return n.morphJS("document.getElementById('"+escJS(id)+"')", false)
 }
-func (n *Node) ToJSMorphInner(id string) string {
+func (n *Node) toJSMorphInner(id string) string {
 	return n.morphJS("document.getElementById('"+escJS(id)+"')", true)
 }
 func (n *Node) toJSMorphBody() string { return n.morphJS("document.body", true) }
@@ -561,7 +540,7 @@ func (ctx *Context) Event(name string, data ...any) *Action {
 	if len(data) > 0 {
 		payload = data[0]
 	}
-	return &Action{Name: "__live", Data: map[string]any{"event": name, "data": payload}}
+	return call("__live", map[string]any{"event": name, "data": payload})
 }
 
 // Live registers a server-owned view. Mount(*ViewContext) error is optional and
@@ -606,15 +585,15 @@ func (app *App) renderLive(ctx *Context, factory func() View) *Node {
 func (app *App) liveEvent(ctx *Context) string {
 	handler, matched, ok := app.matchPage(ctx.Request)
 	if !ok {
-		return Notify("error", "Page unavailable")
+		return Notify("error", "Page unavailable").script()
 	}
 	ctx.setRequest(matched)
 	var req struct {
 		Event string          `json:"event"`
 		Data  json.RawMessage `json:"data"`
 	}
-	if err := ctx.Body(&req); err != nil {
-		return Notify("error", "Invalid event")
+	if err := ctx.body(&req); err != nil {
+		return Notify("error", "Invalid event").script()
 	}
 	// Ensures Mount precedes the first event, including reconnect registration.
 	root := handler(ctx)
@@ -622,7 +601,7 @@ func (app *App) liveEvent(ctx *Context) string {
 	view := app.connStates[ctx.wsConn].view
 	app.mu.RUnlock()
 	if view == nil {
-		return Notify("error", "No live view mounted")
+		return Notify("error", "No live view mounted").script()
 	}
 	if req.Event != "" {
 		if err := view.Handle(ctx, Event{Name: req.Event, Data: req.Data}); err != nil {
@@ -630,12 +609,12 @@ func (app *App) liveEvent(ctx *Context) string {
 		}
 		root = handler(ctx)
 	}
-	return root.ToJSMorph("__live__")
+	return root.toJSMorph("__live__")
 }
 
 // Notify displays a notification with an explicit variant.
 func (r Result) Notify(variant, message string) Result {
-	return r.effect(func(*Context) (string, error) { return Notify(variant, message), nil })
+	return r.Run(Notify(variant, message))
 }
 
 // Replace replaces a subtree, including its input state. Use Morph to retain drafts.
@@ -644,7 +623,7 @@ func (r Result) Replace(id string, node *Node) Result {
 		if node == nil {
 			return "", errors.New("nil node")
 		}
-		return node.ToJSReplace(id), nil
+		return node.toJSReplace(id), nil
 	})
 }
 
@@ -653,7 +632,7 @@ func (r Result) Append(id string, node *Node) Result {
 		if node == nil {
 			return "", errors.New("nil node")
 		}
-		return node.ToJSAppend(id), nil
+		return node.toJSAppend(id), nil
 	})
 }
 
@@ -662,14 +641,20 @@ func (r Result) Prepend(id string, node *Node) Result {
 		if node == nil {
 			return "", errors.New("nil node")
 		}
-		return node.ToJSPrepend(id), nil
+		return node.toJSPrepend(id), nil
 	})
 }
 
 func (r Result) SetText(id, text string) Result {
-	return r.effect(func(*Context) (string, error) { return SetText(id, text), nil })
+	return r.Run(SetText(id, text))
 }
 
 func (r Result) Download(filename, mimeType, base64Data string) Result {
-	return r.effect(func(*Context) (string, error) { return Download(filename, mimeType, base64Data), nil })
+	base64Data = strings.Map(func(r rune) rune {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '+' || r == '/' || r == '=' {
+			return r
+		}
+		return -1
+	}, base64Data)
+	return r.Run(op("download", filename, mimeType, base64Data))
 }
