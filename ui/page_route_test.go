@@ -63,7 +63,7 @@ func TestPageSupportsCatchAllPathValues(t *testing.T) {
 
 func TestStaticRootPageRemainsExact(t *testing.T) {
 	app := NewApp()
-	app.Page("/", func(ctx *Context) *Node { return Div().Text("home") })
+	app.Page("/", func(_ *Context) *Node { return Div().Text("home") })
 
 	home := httptest.NewRecorder()
 	app.Handler().ServeHTTP(home, httptest.NewRequest("GET", "http://example.test/", nil))
@@ -95,7 +95,7 @@ func TestWebSocketNavigationSupportsPagePathValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect WebSocket: %v", err)
 	}
-	defer ws.Close()
+	defer func() { _ = ws.Close() }()
 
 	message := `{"act":"__nav","data":{"url":"/dp/ws-token"},"id":1,"version":1}`
 	if err := websocket.Message.Send(ws, message); err != nil {

@@ -9,7 +9,7 @@ const (
 	selectDisplayID = "select-display"
 )
 
-func SelectPage(ctx *r.Context) *r.Node {
+func SelectPage(_ *r.Context) *r.Node {
 	row := func(title string, content *r.Node) *r.Node {
 		return r.Div("bg-white p-4 rounded-lg shadow border border-gray-200 flex flex-col gap-3").Render(
 			r.Div("text-sm font-bold text-gray-700").Text(title),
@@ -116,7 +116,7 @@ type selectChangeInput struct{ ChooseField string }
 
 var selectChange r.ActionRef[selectChangeInput]
 
-func HandleSelectChange(ctx *r.Context, data selectChangeInput) (r.Result, error) {
+func HandleSelectChange(_ *r.Context, data selectChangeInput) (r.Result, error) {
 	val := data.ChooseField
 	if val == "" {
 		val = "(none)"

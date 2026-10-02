@@ -64,7 +64,7 @@ func formBuilder(formID string, data FormData) *r.FormBuilder {
 		Submit("", "Submit", "px-4 py-2 rounded border border-gray-300 text-gray-700 cursor-pointer hover:bg-gray-50 text-sm")
 }
 
-func FormPage(ctx *r.Context) *r.Node {
+func FormPage(_ *r.Context) *r.Node {
 	return formPageContent("", FormData{}, "", FormData{})
 }
 
@@ -106,7 +106,7 @@ func formPageContent(result1 string, data1 FormData, result2 string, data2 FormD
 	)
 }
 
-func HandleFormSubmit(ctx *r.Context, data FormData) (r.Result, error) {
+func HandleFormSubmit(_ *r.Context, data FormData) (r.Result, error) {
 	result := fmt.Sprintf(
 		"Action=%s  Title=%s  GenderNext=%s  Gender=%s  Country=%s  Some=%s  Number=%s  Agree=%v",
 		data.Action, data.Title, data.GenderNext, data.Gender, data.Country, data.Some, data.Number, data.Agree,

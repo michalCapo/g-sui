@@ -2,7 +2,7 @@ package pages
 
 import r "github.com/michalCapo/g-sui/ui"
 
-func Checkbox(ctx *r.Context) *r.Node {
+func Checkbox(_ *r.Context) *r.Node {
 	row := func(title string, content *r.Node) *r.Node {
 		return r.Div("bg-white p-4 rounded-lg shadow border border-gray-200 flex flex-col gap-3").Render(
 			r.Div("text-sm font-bold text-gray-700").Text(title),

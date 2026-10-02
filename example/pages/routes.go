@@ -9,7 +9,7 @@ import (
 	r "github.com/michalCapo/g-sui/ui"
 )
 
-func RoutesExample(ctx *r.Context) *r.Node {
+func RoutesExample(_ *r.Context) *r.Node {
 	codeSnippet := func(text string) *r.Node {
 		return r.Code("bg-gray-100 px-1 rounded text-sm").Text(text)
 	}

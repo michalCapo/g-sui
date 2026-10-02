@@ -133,7 +133,7 @@ func TestServerAnnouncesInstanceOnConnect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	var raw string
 	if err := websocket.Message.Receive(conn, &raw); err != nil {

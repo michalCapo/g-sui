@@ -4,7 +4,7 @@ import r "github.com/michalCapo/g-sui/ui"
 
 var redirectDashboard, redirectButton r.ActionRef[struct{}]
 
-func ReloadRedirect(ctx *r.Context) *r.Node {
+func ReloadRedirect(_ *r.Context) *r.Node {
 	return r.Div("max-w-6xl mx-auto flex flex-col gap-6 w-full").Render(
 		r.Div("text-3xl font-bold").Text("Reload & Redirect"),
 		r.Div("text-gray-600").Text("Demonstrates page reload and redirect functionality."),
@@ -32,11 +32,11 @@ func ReloadRedirect(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleRedirectDashboard(ctx *r.Context, _ struct{}) (r.Result, error) {
+func HandleRedirectDashboard(_ *r.Context, _ struct{}) (r.Result, error) {
 	return r.Result{}.Notify("info", "Redirecting to dashboard...").Navigate("/"), nil
 }
 
-func HandleRedirectButton(ctx *r.Context, _ struct{}) (r.Result, error) {
+func HandleRedirectButton(_ *r.Context, _ struct{}) (r.Result, error) {
 	return r.Result{}.Notify("info", "Redirecting to button page...").Navigate("/button"), nil
 }
 

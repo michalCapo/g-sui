@@ -2,7 +2,7 @@ package pages
 
 import r "github.com/michalCapo/g-sui/ui"
 
-func Number(ctx *r.Context) *r.Node {
+func Number(_ *r.Context) *r.Node {
 	card := func(title string, body *r.Node) *r.Node {
 		return r.Div("bg-white p-4 rounded-lg shadow flex flex-col gap-3").Render(
 			r.Div("text-sm font-bold text-gray-700").Text(title),

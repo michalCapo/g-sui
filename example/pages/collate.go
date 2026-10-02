@@ -53,7 +53,7 @@ var allEmployees = []*Employee{
 var collateFilters = map[string]*r.CollateFilterValue{}
 var collateFiltersMu sync.Mutex
 
-func CollatePage(ctx *r.Context) *r.Node {
+func CollatePage(_ *r.Context) *r.Node {
 	limit := 8
 	data := allEmployees
 	if len(data) > limit {
@@ -215,7 +215,7 @@ type CollateDataRequest struct {
 	Filters   []r.CollateFilterValue `json:"filters"`
 }
 
-func handleCollateData(ctx *r.Context, req CollateDataRequest) (r.Result, error) {
+func handleCollateData(_ *r.Context, req CollateDataRequest) (r.Result, error) {
 	collateFiltersMu.Lock()
 	defer collateFiltersMu.Unlock()
 	limit := 8
@@ -458,8 +458,8 @@ func exportEmployeesCSV(employees []*Employee) (r.Result, error) {
 		}
 		name := strings.ReplaceAll(emp.Name, "\"", "\"\"")
 		role := strings.ReplaceAll(emp.Role, "\"", "\"\"")
-		buf.WriteString(fmt.Sprintf("%d,\"%s\",%s,%.2f,%s,%s,\"%s\"\n",
-			emp.ID, name, emp.Department, emp.Salary, emp.HireDate, status, role))
+		fmt.Fprintf(&buf, "%d,\"%s\",%s,%.2f,%s,%s,\"%s\"\n",
+			emp.ID, name, emp.Department, emp.Salary, emp.HireDate, status, role)
 	}
 	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	return r.Result{}.Download("employees.csv", "text/csv", b64), nil

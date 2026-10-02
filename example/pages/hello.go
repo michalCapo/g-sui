@@ -8,7 +8,7 @@ import (
 
 var helloOk, helloError, helloDelay, helloCrash r.ActionRef[struct{}]
 
-func Hello(ctx *r.Context) *r.Node {
+func Hello(_ *r.Context) *r.Node {
 	return r.Div("max-w-5xl mx-auto flex flex-col gap-4").Render(
 		r.Div("text-2xl font-bold").Text("Hello Actions"),
 		r.Div("text-gray-600").Text("Click buttons to trigger different server action responses."),
@@ -29,11 +29,11 @@ func Hello(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleHelloOk(ctx *r.Context, _ struct{}) (r.Result, error) {
+func HandleHelloOk(_ *r.Context, _ struct{}) (r.Result, error) {
 	return r.Result{}.Notify("success", "Hello"), nil
 }
 
-func HandleHelloError(ctx *r.Context, _ struct{}) (r.Result, error) {
+func HandleHelloError(_ *r.Context, _ struct{}) (r.Result, error) {
 	return r.Result{}.Notify("error", "Hello error"), nil
 }
 
@@ -48,7 +48,7 @@ func HandleHelloDelay(ctx *r.Context, _ struct{}) (r.Result, error) {
 	return r.Result{}.Notify("info", "Information (after 2s delay)"), nil
 }
 
-func HandleHelloCrash(ctx *r.Context, _ struct{}) (r.Result, error) {
+func HandleHelloCrash(_ *r.Context, _ struct{}) (r.Result, error) {
 	panic("Hello again")
 }
 

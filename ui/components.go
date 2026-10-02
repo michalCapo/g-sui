@@ -1516,7 +1516,7 @@ func (t *TabsBuilder) Build() *Node {
 	// JS for tab switching and keyboard navigation
 	var js strings.Builder
 	js.WriteString("(function(){")
-	js.WriteString(fmt.Sprintf("var c=document.getElementById('%s');", escJS(containerID)))
+	fmt.Fprintf(&js, "var c=document.getElementById('%s');", escJS(containerID))
 	js.WriteString("if(!c)return;")
 	js.WriteString("var btns=[")
 	for i, id := range btnIDs {

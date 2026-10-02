@@ -405,7 +405,7 @@ func requestPathParams(r *http.Request) map[string]string {
 	if i := strings.IndexByte(pattern, '/'); i >= 0 {
 		pattern = pattern[i:]
 	}
-	for _, segment := range strings.Split(pattern, "/") {
+	for segment := range strings.SplitSeq(pattern, "/") {
 		if len(segment) < 3 || segment[0] != '{' || segment[len(segment)-1] != '}' {
 			continue
 		}
@@ -499,11 +499,11 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		w.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(w)
-		defer gz.Close()
+		defer func() { _ = gz.Close() }()
 		writer = gz
 	}
 
-	fmt.Fprintf(writer, `<!DOCTYPE html>
+	_, _ = fmt.Fprintf(writer, `<!DOCTYPE html>
 <html lang="en" class="gsui-booting">
 <head>
 <meta charset="UTF-8">
@@ -553,11 +553,11 @@ func (app *App) serveWSClient(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		w.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(w)
-		defer gz.Close()
-		gz.Write([]byte(wsClientJS))
+		defer func() { _ = gz.Close() }()
+		_, _ = gz.Write([]byte(wsClientJS))
 		return
 	}
-	w.Write([]byte(wsClientJS))
+	_, _ = w.Write([]byte(wsClientJS))
 }
 
 // wsClientVersion is a content hash of the embedded client script, appended
@@ -1117,7 +1117,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		}
 		delete(app.clients, ws)
 		app.mu.Unlock()
-		ws.Close()
+		_ = ws.Close()
 	}()
 
 	// Read independently so disconnect cancels a running action. Dispatch is

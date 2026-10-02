@@ -460,8 +460,7 @@ type ValidationError struct{ Fields FormErrors }
 
 func (e ValidationError) Error() string { return "form validation failed" }
 func actionError(ctx *Context, err error) string {
-	var validation ValidationError
-	if errors.As(err, &validation) {
+	if validation, ok := errors.AsType[ValidationError](err); ok {
 		form, _ := ctx.wsData["__form"].(string)
 		b, _ := json.Marshal(validation.Fields)
 		return fmt.Sprintf("__gsuiFormErrors('%s',%s);", escJS(form), b)

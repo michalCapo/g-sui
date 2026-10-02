@@ -14,7 +14,7 @@ func svgIcon(label string, svg *r.Node) *r.Node {
 	)
 }
 
-func Icons(ctx *r.Context) *r.Node {
+func Icons(_ *r.Context) *r.Node {
 	iconRow := func(children ...*r.Node) *r.Node {
 		return r.Div("relative flex items-center justify-center border rounded-lg p-4 bg-white border-gray-300 min-h-[3rem]").Render(children...)
 	}

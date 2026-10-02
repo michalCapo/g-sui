@@ -2,7 +2,7 @@ package pages
 
 import r "github.com/michalCapo/g-sui/ui"
 
-func Skeleton(ctx *r.Context) *r.Node {
+func Skeleton(_ *r.Context) *r.Node {
 	return r.Div("max-w-6xl mx-auto flex flex-col gap-8 w-full").Render(
 		r.Div("text-3xl font-bold").Text("Skeleton Loaders"),
 		r.Div("text-gray-600").Text("Loading placeholder components for various content types."),

@@ -7,7 +7,7 @@ import (
 
 const liveClockID = "live-clock"
 
-func Clock(ctx *r.Context) *r.Node {
+func Clock(_ *r.Context) *r.Node {
 	return r.Div("max-w-5xl mx-auto flex flex-col gap-4").Render(
 		r.Div("text-2xl font-bold").Text("Live Clock (WS patches)"),
 		r.Div("text-gray-600").Text("Updates via WebSocket patches every second."),

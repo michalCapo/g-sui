@@ -42,11 +42,11 @@ func loginForm(submit r.ActionRef[loginInput]) *r.Node {
 }
 
 func RegisterLogin(app *r.App) {
-	submit := r.RegisterAction(app, "login.submit", func(ctx *r.Context, input loginInput) (r.Result, error) {
+	submit := r.RegisterAction(app, "login.submit", func(_ *r.Context, input loginInput) (r.Result, error) {
 		if input.Name != "user" || input.Password != "password" {
 			return r.Result{}, r.ValidationError{Fields: r.FormErrors{"Name": "Use user / password for this demo"}}
 		}
 		return r.Result{}.Replace(loginFormID, r.Div("text-green-600 max-w-md p-8 text-center font-bold rounded-lg bg-white shadow-xl").ID(loginFormID).Text("Success")).Toast("Login successful"), nil
 	})
-	app.Page("/login", func(ctx *r.Context) *r.Node { return loginForm(submit) })
+	app.Page("/login", func(_ *r.Context) *r.Node { return loginForm(submit) })
 }

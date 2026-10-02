@@ -90,5 +90,5 @@ func Button() *r.Node {
 }
 
 func RegisterButton(app *r.App) {
-	app.Page("/button", func(ctx *r.Context) *r.Node { return Button() })
+	app.Page("/button", func(_ *r.Context) *r.Node { return Button() })
 }

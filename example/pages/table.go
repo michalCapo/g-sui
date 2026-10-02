@@ -27,7 +27,7 @@ type Product struct {
 	ReleaseMonth string // MonthYear filter demo (format: "2026-03")
 }
 
-func TablePage(ctx *r.Context) *r.Node {
+func TablePage(_ *r.Context) *r.Node {
 	// Section 1: Basic — SimpleTable with action buttons
 	viewBtn := r.NewButton("View").BtnColor(r.BtnBlue).BtnSize(r.BtnXS).Build()
 	editBtn := r.NewButton("Edit").BtnColor(r.BtnGreen).BtnSize(r.BtnXS).Build()
@@ -285,7 +285,9 @@ func parseFloat(s string) float64 {
 		return 0
 	}
 	var f float64
-	fmt.Sscanf(s, "%f", &f)
+	if _, err := fmt.Sscanf(s, "%f", &f); err != nil {
+		return 0
+	}
 	return f
 }
 
@@ -324,7 +326,7 @@ func sortProducts(data []*Product, col int, dir string) {
 	})
 }
 
-func handleTableData(ctx *r.Context, req TableDataRequest) (r.Result, error) {
+func handleTableData(_ *r.Context, req TableDataRequest) (r.Result, error) {
 	activeFiltersMu.Lock()
 	defer activeFiltersMu.Unlock()
 	pageSize := 10
@@ -612,8 +614,8 @@ func exportProductsCSV(products []*Product) (r.Result, error) {
 	buf.WriteString("ID,Name,Price,Stock,Created,Category,Status,ReleaseMonth\n")
 	for _, p := range products {
 		name := strings.ReplaceAll(p.Name, "\"", "\"\"")
-		buf.WriteString(fmt.Sprintf("%d,\"%s\",%.2f,%d,%s,%s,%s,%s\n",
-			p.ID, name, p.Price, p.Stock, p.CreatedAt, p.Category, p.Status, p.ReleaseMonth))
+		fmt.Fprintf(&buf, "%d,\"%s\",%.2f,%d,%s,%s,%s,%s\n",
+			p.ID, name, p.Price, p.Stock, p.CreatedAt, p.Category, p.Status, p.ReleaseMonth)
 	}
 	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	return r.Result{}.Download("products.csv", "text/csv", b64), nil

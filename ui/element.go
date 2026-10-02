@@ -336,8 +336,8 @@ func (n *Node) toJS() string {
 func (n *Node) toJSReplace(targetID string) string {
 	var b strings.Builder
 	b.WriteString("(function(){")
-	b.WriteString(fmt.Sprintf("var _t=document.getElementById('%s');", escJS(targetID)))
-	b.WriteString(fmt.Sprintf("if(!_t){console.warn('[g-sui] replaceWith: element #%s not found');__ws.notfound('%s');return;}", escJS(targetID), escJS(targetID)))
+	fmt.Fprintf(&b, "var _t=document.getElementById('%s');", escJS(targetID))
+	fmt.Fprintf(&b, "if(!_t){console.warn('[g-sui] replaceWith: element #%s not found');__ws.notfound('%s');return;}", escJS(targetID), escJS(targetID))
 	counter := 0
 	var postJS []string
 	root := n.compile(&b, &counter, &postJS)
@@ -353,8 +353,8 @@ func (n *Node) toJSReplace(targetID string) string {
 func (n *Node) toJSAppend(parentID string) string {
 	var b strings.Builder
 	b.WriteString("(function(){")
-	b.WriteString(fmt.Sprintf("var _p=document.getElementById('%s');", escJS(parentID)))
-	b.WriteString(fmt.Sprintf("if(!_p){console.warn('[g-sui] appendChild: element #%s not found');__ws.notfound('%s');return;}", escJS(parentID), escJS(parentID)))
+	fmt.Fprintf(&b, "var _p=document.getElementById('%s');", escJS(parentID))
+	fmt.Fprintf(&b, "if(!_p){console.warn('[g-sui] appendChild: element #%s not found');__ws.notfound('%s');return;}", escJS(parentID), escJS(parentID))
 	counter := 0
 	var postJS []string
 	root := n.compile(&b, &counter, &postJS)
@@ -370,8 +370,8 @@ func (n *Node) toJSAppend(parentID string) string {
 func (n *Node) toJSPrepend(parentID string) string {
 	var b strings.Builder
 	b.WriteString("(function(){")
-	b.WriteString(fmt.Sprintf("var _p=document.getElementById('%s');", escJS(parentID)))
-	b.WriteString(fmt.Sprintf("if(!_p){console.warn('[g-sui] prepend: element #%s not found');__ws.notfound('%s');return;}", escJS(parentID), escJS(parentID)))
+	fmt.Fprintf(&b, "var _p=document.getElementById('%s');", escJS(parentID))
+	fmt.Fprintf(&b, "if(!_p){console.warn('[g-sui] prepend: element #%s not found');__ws.notfound('%s');return;}", escJS(parentID), escJS(parentID))
 	counter := 0
 	var postJS []string
 	root := n.compile(&b, &counter, &postJS)
@@ -388,8 +388,8 @@ func (n *Node) toJSPrepend(parentID string) string {
 func (n *Node) toJSInner(targetID string) string {
 	var b strings.Builder
 	b.WriteString("(function(){")
-	b.WriteString(fmt.Sprintf("var _t=document.getElementById('%s');", escJS(targetID)))
-	b.WriteString(fmt.Sprintf("if(!_t){console.warn('[g-sui] innerHTML: element #%s not found');__ws.notfound('%s');return;}", escJS(targetID), escJS(targetID)))
+	fmt.Fprintf(&b, "var _t=document.getElementById('%s');", escJS(targetID))
+	fmt.Fprintf(&b, "if(!_t){console.warn('[g-sui] innerHTML: element #%s not found');__ws.notfound('%s');return;}", escJS(targetID), escJS(targetID))
 	b.WriteString("if(window.__gsuiDispose)Array.from(_t.children).forEach(__gsuiDispose);_t.innerHTML='';")
 	counter := 0
 	var postJS []string

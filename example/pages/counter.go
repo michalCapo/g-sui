@@ -29,7 +29,7 @@ func (v *counterView) Render(ctx *r.ViewContext) *r.Node {
 	)
 }
 
-func (v *counterView) Handle(ctx *r.ViewContext, event r.Event) error {
+func (v *counterView) Handle(_ *r.ViewContext, event r.Event) error {
 	for i := range v.Counts {
 		switch event.Name {
 		case "counter-" + strconv.Itoa(i) + "-inc":

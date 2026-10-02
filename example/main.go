@@ -1,7 +1,9 @@
+// Command example runs the g-sui component showcase.
 package main
 
 import (
 	"embed"
+	"log"
 
 	"github.com/michalCapo/g-sui/example/pages"
 	r "github.com/michalCapo/g-sui/ui"
@@ -49,14 +51,14 @@ func main() {
 	app.Title = "g-sui Component Showcase"
 	app.Description = "A server-rendered Go UI framework with live WebSocket updates, Tailwind CSS, and interactive components."
 
-	app.Listen(":1424")
+	log.Fatal(app.Listen(":1424"))
 }
 
 // ---------------------------------------------------------------------------
 // Layout
 // ---------------------------------------------------------------------------
 
-func layout(ctx *r.Context) *r.Node {
+func layout(_ *r.Context) *r.Node {
 	// The layout persists while the runtime swaps pages.
 	return r.Div("min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors").Render(
 		r.Nav("bg-white dark:bg-gray-900 shadow dark:shadow-gray-800/50").Attr("aria-label", "Main navigation").Render(

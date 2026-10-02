@@ -87,7 +87,7 @@ func TestActionDataEscapesScriptBreakoutForScriptContext(t *testing.T) {
 
 func TestAppHandlerEscapesRenderedTextInHTMLScript(t *testing.T) {
 	app := NewApp()
-	app.Page("/", func(ctx *Context) *Node {
+	app.Page("/", func(_ *Context) *Node {
 		return Div().Text(scriptBreakoutPayload)
 	})
 
@@ -118,7 +118,7 @@ func TestAppShellMetadataIsHTMLEscaped(t *testing.T) {
 	app.Title = `</title><script>alert(1)</script>`
 	app.Description = `desc"><script>alert(2)</script><meta name="x`
 	app.Favicon = `/favicon.ico" onerror="alert(3)`
-	app.Page("/", func(ctx *Context) *Node { return Div().Text("ok") })
+	app.Page("/", func(_ *Context) *Node { return Div().Text("ok") })
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)
@@ -143,7 +143,7 @@ func TestAppShellMetadataIsHTMLEscaped(t *testing.T) {
 
 func TestAppShellGatesInitialPaintUntilStylesAreReady(t *testing.T) {
 	app := NewApp()
-	app.Page("/", func(ctx *Context) *Node { return Div().Text("ready") })
+	app.Page("/", func(_ *Context) *Node { return Div().Text("ready") })
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)

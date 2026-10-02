@@ -48,7 +48,7 @@ func sharedForm(formID, title, description string) *r.Node {
 	)
 }
 
-func Shared(ctx *r.Context) *r.Node {
+func Shared(_ *r.Context) *r.Node {
 	return r.Div("max-w-5xl mx-auto flex flex-col gap-4").Render(
 		r.Div("text-2xl font-bold").Text("Shared"),
 		r.Div("text-gray-600").Text("Reused form template in multiple places."),
@@ -66,7 +66,7 @@ func Shared(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleSharedSubmit(ctx *r.Context, data sharedInput) (r.Result, error) {
+func HandleSharedSubmit(_ *r.Context, data sharedInput) (r.Result, error) {
 	formID := data.FormID
 	title := data.Title
 	desc := data.Description
@@ -82,7 +82,7 @@ func HandleSharedSubmit(ctx *r.Context, data sharedInput) (r.Result, error) {
 		Notify("success", "Data stored"), nil
 }
 
-func HandleSharedReset(ctx *r.Context, data sharedInput) (r.Result, error) {
+func HandleSharedReset(_ *r.Context, data sharedInput) (r.Result, error) {
 	formID := data.FormID
 	return r.Result{}.Replace(formID, sharedForm(formID, "", "")), nil
 }

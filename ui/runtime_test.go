@@ -59,7 +59,7 @@ func TestRuntimeSharedMiddleware(t *testing.T) {
 	app.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/private" {
-				http.Error(w, "denied", 401)
+				http.Error(w, "denied", http.StatusUnauthorized)
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), contextKey{}, "identity")))
@@ -73,7 +73,7 @@ func TestRuntimeSharedMiddleware(t *testing.T) {
 	ws := runtimeSocket(t, app)
 	rr := httptest.NewRecorder()
 	app.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/private", nil))
-	if rr.Code != 401 {
+	if rr.Code != http.StatusUnauthorized {
 		t.Fatal(rr.Code)
 	}
 	js := runtimeCall(t, ws, "__nav", "", 1, map[string]any{"url": "/private"})
@@ -179,7 +179,7 @@ func TestRuntimeDisconnectCancelsRunningAction(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("action did not start")
 	}
-	ws.Close()
+	_ = ws.Close()
 	select {
 	case <-stopped:
 	case <-time.After(time.Second):
@@ -206,12 +206,12 @@ func TestRuntimeCloseCancelsRunningActionWithQueuedMessages(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("action did not start")
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		if err := websocket.Message.Send(ws, `{"act":"__ping"}`); err != nil {
 			t.Fatal(err)
 		}
 	}
-	app.Close()
+	_ = app.Close()
 	select {
 	case <-stopped:
 	case <-time.After(time.Second):
@@ -261,7 +261,7 @@ func TestRuntimeSubscriptionsAreIndependent(t *testing.T) {
 		t.Fatalf("unrelated subscription %s cancelled", id)
 	default:
 	}
-	app.Close()
+	_ = app.Close()
 	select {
 	case id := <-stopped:
 		if id != "b" {
@@ -274,10 +274,10 @@ func TestRuntimeSubscriptionsAreIndependent(t *testing.T) {
 
 type runtimeCounter struct{ count int }
 
-func (v *runtimeCounter) Render(ctx *ViewContext) *Node {
+func (v *runtimeCounter) Render(_ *ViewContext) *Node {
 	return Span().Text(fmt.Sprintf("count:%d", v.count))
 }
-func (v *runtimeCounter) Handle(ctx *ViewContext, event Event) error {
+func (v *runtimeCounter) Handle(_ *ViewContext, event Event) error {
 	if event.Name == "inc" {
 		v.count++
 	}
@@ -346,7 +346,7 @@ func TestRuntimeTypedActionValidationAndRefresh(t *testing.T) {
 func TestRuntimeTableSourceKeepsStateInURL(t *testing.T) {
 	app := NewApp()
 	queries := make(chan TableQuery, 4)
-	source := RegisterTable(app, "records", func(ctx *Context, q TableQuery) (TablePage[runtimeInput], error) {
+	source := RegisterTable(app, "records", func(_ *Context, q TableQuery) (TablePage[runtimeInput], error) {
 		queries <- q
 		return TablePage[runtimeInput]{Rows: []*runtimeInput{{Name: q.Search}}, Total: 1}, nil
 	}, func(table *DataTable[runtimeInput]) {
@@ -426,7 +426,7 @@ func TestRuntimeTypedPushAndBroadcastEnvelopes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		var raw string
 		if err := websocket.Message.Receive(ws, &raw); err != nil {
 			t.Fatal(err)

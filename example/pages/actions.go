@@ -8,7 +8,7 @@ import (
 
 // ActionsPage shows local UI actions. None of them needs JavaScript or a
 // server round trip.
-func ActionsPage(ctx *r.Context) *r.Node {
+func ActionsPage(_ *r.Context) *r.Node {
 	btn := "px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
 	input := "border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm bg-white dark:bg-gray-900"
 	card := func(title string, nodes ...*r.Node) *r.Node {

@@ -4,7 +4,7 @@ import (
 	r "github.com/michalCapo/g-sui/ui"
 )
 
-func Showcase(ctx *r.Context) *r.Node {
+func Showcase(_ *r.Context) *r.Node {
 	return r.Div("max-w-6xl mx-auto flex flex-col gap-8 w-full").Render(
 		r.Div("text-3xl font-bold").Text("Component Showcase"),
 		r.Div("text-gray-600").Text("A collection of reusable UI components built with the rework framework."),
@@ -381,7 +381,7 @@ const dialogTargetID = "showcase-dialog"
 var showcaseConfirm r.ActionRef[struct{}]
 
 // handleShowcaseConfirm returns the dialog from the server; it closes itself.
-func handleShowcaseConfirm(ctx *r.Context, _ struct{}) (r.Result, error) {
+func handleShowcaseConfirm(_ *r.Context, _ struct{}) (r.Result, error) {
 	return r.Result{}.Append(dialogTargetID, r.ConfirmDialog(
 		"Delete this item?",
 		"This action cannot be undone. The item will be permanently removed.",

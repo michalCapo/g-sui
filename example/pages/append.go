@@ -11,7 +11,7 @@ const appendListID = "append-list"
 
 var appendEnd, appendStart r.ActionRef[struct{}]
 
-func Append(ctx *r.Context) *r.Node {
+func Append(_ *r.Context) *r.Node {
 	return r.Div("max-w-5xl mx-auto flex flex-col gap-4").Render(
 		r.Div("text-2xl font-bold").Text("Append / Prepend Demo"),
 		r.Div("text-gray-600").Text("Click buttons to insert items at the beginning or end of the list."),
@@ -31,7 +31,7 @@ func Append(ctx *r.Context) *r.Node {
 	)
 }
 
-func HandleAppendEnd(ctx *r.Context, _ struct{}) (r.Result, error) {
+func HandleAppendEnd(_ *r.Context, _ struct{}) (r.Result, error) {
 	now := time.Now().Format("15:04:05")
 	item := r.Div("p-2 rounded border bg-white").Render(
 		r.Span("text-sm text-gray-600").Text(fmt.Sprintf("Appended at %s", now)),
@@ -39,7 +39,7 @@ func HandleAppendEnd(ctx *r.Context, _ struct{}) (r.Result, error) {
 	return r.Result{}.Append(appendListID, item), nil
 }
 
-func HandleAppendStart(ctx *r.Context, _ struct{}) (r.Result, error) {
+func HandleAppendStart(_ *r.Context, _ struct{}) (r.Result, error) {
 	now := time.Now().Format("15:04:05")
 	item := r.Div("p-2 rounded border bg-white").Render(
 		r.Span("text-sm text-gray-600").Text(fmt.Sprintf("Prepended at %s", now)),
