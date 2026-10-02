@@ -331,6 +331,16 @@ func (n *Node) toJS() string {
 	return b.String()
 }
 
+// DebugJS returns the JavaScript this node compiles to when rendered as a
+// page. It is for tests and debugging; output format may change. It adds no
+// way to run code beyond what the node already contains.
+func (n *Node) DebugJS() string {
+	if n == nil {
+		return ""
+	}
+	return n.toJS()
+}
+
 // toJSReplace compiles JS that replaces an existing DOM element by its ID.
 // The old element is found by ID, the new tree is built, and replaceWith() is called.
 func (n *Node) toJSReplace(targetID string) string {

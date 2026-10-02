@@ -171,6 +171,9 @@ app.Subscription("clock", func(ctx *ui.Context) error {
 ui.Span().ID("clock").Subscribe("clock")
 ```
 
+Use `ui.RegisterSubscription(app, name, func(ctx *ui.Context, in T) error)` to
+read data passed as `node.Subscribe(name, data)`.
+
 ## Theme & Dark Mode
 
 ```go

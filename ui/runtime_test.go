@@ -224,8 +224,11 @@ func TestRuntimeSubscriptionsAreIndependent(t *testing.T) {
 	app.Page("/", func(*Context) *Node { return Div() })
 	started := make(chan string, 2)
 	stopped := make(chan string, 2)
-	app.Subscription("ticks", func(ctx *Context) error {
-		id := ctx.wsData["id"].(string)
+	type tick struct {
+		ID string `json:"id"`
+	}
+	RegisterSubscription(app, "ticks", func(ctx *Context, in tick) error {
+		id := in.ID
 		started <- id
 		<-ctx.Context().Done()
 		stopped <- id
@@ -474,4 +477,64 @@ func TestRuntimeTypedPushAndBroadcastEnvelopes(t *testing.T) {
 	if err := app.Broadcast(Refresh("page")); err == nil {
 		t.Fatal("broadcast accepted page-dependent effect")
 	}
+}
+
+type feedInput struct {
+	Folder string `json:"folder"`
+}
+
+func (f *feedInput) Validate() error {
+	if f.Folder == "" {
+		return errors.New("folder required")
+	}
+	return nil
+}
+
+func TestRegisterSubscriptionDecodesAndValidates(t *testing.T) {
+	app := NewApp()
+	app.Page("/", func(*Context) *Node { return Div() })
+	got := make(chan string, 1)
+	RegisterSubscription(app, "feed", func(ctx *Context, in feedInput) error {
+		got <- in.Folder
+		return nil
+	})
+	ws := runtimeSocket(t, app)
+	send := func(sub string, data map[string]any) string {
+		b, _ := json.Marshal(wsMessage{Act: "feed", Page: "/", Version: 1, Sub: sub, Data: data})
+		if err := websocket.Message.Send(ws, string(b)); err != nil {
+			t.Fatal(err)
+		}
+		var reply string
+		if err := websocket.Message.Receive(ws, &reply); err != nil {
+			t.Fatal(err)
+		}
+		return reply
+	}
+	send("a", map[string]any{"folder": "inbox"})
+	select {
+	case folder := <-got:
+		if folder != "inbox" {
+			t.Fatal(folder)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription not started")
+	}
+	if reply := send("b", map[string]any{}); !strings.Contains(reply, "Unable to complete") {
+		t.Fatalf("invalid data not rejected: %s", reply)
+	}
+	select {
+	case folder := <-got:
+		t.Fatalf("invalid subscription started: %q", folder)
+	case <-time.After(50 * time.Millisecond):
+	}
+	_ = app.Close()
+}
+
+func TestSubscribeRejectsNonObjectData(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic")
+		}
+	}()
+	Div().Subscribe("feed", "inbox")
 }

@@ -253,10 +253,27 @@ func (app *App) Close() error {
 // Subscription starts cancellable background work after the response has been
 // sent. The callback must select on ctx.Context().Done() or use cancellable IO.
 // Reconnect starts a fresh subscription; page changes/unsubscribe cancel it.
+// Use RegisterSubscription to read the data passed to Node.Subscribe.
 func (app *App) Subscription(name string, run func(*Context) error) {
+	RegisterSubscription(app, name, func(ctx *Context, _ struct{}) error { return run(ctx) })
+}
+
+// RegisterSubscription is Subscription with typed data. It decodes the data
+// passed to Node.Subscribe into T and calls optional Validate() error on *T,
+// like RegisterAction.
+func RegisterSubscription[T any](app *App, name string, run func(*Context, T) error) {
 	app.action(name, func(ctx *Context) string {
 		if ctx.subscription == "" {
 			return Notify("error", "Subscription required").script()
+		}
+		var input T
+		if err := ctx.body(&input); err != nil {
+			return Notify("error", "Invalid input").script()
+		}
+		if valid, ok := any(&input).(interface{ Validate() error }); ok {
+			if err := valid.Validate(); err != nil {
+				return actionError(ctx, err)
+			}
 		}
 		ctx.after = append(ctx.after, func() {
 			go func() {
@@ -265,7 +282,7 @@ func (app *App) Subscription(name string, run func(*Context) error) {
 						log.Printf("gsui: subscription %q panicked", name)
 					}
 				}()
-				if err := run(ctx); err != nil && ctx.Context().Err() == nil {
+				if err := run(ctx, input); err != nil && ctx.Context().Err() == nil {
 					log.Printf("gsui: subscription %q failed: %v", name, err)
 				}
 			}()
@@ -274,8 +291,9 @@ func (app *App) Subscription(name string, run func(*Context) error) {
 	})
 }
 
-// Subscribe attaches a subscription to this node's lifetime. Use different
-// data to distinguish multiple subscriptions to the same action.
+// Subscribe attaches a subscription to this node's lifetime. Optional data
+// must encode to a JSON object; read it with RegisterSubscription. Use
+// different data to distinguish multiple subscriptions to the same action.
 func (n *Node) Subscribe(name string, data ...any) *Node {
 	var payload any = map[string]any{}
 	if len(data) > 0 {
@@ -284,6 +302,9 @@ func (n *Node) Subscribe(name string, data ...any) *Node {
 	b, err := json.Marshal(payload)
 	if err != nil {
 		panic(fmt.Errorf("subscription payload: %w", err))
+	}
+	if len(b) == 0 || b[0] != '{' {
+		panic("subscription payload must be a JSON object")
 	}
 	n.rawJS += fmt.Sprintf("__ws.subscribe('%s',%s);(this.__gsuiCleanup||(this.__gsuiCleanup=[])).push(function(){__ws.unsubscribe('%s',%s)});", escJS(name), b, escJS(name), b)
 	return n

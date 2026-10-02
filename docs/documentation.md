@@ -599,6 +599,9 @@ last resort and must never contain user input:
 | `node.UnsafeJS(code)` | Raw JS that runs when the node is inserted; `this` is the element |
 | `ctx.UnsafeHeadJS(code)` | Per-page JS in `<head>` |
 
+In tests, `node.DebugJS()` returns the JavaScript a node compiles to, without
+rendering a page. It is for inspection only; the output format may change.
+
 ---
 
 ## DOM Swaps
@@ -1780,6 +1783,7 @@ go get github.com/michalCapo/g-sui@v1.001
 | `Listen` | `(addr string) error` | Start HTTP server |
 | `Broadcast` | `(result Result) error` | Send effects to all connected clients |
 | `Widget` | `(name, mount string)` | Register a client widget mount function |
+| `Subscription` | `(name string, run func(*Context) error)` | Register cancellable background work started by `node.Subscribe` |
 
 #### Context Methods
 
@@ -1797,6 +1801,7 @@ go get github.com/michalCapo/g-sui@v1.001
 | `NewApp()` | `*App` | Create application |
 | `El(tag, class...)` | `*Node` | Create element |
 | `Target()` | `string` | Generate random DOM ID |
+| `RegisterSubscription[T](app, name, run)` | | Like `app.Subscription`; decodes `node.Subscribe` data into `T` |
 
 | `UnsafeJS(code)` | `*Action` | Trusted raw JS action |
 | `If(cond, node)` | `*Node` | Conditional render |
@@ -2075,6 +2080,22 @@ app.Subscription("clock", func(ctx *ui.Context) error {
 })
 
 ui.Span().ID("clock").Subscribe("clock")
+```
+
+Read `Subscribe` data with `RegisterSubscription`. Data must be a JSON object.
+Like `RegisterAction`, it calls an optional `Validate() error` on `*T`:
+
+```go
+type FolderFeed struct {
+    Folder string `json:"folder"`
+}
+
+ui.RegisterSubscription(app, "folder.feed", func(ctx *ui.Context, in FolderFeed) error {
+    // Watch in.Folder until ctx.Context() is done.
+    return nil
+})
+
+ui.Div().ID("list").Subscribe("folder.feed", FolderFeed{Folder: "inbox"})
 ```
 
 Subscriptions start after their response is sent, cancel on removal/navigation/

@@ -145,6 +145,16 @@ func TestMapHelper(t *testing.T) {
 // Swap strategy tests
 // ---------------------------------------------------------------------------
 
+func TestDebugJS(t *testing.T) {
+	js := Div().ID("box").Text("hi").Subscribe("feed", map[string]string{"folder": "inbox"}).DebugJS()
+
+	expect(t, js, "document.body.appendChild(")
+	expect(t, js, "__ws.subscribe('feed',{\"folder\":\"inbox\"})")
+	if (*Node)(nil).DebugJS() != "" {
+		t.Fatal("nil node should compile to empty string")
+	}
+}
+
 func TestToJSReplace(t *testing.T) {
 	n := Div().ID("new-counter").Text("42")
 	js := n.toJSReplace("old-counter")
