@@ -54,6 +54,7 @@ local actions.
 | Modal dialog | `ui.El("dialog")` with `ui.OpenDialog(id)` / `ui.CloseDialog(id)` |
 | Confirm before an action | `ui.Confirm("Sure?", action)` or `ui.ConfirmDialog(...)` from a server action |
 | Several steps on one click | `ui.Seq(a, b, c)` |
+| Combine updates from several helpers | `ui.Merge(a, b)` / `r.Add(...)` |
 | Run later | `ui.Delay(2*time.Second, action)` |
 | Toast | `ui.Toast(msg)`, `ui.Notify(variant, msg)`; in a handler `Result.Toast` |
 | Copy to clipboard | `ui.CopyText(text)`, `ui.CopyFrom(inputID)` |

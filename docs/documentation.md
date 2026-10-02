@@ -676,6 +676,14 @@ ui.RegisterAction(app, "invoice.delete", func(ctx *ui.Context, input DeleteInput
 
 Effects are immutable: assign the returned value when building a result in a loop.
 
+Combine results built by several helpers with `ui.Merge` or `Add`. Effects run
+in the order they were added.
+
+```go
+return ui.Merge(refreshTopBar(), renderProjects(ctx), ui.Result{}.Run(ui.CloseDialog("edit"))), nil
+// or: topBar.Add(projects, closeDialog)
+```
+
 | Method | Description |
 | --- | --- |
 | `Morph(id, node)` | Update a subtree while preserving drafts and focus |
@@ -687,6 +695,7 @@ Effects are immutable: assign the returned value when building a result in a loo
 | `Navigate(url)` / `PatchURL(url, replace)` | Navigate or rerender the current route |
 | `Refresh(regions...)` | Rerender named regions |
 | `Download(filename, mimeType, base64Data)` | Download generated data |
+| `Add(others...)` | Append the effects of other results, in order |
 
 Return the result directly. `Context.Push` accepts a result for subscription
 updates. `App.Broadcast` accepts effects that do not require a page context and
@@ -1807,6 +1816,7 @@ go get github.com/michalCapo/g-sui@v1.001
 | `If(cond, node)` | `*Node` | Conditional render |
 | `Or(cond, yes, no)` | `*Node` | Binary conditional |
 | `Map[T](items, fn)` | `[]*Node` | Slice iteration |
+| `Merge(results...)` | `Result` | Combine results in order; same as `Result{}.Add(results...)` |
 | `Seq`, `Confirm`, `Delay` | `*Action` | Compose actions; see [Local Actions](#local-actions) |
 | `Show`, `Hide`, `Toggle`, `Remove`, `SetText`, ... | `*Action` | Local UI actions; see [Local Actions](#local-actions) |
 | `Widget(name, props, class...)` | `*Node` | Mount a widget registered with `App.Widget` |

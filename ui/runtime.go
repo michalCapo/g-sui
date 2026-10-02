@@ -347,6 +347,19 @@ func (r Result) effect(fn func(*Context) (string, error)) Result {
 	r.effects = append(append([]func(*Context) (string, error){}, r.effects...), fn)
 	return r
 }
+
+// Add appends the effects of others after r's own, in order.
+func (r Result) Add(others ...Result) Result {
+	effects := append([]func(*Context) (string, error){}, r.effects...)
+	for _, o := range others {
+		effects = append(effects, o.effects...)
+	}
+	r.effects = effects
+	return r
+}
+
+// Merge combines results in order. It is Result{}.Add(results...).
+func Merge(results ...Result) Result { return Result{}.Add(results...) }
 func (r Result) Toast(message string) Result {
 	return r.Notify("success", message)
 }

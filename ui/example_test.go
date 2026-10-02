@@ -275,6 +275,25 @@ func TestResultEffects(t *testing.T) {
 	expect(t, js, `__gsui.notify(el,"success","Done!")`)
 }
 
+func TestResultMergeKeepsOrder(t *testing.T) {
+	effect := func(js string) Result {
+		return Result{}.effect(func(*Context) (string, error) { return js, nil })
+	}
+	a := effect("1").Add(effect("2"))
+	merged := Merge(a, Result{}, effect("3").Add(effect("4"), effect("5")))
+	_ = a.Add(effect("x")) // must not alias merged or a
+	js, err := merged.Add(effect("6")).build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if js != "123456" {
+		t.Fatalf("got %q", js)
+	}
+	if js, _ := a.build(nil); js != "12" {
+		t.Fatalf("a changed: %q", js)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Escaping tests
 // ---------------------------------------------------------------------------
