@@ -1636,7 +1636,11 @@ window.addEventListener('gsui:reconnected', e => {
 });
 ```
 
-Other client helpers: `__ws.connected()`, `__ws.offline()`, `__ws.holds()`, `__ws.reconnect()`. All of these -- including `hold()` -- are available on the pre-client stub, so they are safe to call from `Node.UnsafeJS` blocks and `ctx.UnsafeHeadJS` that run before `/__ws.js` loads.
+Other client helpers: `__ws.connected()`, `__ws.offline()`, `__ws.holds()`, `__ws.reconnect()`, `__ws.restart()`. Plain `reconnect()` keeps an OPEN or CONNECTING socket and retains the one-second retry cooldown. `restart()` closes the current socket and connects immediately with the browser's current cookies. Its Promise resolves when the replacement socket opens and subscriptions have been re-armed. It rejects if that attempt fails, is superseded by another restart, or does not open within 10 seconds.
+
+Use `await window.__ws.restart()` after an HTTP request rotates login cookies. This intentional replacement preserves the DOM and form state, never reloads the page (including on a server instance change), and does not show the offline badge or emit `gsui:reconnected`. In-flight calls release their busy/loader state and are never replayed. A failed attempt resumes normal outage recovery.
+
+All of these helpers -- including `hold()` and `restart()` -- are available on the pre-client stub, so they are safe to call from `Node.UnsafeJS` blocks and `ctx.UnsafeHeadJS` that run before `/__ws.js` loads. The stub queues `restart()` and forwards its Promise's result once the client initializes.
 
 A hold defers a reload rather than cancelling it: when the last hold is released, the pending reload runs. The client dispatches `gsui:reloadpending` with `detail.reason` (`"server-restart"` or `"long-outage"`) at the moment the reload is postponed, so the page can warn the user or finish up. Always release holds in a `finally` block -- a leaked hold postpones the reload for the lifetime of the page.
 

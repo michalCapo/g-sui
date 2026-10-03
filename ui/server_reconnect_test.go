@@ -58,7 +58,7 @@ func TestClientKeepsPageUsableWhileOffline(t *testing.T) {
 // The stub runs before /__ws.js loads; every documented helper must exist on
 // it, and hold() must share its counter with the real client.
 func TestStubExposesFullClientAPI(t *testing.T) {
-	for _, want := range []string{"call", "subscribe", "unsubscribe", "notfound", "hold", "holds", "connected", "offline", "reconnect"} {
+	for _, want := range []string{"call", "subscribe", "unsubscribe", "notfound", "hold", "holds", "connected", "offline", "reconnect", "restart"} {
 		if !strings.Contains(wsStubJS, want+":function") {
 			t.Errorf("stub missing %q", want)
 		}

@@ -77,6 +77,7 @@ local actions.
 | Forms with validation | `ui.FormFor[T]` or `ui.NewForm(id).Action(ref)` |
 | Data tables, lists with filters | `ui.RegisterTable`, `ui.NewDataTable[T]`, `ui.NewCollate[T]` |
 | Live updates from the server | `ctx.Push`, `app.Broadcast`, `Subscribe`, `app.Live` |
+| Re-auth socket after cookie refresh | `await window.__ws.restart()` |
 | Chart, map, editor | `app.Widget(name, mountJS)` and `ui.Widget(name, props)` |
 
 ## Example: dropdown menu without JavaScript

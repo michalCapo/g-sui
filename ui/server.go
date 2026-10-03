@@ -619,11 +619,12 @@ func (app *App) wsConfigJS() string {
 // otherwise hit "__ws is not defined". The stub queues those calls; the real
 // client replays and replaces it when it initializes.
 // Sending methods queue and are replayed; state methods answer immediately so
-// they are never replayed twice. hold() uses the shared window.__gsuiHolds
+// they are never replayed twice. restart() queues with its Promise callbacks.
+// hold() uses the shared window.__gsuiHolds
 // counter, so a hold taken before the client loads still suppresses the
 // reconnect reload and its release function keeps working afterwards.
 const wsStubJS = `window.__gsuiHolds=window.__gsuiHolds||0;
-window.__ws||(window.__ws={__q:[],navigate:function(){this.__q.push(['navigate',arguments])},call:function(){this.__q.push(['call',arguments])},subscribe:function(){this.__q.push(['subscribe',arguments])},unsubscribe:function(){this.__q.push(['unsubscribe',arguments])},notfound:function(){this.__q.push(['notfound',arguments])},hold:function(){window.__gsuiHolds++;var r=false;return function(){if(r)return;r=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1)}},holds:function(){return window.__gsuiHolds},connected:function(){return false},offline:function(){return false},reconnect:function(){}});`
+window.__ws||(window.__ws={__q:[],navigate:function(){this.__q.push(['navigate',arguments])},call:function(){this.__q.push(['call',arguments])},subscribe:function(){this.__q.push(['subscribe',arguments])},unsubscribe:function(){this.__q.push(['unsubscribe',arguments])},notfound:function(){this.__q.push(['notfound',arguments])},hold:function(){window.__gsuiHolds++;var r=false;return function(){if(r)return;r=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1)}},holds:function(){return window.__gsuiHolds},connected:function(){return false},offline:function(){return false},reconnect:function(){},restart:function(){var q=this.__q;return new Promise(function(resolve,reject){q.push(['restart',[],resolve,reject])})}});`
 
 // themeInitJS runs synchronously in <head> before the body renders to
 // prevent FOUC. It reads the stored theme from localStorage, applies the
@@ -743,7 +744,7 @@ var __offline=(function(){
 })();
 var __ws=(function(){
   var ws,ready=false,seq=0,inflight={},loaderEl=null,loaderTimer=0,hadClose=false,backoff=500;
-  var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],api,busy={},uncertain={};
+  var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],api,busy={},uncertain={},restartPending=null;
   function message(act,data,id,sub){return JSON.stringify({act:act,data:data||{},id:id||0,sub:sub||'',page:window.__gsuiPage||location.pathname+location.search,version:window.__gsuiVersion})}
   function release(id){var el=busy[id];if(el){el.disabled=false;el.removeAttribute('aria-busy');if(el.form)el.form.removeAttribute('aria-busy');el.classList.remove('gsui-busy','opacity-60','cursor-wait');delete busy[id]}}
   var inst=typeof __gsuiCfg.inst==='string'?__gsuiCfg.inst:'',serverChanged=false,pendingReload='';
@@ -768,11 +769,12 @@ var __ws=(function(){
   // process holds ids the new one never generated: its responses would patch
   // elements that do not exist and the UI would look dead. Reloading is the
   // only way to resync, so a restarted server is treated like a long outage.
-  function onHello(id){
+  // An explicit socket restart reports the change but preserves the page.
+  function onHello(id,restarting){
     if(serverChanged||!inst||!id||id===inst)return;
-    serverChanged=true;
+    if(!restarting)serverChanged=true;
     try{window.dispatchEvent(new CustomEvent('gsui:serverchanged',{detail:{was:inst,now:id}}))}catch(_){}
-    requestReload('server-restart');
+    if(!restarting)requestReload('server-restart');
   }
   function showLoader(){
     // While disconnected there is no pending request; the offline badge already
@@ -819,6 +821,10 @@ var __ws=(function(){
     if(!ws||ws.readyState!==1)return false;
     try{ws.send(msg);return true}catch(_){return false}
   }
+  function releaseCalls(){
+    inflight={};hideLoader();
+    Object.keys(busy).forEach(function(id){release(id)});
+  }
   // markDown is the single place that records "the connection is gone". It
   // runs from onclose and when a silently dead socket is discovered, so the
   // bookkeeping is identical either way.
@@ -828,9 +834,7 @@ var __ws=(function(){
     ready=false;stopPing();
     // Replies for messages that were already on the wire will never arrive;
     // No action is replayed after reconnect.
-    inflight={};
-    hideLoader();
-    Object.keys(busy).forEach(function(id){release(id)});
+    releaseCalls();
     if(!downSince)downSince=Date.now();
     __offline.schedule();hadClose=true;
   }
@@ -855,13 +859,46 @@ var __ws=(function(){
     if(retryTimer){clearTimeout(retryTimer);retryTimer=0}
     connect();
   }
-  function connect(){
+  function finishRestart(err){
+    var pending=restartPending;if(!pending)return;
+    restartPending=null;clearTimeout(pending.timer);
+    if(err)pending.reject(err);else pending.resolve();
+  }
+  function restartNow(){
+    finishRestart(new Error('WebSocket restart superseded'));
+    // Retire the socket before closing it so even a synchronous or late event
+    // cannot turn this intentional replacement into an outage.
+    var old=ws;ws=null;ready=false;stopPing();
+    releaseCalls();uncertain={};hadClose=false;downSince=0;pendingReload='';serverChanged=false;
+    if(retryTimer){clearTimeout(retryTimer);retryTimer=0}
+    __offline.hide();
+    if(old){try{old.close()}catch(_){}}
+    return new Promise(function(resolve,reject){
+      var sock;
+      restartPending={resolve:resolve,reject:reject,timer:setTimeout(function(){
+        finishRestart(new Error('WebSocket restart timed out'));
+        if(ws===sock){ws=null;try{sock.close()}catch(_){}retry()}
+      },10000)};
+      // A fresh native WebSocket handshake uses the browser's current cookies.
+      // Intentional restarts bypass reconnectNow's one-second cooldown.
+      sock=connect(true);
+    });
+  }
+  function retry(){
+    markDown();
+    var d=Math.min(10000,backoff)*(0.75+Math.random()*0.5);backoff=Math.min(10000,backoff*2);
+    if(retryTimer)clearTimeout(retryTimer);
+    retryTimer=setTimeout(function(){retryTimer=0;connect()},d);
+  }
+  function connect(restarting){
     retryTimer=0;
     if(ws&&(ws.readyState===0||ws.readyState===1))return;
     lastAttempt=Date.now();
     // sock is captured per attempt: handlers of an abandoned socket must not
     // touch the state of a newer one (that spawned parallel connections).
-    var sock=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/__ws');
+    var sock;
+    try{sock=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/__ws')}
+    catch(err){if(restarting)finishRestart(err);retry();return;}
     ws=sock;
     sock.onopen=function(){
       if(ws!==sock){try{sock.close()}catch(_){}return;}
@@ -874,6 +911,7 @@ var __ws=(function(){
       // reconnect leaves live regions frozen.
       subs.forEach(function(s){rawSend(message(s.act,s.data,0,s.key))});
       if(Object.keys(inflight).length)showLoader();
+      if(restarting)finishRestart();
       if(hadClose){
         hadClose=false;
         var outage=downSince?Date.now()-downSince:0;downSince=0;
@@ -889,7 +927,7 @@ var __ws=(function(){
     sock.onmessage=function(e){
       if(ws!==sock)return;
       var m;try{m=JSON.parse(e.data)}catch(_){return}
-      if(m&&m.__hello){onHello(m.__hello);return}
+      if(m&&m.__hello){onHello(m.__hello,restarting);return}
       if(!m||(!m.__r&&!m.__push))return;
       if(!m.broadcast&&(!Number.isInteger(m.version)||m.version<1))return;
       if(m&&m.__r){delete inflight[m.id];delete uncertain[m.id];release(m.id);hideLoader()}
@@ -903,12 +941,15 @@ var __ws=(function(){
     };
     sock.onclose=function(){
       if(ws!==sock)return;
-      markDown();
-      var d=Math.min(10000,backoff)*(0.75+Math.random()*0.5);backoff=Math.min(10000,backoff*2);
-      if(retryTimer)clearTimeout(retryTimer);
-      retryTimer=setTimeout(function(){retryTimer=0;connect()},d);
+      if(restarting)finishRestart(new Error('WebSocket restart failed'));
+      retry();
     };
-    sock.onerror=function(){try{sock.close()}catch(_){}};
+    sock.onerror=function(){
+      if(ws!==sock)return;
+      if(restarting)finishRestart(new Error('WebSocket restart failed'));
+      try{sock.close()}catch(_){}
+    };
+    return sock;
   }
   connect();
   // Retry immediately when the browser regains connectivity or the tab is
@@ -970,6 +1011,7 @@ var __ws=(function(){
     connected:function(){return ready&&!!ws&&ws.readyState===1},
     offline:function(){return __offline.visible()},
     reconnect:reconnectNow,
+    restart:restartNow,
     // Managed subscriptions restart once per connection and stop on navigation.
     subscribe:function(act,data){
       var d=Object.assign({},data||{}),key=act+'|'+JSON.stringify(d);
@@ -1001,7 +1043,7 @@ var __ws=(function(){
   };
   return api;
 })();
-if(__wsPre&&__wsPre.__q){__wsPre.__q.forEach(function(it){try{__ws[it[0]].apply(__ws,it[1])}catch(e){console.error('gsui: queued ws call failed:',e)}})}`
+if(__wsPre&&__wsPre.__q){__wsPre.__q.forEach(function(it){try{var result=__ws[it[0]].apply(__ws,it[1]);if(it[2])result.then(it[2],it[3])}catch(e){if(it[3])it[3](e);else console.error('gsui: queued ws call failed:',e)}})}`
 
 // ---------------------------------------------------------------------------
 // WebSocket handler

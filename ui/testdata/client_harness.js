@@ -23,15 +23,21 @@ async function waitFor(cond, ms) {
 }
 
 function makeEl(tag) {
+  const attrs = {}, classes = new Set();
   const el = {
     tagName: (tag || 'div').toUpperCase(), style: {cssText: '', opacity: ''},
     dataset: {}, children: [], parentNode: null, className: '', textContent: '',
-    classList: {add() {}, remove() {}, contains: () => false},
+    classList: {
+      add(...names) { names.forEach(name => classes.add(name)); },
+      remove(...names) { names.forEach(name => classes.delete(name)); },
+      contains: name => classes.has(name),
+    },
     appendChild(c) { c.parentNode = el; el.children.push(c); return c; },
     removeChild(c) { el.children = el.children.filter(x => x !== c); c.parentNode = null; },
     remove() { if (el.parentNode) el.parentNode.removeChild(el); },
     querySelector: () => null, querySelectorAll: () => [],
-    addEventListener() {}, getAttribute: () => null, setAttribute() {}, removeAttribute() {},
+    addEventListener() {}, getAttribute: name => attrs[name] || null,
+    setAttribute(name, value) { attrs[name] = value; }, removeAttribute(name) { delete attrs[name]; },
   };
   return el;
 }
@@ -127,6 +133,154 @@ function makeEnv() {
 }
 
 const tests = {
+  async plainReconnectKeepsLiveSocket() {
+    const env = makeEnv();
+    const ws = env.run({grace: 0, reloadAfter: 0, keepAlive: -1});
+    const a = env.latest();
+    ws.reconnect();
+    check('plain reconnect keeps CONNECTING socket', env.sockets.length === 1 && a.readyState === 0);
+    a.accept();
+    ws.reconnect();
+    check('plain reconnect keeps OPEN socket', env.sockets.length === 1 && a.readyState === 1 && ws.connected());
+    await sleep(20);
+    check('plain reconnect never schedules an outage for a live socket', !env.badge() && env.reloads() === 0);
+  },
+
+  async restartReplacesOpenSocketWithoutChangingPage() {
+    const env = makeEnv();
+    const ws = env.run({grace: 10, reloadAfter: 10, keepAlive: -1, inst: 'srv-1'});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    const draft = makeEl('textarea');
+    draft.id = 'draft'; draft.value = 'Unsaved compose text';
+    env.body.appendChild(draft);
+    const button = makeEl('button'); button.form = makeEl('form');
+    ws.subscribe('clock.start', {id: 'compose'});
+    ws.call('save', {}, null, button);
+    await sleep(150); // let the pending call's loader appear
+    check('pending call is busy with a loader', button.disabled && button.form.getAttribute('aria-busy') &&
+      env.body.children.some(c => c.id === '__ws-loader'));
+    let reconnected = 0, resolved = false;
+    env.sandbox.window.addEventListener('gsui:reconnected', () => reconnected++);
+    const pending = ws.restart().then(() => { resolved = true; });
+    const b = env.latest();
+    check('restart immediately closes OPEN socket and creates a fresh one',
+      a.readyState === 2 && b !== a && b.readyState === 0 && env.sockets.length === 2);
+    check('restart waits for the replacement socket to open', !resolved && !ws.connected());
+    check('restart releases button, form and busy classes', button.disabled === false &&
+      !button.getAttribute('aria-busy') && !button.form.getAttribute('aria-busy') && !button.classList.contains('gsui-busy'));
+    await sleep(180); // beyond both the outage threshold and loader fade
+    check('restart does not flash offline or leave a loader', !env.badge() && !ws.offline() &&
+      !env.body.children.some(c => c.id === '__ws-loader'));
+    b.accept();
+    await pending;
+    hello(b, 'srv-2'); // even an instance change must not reload this restart
+    const sent = b.sent.map(m => JSON.parse(m));
+    check('restart resolves on open', resolved && ws.connected());
+    check('restart re-arms managed subscriptions exactly once',
+      sent.length === 1 && sent[0].act === 'clock.start' && sent[0].sub === 'clock.start|{"id":"compose"}');
+    check('restart never replays in-flight calls', !sent.some(m => m.act === 'save'));
+    check('restart preserves the same DOM node and form value', env.sandbox.document.getElementById('draft') === draft &&
+      draft.value === 'Unsaved compose text');
+    check('restart does not navigate, reload, change page version or emit an outage event',
+      env.history.pushed.length === 0 && env.reloads() === 0 && env.sandbox.window.__gsuiVersion === 1 && reconnected === 0);
+
+    const currentID = ws.call('current', {}, null, button);
+    a.onclose({}); a.onerror({}); a.onopen({});
+    a.deliver(JSON.stringify({__r: 1, id: currentID, version: 1, js: 'window.staleRestartPatch=true'}));
+    check('retired socket handlers cannot release new calls, patch the DOM or close the new socket',
+      button.disabled === true && !env.sandbox.window.staleRestartPatch && ws.connected() && b.readyState === 1);
+    b.deliver(JSON.stringify({__r: 1, id: currentID, version: 1, js: ''}));
+    await sleep(600); // a stale close must not schedule another connection
+    check('retired socket does not create parallel connections', env.sockets.length === 2 && ws.connected());
+  },
+
+  async restartReplacesConnectingSocketAndSupersedesEarlierRestart() {
+    const env = makeEnv();
+    const ws = env.run({grace: 0, reloadAfter: 0, keepAlive: -1});
+    const a = env.latest();
+    const first = ws.restart().then(() => null, error => error);
+    const b = env.latest();
+    check('restart replaces a CONNECTING socket immediately', a.readyState === 2 && b !== a);
+    const second = ws.restart();
+    const c = env.latest();
+    const error = await first;
+    check('superseded restart rejects its own Promise', error && /superseded/.test(error.message));
+    b.onopen({}); b.onclose({}); b.onerror({});
+    c.accept();
+    await second;
+    await sleep(20);
+    check('latest restart owns the connection', b.readyState !== 1 && c.readyState === 1 && ws.connected() &&
+      env.sockets.length === 3 && !env.badge() && env.reloads() === 0);
+  },
+
+  async restartDoesNotDisableFutureServerRestartDetection() {
+    const env = makeEnv();
+    const ws = env.run({grace: -1, reloadAfter: 15000, keepAlive: -1, inst: 'srv-1'});
+    env.latest().accept();
+    const pending = ws.restart();
+    const b = env.latest();
+    b.accept(); hello(b, 'srv-2');
+    await pending;
+    check('forced restart preserves page on server change', env.reloads() === 0);
+    b.drop();
+    await waitFor(() => env.latest() !== b, 2000);
+    env.latest().accept(); hello(env.latest(), 'srv-2');
+    check('later ordinary reconnect still detects a changed server', env.reloads() === 1);
+  },
+
+  async restartRejectsOnHandshakeFailure() {
+    for (const fail of ['error', 'close', 'constructor']) {
+      const env = makeEnv();
+      const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1});
+      env.latest().accept();
+      if (fail === 'constructor') env.sandbox.WebSocket = class { constructor() { throw new Error('handshake construction failed'); } };
+      const pending = ws.restart().then(() => null, error => error);
+      if (fail === 'error') env.latest().onerror({});
+      if (fail === 'close') env.latest().drop();
+      const error = await pending;
+      check('restart rejects on ' + fail, error && /failed/.test(error.message));
+      // Restore the constructor and recover using the normal retry path.
+      env.sandbox.WebSocket = env.sockets[0].constructor;
+      const failed = env.latest();
+      await waitFor(() => env.latest() !== failed, 2000);
+      env.latest().accept();
+      check('normal recovery remains available after ' + fail, ws.connected());
+    }
+  },
+
+  async restartRejectsOnTimeoutAndRetiresHungSocket() {
+    const env = makeEnv();
+    // Advance only the restart deadline; do not wait ten seconds in the suite.
+    env.sandbox.setTimeout = (fn, ms) => setTimeout(fn, ms === 10000 ? 25 : ms);
+    const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1});
+    env.latest().accept();
+    const pending = ws.restart().then(() => null, error => error);
+    const hung = env.latest();
+    const error = await pending;
+    check('restart rejects after its timeout', error && /timed out/.test(error.message));
+    check('timeout closes the hung attempt', hung.readyState !== 0 && !ws.connected());
+    hung.onopen({});
+    check('timed-out attempt cannot become ready', !ws.connected());
+  },
+
+  async preClientRestartPromiseSurvivesHandover() {
+    for (const fail of [false, true]) {
+      const env = makeEnv();
+      let pending, settled = false;
+      const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1}, sandbox => {
+        sandbox.window.__ws.subscribe('clock.start');
+        pending = sandbox.window.__ws.restart().then(() => { settled = true; return null; }, error => { settled = true; return error; });
+      });
+      check('stub restart creates a Promise and waits for open', pending && !settled && env.sockets.length === 2);
+      if (fail) env.latest().drop(); else env.latest().accept();
+      const error = await pending;
+      check('stub Promise forwards ' + (fail ? 'failure' : 'success'), settled && (fail ? !!error : error === null && ws.connected()));
+      if (!fail) check('stub subscription survives restart handover',
+        env.latest().sent.filter(m => JSON.parse(m).act === 'clock.start').length === 1);
+    }
+  },
+
   async repliesOnlyReleaseTheirOwnButton() {
     const env=makeEnv(), ws=env.run({grace:-1,reloadAfter:-1,keepAlive:-1});
     env.latest().accept();
