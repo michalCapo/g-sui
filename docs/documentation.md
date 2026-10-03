@@ -1919,6 +1919,26 @@ route resolution. `Authorize` runs with an empty action for page rendering and
 the action name for user events. `Identity` is resolved again for every action:
 validate expiry/revocation in your session store, not only at WebSocket upgrade.
 
+For rejected WebSocket actions, return `ui.Deny(result)` from `Authorize` to
+send that `Result` instead of the default error toast:
+
+```go
+app.Authorize = func(ctx *ui.Context, action string) error {
+    if !sessionValid(ctx.User()) {
+        return ui.Deny(ui.Result{}.Run(ui.Redirect("/session/refresh")))
+    }
+    return checkAccess(ctx.User(), ctx.Request.URL.Path, action)
+}
+```
+
+`Deny` also works from `Identity` and through errors wrapped with `%w`.
+`ui.Deny(ui.Result{})` rejects without browser effects. Other errors keep the
+default `Notify("error", "Request denied or page expired")` reply. The action
+handler does not run, and no subscription is registered. If the denial Result
+cannot be built, the client receives the standard action-error toast.
+Initial HTTP page denials still return 403; denied live navigation still falls
+back to HTTP.
+
 Wrapping `app.Handler()` externally cannot make path-based middleware run again
 inside a WebSocket. Move that protection to `Use`/`Authorize`. Actions are globally
 registered: authorizing a public page alone does not authorize an unrelated action.
@@ -1928,6 +1948,8 @@ DOM IDs and client page versions are not authentication credentials.
 An open WebSocket has its handshake cookies. Login, logout or cookie changes
 should use an HTTP endpoint and full redirect. Middleware must not depend on
 setting a cookie during a live action.
+An app may instead use a trusted custom denial effect to refresh cookies through
+HTTP, then call `await window.__ws.restart()` to reconnect with the new cookies.
 
 ### Typed actions and region refresh
 
@@ -2116,6 +2138,17 @@ Subscriptions start after their response is sent, cancel on removal/navigation/
 disconnect, and restart on reconnect. Name plus data identifies a subscription;
 use different data for independent instances. Removing one does not cancel other
 subscriptions. A missing target only cancels its sending subscription.
+
+Only actions registered with `app.Subscription` or `ui.RegisterSubscription`
+retain subscription state; ordinary actions ignore a frame's `sub` field.
+Registration happens only after `Authorize` succeeds. Subscription IDs are
+limited to 256 bytes (the client uses name plus JSON data as the ID). Keep
+subscription data small. Each connection may retain at most 64 IDs by default.
+Set `app.MaxSubscriptions` before serving to choose a positive limit; zero or
+negative values use 64. Over-long IDs and new IDs at capacity are rejected
+without retaining an entry or context, and existing subscriptions are never
+silently evicted. Restarting an existing ID is allowed at capacity. Unsubscribe
+frees its slot; navigation and disconnect clear all slots.
 
 Pass `ctx.Context()` to blocking work and stop on cancellation. Reads continue
 while an action runs so disconnect can cancel it. Actions remain serial per

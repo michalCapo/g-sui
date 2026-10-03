@@ -522,6 +522,19 @@ func TestRegisterSubscriptionDecodesAndValidates(t *testing.T) {
 	if reply := send("b", map[string]any{}); !strings.Contains(reply, "Unable to complete") {
 		t.Fatalf("invalid data not rejected: %s", reply)
 	}
+	if reply := send("c", map[string]any{"folder": 42}); !strings.Contains(reply, "Invalid input") {
+		t.Fatalf("invalid input not rejected: %s", reply)
+	}
+	app.mu.RLock()
+	for _, st := range app.connStates {
+		if len(st.subscriptions) != 1 {
+			t.Errorf("invalid subscription retained an entry: %d", len(st.subscriptions))
+		}
+		if _, ok := st.subscriptions["a"]; !ok {
+			t.Error("invalid subscription removed a valid subscription")
+		}
+	}
+	app.mu.RUnlock()
 	select {
 	case folder := <-got:
 		t.Fatalf("invalid subscription started: %q", folder)

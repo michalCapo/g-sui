@@ -52,24 +52,31 @@ type LayoutHandler func(ctx *Context) *Node
 // and named actions (WS). Pages return a *Node tree that compiles to JS
 // for the initial render. Typed actions return Result effects.
 type App struct {
-	mu          sync.RWMutex
-	actions     map[string]actionHandler
-	clients     map[*websocket.Conn]bool
-	connStates  map[*websocket.Conn]*connState
-	mux         *http.ServeMux
-	pageMux     *http.ServeMux
-	layout      LayoutHandler
-	setupOnce   sync.Once
-	middleware  []func(http.Handler) http.Handler
-	widgets     map[string]string
-	pageHandler http.Handler
+	mu                  sync.RWMutex
+	actions             map[string]actionHandler
+	subscriptionActions map[string]bool
+	clients             map[*websocket.Conn]bool
+	connStates          map[*websocket.Conn]*connState
+	mux                 *http.ServeMux
+	pageMux             *http.ServeMux
+	layout              LayoutHandler
+	setupOnce           sync.Once
+	middleware          []func(http.Handler) http.Handler
+	widgets             map[string]string
+	pageHandler         http.Handler
 	// Authorize runs for initial pages, live navigation and every user action.
 	// An empty action name denotes a page render. Check object permissions in
 	// action handlers as well. Configure before serving requests.
+	// Return Deny(result) to send custom effects when rejecting a WS action.
 	Authorize func(*Context, string) error
 	// Identity resolves the current user on every request/action. Cookies on an
 	// existing socket are the handshake cookies; validate expiry in this hook.
 	Identity func(*http.Request) (any, error)
+
+	// MaxSubscriptions limits subscription IDs retained per connection.
+	// Values <= 0 use the default of 64. Configure before serving requests.
+	// New IDs are rejected at the limit; existing IDs may be restarted.
+	MaxSubscriptions int
 
 	// Favicon is the URL path for the site favicon (e.g. "/assets/favicon.svg").
 	// When set, a <link rel="icon"> tag is emitted in the HTML shell.
@@ -142,11 +149,12 @@ type actionHandler func(ctx *Context) string
 // NewApp creates a new application instance.
 func NewApp() *App {
 	return &App{
-		actions:    make(map[string]actionHandler),
-		clients:    make(map[*websocket.Conn]bool),
-		connStates: make(map[*websocket.Conn]*connState),
-		mux:        http.NewServeMux(),
-		pageMux:    http.NewServeMux(),
+		actions:             make(map[string]actionHandler),
+		subscriptionActions: make(map[string]bool),
+		clients:             make(map[*websocket.Conn]bool),
+		connStates:          make(map[*websocket.Conn]*connState),
+		mux:                 http.NewServeMux(),
+		pageMux:             http.NewServeMux(),
 	}
 }
 
@@ -200,6 +208,7 @@ func (app *App) CSS(urls []string, css string) {
 func (app *App) action(name string, handler actionHandler) {
 	app.mu.Lock()
 	app.actions[name] = handler
+	delete(app.subscriptionActions, name)
 	app.mu.Unlock()
 }
 
@@ -1213,15 +1222,14 @@ func (app *App) handleWS(ws *websocket.Conn) {
 
 		// Build context with current push context
 		ctx := &Context{
-			Request:      ws.Request(),
-			PathParams:   make(map[string]string),
-			Query:        make(map[string]string),
-			wsConn:       ws,
-			wsData:       msg.Data,
-			app:          app,
-			pushCtx:      app.pushCtxForConn(ws),
-			version:      msg.Version,
-			subscription: msg.Sub,
+			Request:    ws.Request(),
+			PathParams: make(map[string]string),
+			Query:      make(map[string]string),
+			wsConn:     ws,
+			wsData:     msg.Data,
+			app:        app,
+			pushCtx:    app.pushCtxForConn(ws),
+			version:    msg.Version,
 		}
 
 		// Execute handler -> get JS string (recover from panics)
@@ -1233,6 +1241,13 @@ func (app *App) handleWS(ws *websocket.Conn) {
 				}
 			}()
 			if err := app.prepareAction(ctx, msg); err != nil {
+				if denied, ok := errors.AsType[*denialError](err); ok {
+					js, buildErr := denied.result.build(ctx)
+					if buildErr != nil {
+						return actionError(ctx, buildErr)
+					}
+					return js
+				}
 				return Notify("error", "Request denied or page expired").script()
 			}
 			return handler(ctx)

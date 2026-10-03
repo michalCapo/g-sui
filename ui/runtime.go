@@ -87,6 +87,7 @@ func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
 	app.mu.RLock()
 	st := app.connStates[ctx.wsConn]
 	previous, version := st.request, st.version
+	isSubscription := app.subscriptionActions[msg.Act]
 	ctx.Session = st.session
 	app.mu.RUnlock()
 	if msg.Act == "__nav" {
@@ -117,21 +118,34 @@ func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
 		return err
 	}
 	app.mu.Lock()
+	defer app.mu.Unlock()
+	if isSubscription && msg.Sub != "" {
+		if len(msg.Sub) > 256 {
+			return errors.New("subscription ID exceeds 256 bytes")
+		}
+		limit := app.MaxSubscriptions
+		if limit <= 0 {
+			limit = 64
+		}
+		if _, exists := st.subscriptions[msg.Sub]; !exists && len(st.subscriptions) >= limit {
+			return errors.New("subscription limit reached")
+		}
+	}
 	if previous == nil {
 		st.version = msg.Version
 	}
 	if path != "" {
 		st.request = ctx.Request
 	}
-	if msg.Sub != "" {
+	if isSubscription && msg.Sub != "" {
 		if old, ok := st.subscriptions[msg.Sub]; ok {
 			old.cancel()
 		}
 		life, cancel := context.WithCancel(st.ctx)
 		st.subscriptions[msg.Sub] = subscription{name: msg.Act, cancel: cancel}
 		ctx.pushCtx = life
+		ctx.subscription = msg.Sub
 	}
-	app.mu.Unlock()
 	return nil
 }
 
@@ -268,10 +282,12 @@ func RegisterSubscription[T any](app *App, name string, run func(*Context, T) er
 		}
 		var input T
 		if err := ctx.body(&input); err != nil {
+			app.cancelSubscription(ctx.wsConn, "", ctx.subscription)
 			return Notify("error", "Invalid input").script()
 		}
 		if valid, ok := any(&input).(interface{ Validate() error }); ok {
 			if err := valid.Validate(); err != nil {
+				app.cancelSubscription(ctx.wsConn, "", ctx.subscription)
 				return actionError(ctx, err)
 			}
 		}
@@ -289,6 +305,9 @@ func RegisterSubscription[T any](app *App, name string, run func(*Context, T) er
 		})
 		return ""
 	})
+	app.mu.Lock()
+	app.subscriptionActions[name] = true
+	app.mu.Unlock()
 }
 
 // Subscribe attaches a subscription to this node's lifetime. Optional data
@@ -342,6 +361,15 @@ func (n *Node) OnInput(action *Action, delay ...time.Duration) *Node {
 type Result struct {
 	effects []func(*Context) (string, error)
 }
+
+type denialError struct{ result Result }
+
+func (*denialError) Error() string { return "request denied" }
+
+// Deny rejects a WebSocket action with result instead of the default error toast.
+// Return it from App.Authorize (or App.Identity); wrapping with %w is supported.
+// HTTP page rendering still returns 403, and denied navigation redirects to HTTP.
+func Deny(result Result) error { return &denialError{result: result} }
 
 func (r Result) effect(fn func(*Context) (string, error)) Result {
 	r.effects = append(append([]func(*Context) (string, error){}, r.effects...), fn)
