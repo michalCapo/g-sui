@@ -6,3 +6,24 @@
 
 tmp/
 __debug*
+
+# Command-owned scratch directories (also removed by Makefile traps).
+/.gsui-air.*/
+
+# Local build/test output, logs, dependencies, and caches.
+*.test
+*.prof
+*.log
+/coverage.out
+/coverage.html
+.cache/
+node_modules/
+
+# Local databases and credentials. Keep examples trackable.
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+!.env.sample

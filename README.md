@@ -9,7 +9,7 @@ g-sui compiles Go node trees into pure JavaScript. The runtime sends versioned m
 Full API documentation: [`docs/documentation.md`](docs/documentation.md)
 
 For SPA-style applications written in Go, start with the
-[server-driven applications documentation](docs/documentation.md#server-driven-applications) and `go run ./example`.
+[server-driven applications documentation](docs/documentation.md#server-driven-applications) and `make example`.
 It covers live links, typed actions/forms, region refresh, server-owned views,
 URL-backed tables, shared authorization and cancellable subscriptions.
 
@@ -21,7 +21,7 @@ WebSocket connections are same-origin by default; set `App.AllowedOrigins` for a
 go get github.com/michalCapo/g-sui
 ```
 
-Requires Go 1.24+.
+Requires Go 1.26+ (see `go.mod`).
 
 ## Quick Start
 
@@ -129,11 +129,41 @@ do not write raw JavaScript. Raw JS is only available through `Unsafe*` APIs.
 ## Examples
 
 ```bash
-go run example/main.go
+make example
 # Open http://localhost:1424
 ```
 
 The example app includes pages demonstrating components, forms, tables, data panels, real-time updates, navigation, and more.
+
+## Development commands
+
+Run `make` for help. Commands use GNU Make and Bash from the repository root:
+
+- `make run`: example with Air live reload, using the existing Go watch settings.
+- `make example`: example without live reload, at `http://localhost:1424`.
+- `make check`: go fix diagnostics, formatting, vet, staticcheck, optional gopls
+  and golangci-lint (including revive rules), deadcode, build, and tests.
+  Checks continue after failures and return a failing status if any check fails.
+- `make build`: build all packages.
+- `make test`: Go tests; install Node to also run the client runtime tests.
+- `make test-race`: Go tests with the race detector.
+- `make test-browser`: browser regression checks against an already running example.
+  Requires Node and Playwright on `NODE_PATH`, plus Chromium. Set `GSUI_URL` to
+  select the example address and `GSUI_BROWSER` to select a Chromium executable.
+- `make tidy`: update module metadata.
+- `make release`: check tracked changes, tidy modules, create the next
+  `v1.MINOR.PATCH` annotated tag, push it and the current branch, and register
+  the version with the Go module proxy. This command publishes a release.
+
+`make check` requires `staticcheck` and `deadcode` on `PATH`; `gopls` and
+`golangci-lint` are optional. `make run` requires Air. Existing Go environment
+variables and tool configuration still apply. Temporary files use `TMPDIR`
+(default `/tmp`) and are removed on success, failure, or a handled signal.
+Air's temporary logs/state use a separate `.gsui-air.*` directory, also removed
+on exit. Dependencies, tool caches, module changes, and user files are kept.
+
+Configure application launchers with `make run`. In Libro, use its application controls
+with `make run` or `make example` configured as the project start command.
 
 ## Server Actions
 

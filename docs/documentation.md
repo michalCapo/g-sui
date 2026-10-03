@@ -1655,7 +1655,7 @@ With `ReconnectReloadAfterMs = -1` no reload ever happens, including after a res
 The `example/` directory contains a full working application demonstrating all features:
 
 ```bash
-go run example/main.go
+make example
 # Open http://localhost:1424
 ```
 
@@ -1686,24 +1686,24 @@ go run example/main.go
 
 ## Release
 
-### Release Script
+### Release Command
 
-The `release` script creates and pushes version tags:
+`make release` creates and pushes version tags:
 
 ```bash
-./release
+make release
 ```
 
-- Versioning format: `v1.XXX` (e.g., `v1.001`, `v1.002`, `v1.003`)
-- Auto-increments by `0.001` from the latest tag
+- Versioning format: `v1.MINOR.PATCH` (e.g., `v1.1.0`, `v1.1.1`)
+- Increments the patch of the latest `v1.*` tag; starts at `v1.1.0`
 - Ensures clean working tree before tagging
-- Runs `go mod tidy`
+- Runs `make tidy`
 - Creates annotated git tag and pushes to remote
 
 ### Using as a Dependency
 
 ```bash
-go get github.com/michalCapo/g-sui@v1.001
+go get github.com/michalCapo/g-sui@v1.1.0
 ```
 
 ---
@@ -1859,7 +1859,7 @@ loading, theme configuration and the existing Node/JavaScript renderer are uncha
 Run the component showcase:
 
 ```sh
-go run ./example
+make example
 ## http://127.0.0.1:1424
 ```
 
@@ -2125,11 +2125,15 @@ the existing broadcast API; tenant-scoped fan-out belongs in the application.
 
 ### Verification
 
+Run `make` for all commands; see [development commands](../README.md#development-commands)
+for tools, environment variables, and cleanup behavior. In Libro, start the
+example through its application controls.
+
 ```sh
-go test -race ./...
-go run ./example
+make test-race
+make example
 ## In another terminal, with Playwright installed:
-node ui/testdata/browser_runtime.cjs
+make test-browser
 ```
 
 The browser check covers typed forms, table search/exports, menu routes,

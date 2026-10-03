@@ -1,4 +1,4 @@
-// Run the example app first. Requires Playwright on Node's module path.
+// Run make example first, then make test-browser. Requires Playwright on Node's module path.
 // GSUI_BROWSER optionally selects an already installed Chromium executable.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
