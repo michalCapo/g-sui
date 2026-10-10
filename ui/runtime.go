@@ -81,6 +81,9 @@ func (ctx *Context) setRequest(r *http.Request) {
 }
 
 func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
+	if msg.Act == "__ping" {
+		return nil
+	} // keep-alive does nothing, so it needs no page or authorization
 	if msg.Version < 1 {
 		return errors.New("page version required")
 	}

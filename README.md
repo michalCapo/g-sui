@@ -142,7 +142,8 @@ Run `make` for help. Commands use GNU Make and Bash from the repository root:
 - `make run`: example with Air live reload, using the existing Go watch settings.
 - `make example`: example without live reload, at `http://localhost:1424`.
 - `make check`: go fix diagnostics, formatting, vet, staticcheck, optional gopls
-  and golangci-lint (including revive rules), deadcode, build, and tests.
+  and golangci-lint (including revive rules), deadcode (unexported code, tests
+  count as callers), build, and tests.
   Checks continue after failures and return a failing status if any check fails.
 - `make build`: build all packages.
 - `make test`: Go tests; install Node to also run the client runtime tests.

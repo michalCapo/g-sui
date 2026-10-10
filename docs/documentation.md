@@ -1918,6 +1918,8 @@ region refresh and page actions. Middleware-added request context values survive
 route resolution. `Authorize` runs with an empty action for page rendering and
 the action name for user events. `Identity` is resolved again for every action:
 validate expiry/revocation in your session store, not only at WebSocket upgrade.
+The internal keep-alive ping skips page checks and `Authorize`, so public pages
+without a session do not get periodic denial toasts.
 
 For rejected WebSocket actions, return `ui.Deny(result)` from `Authorize` to
 send that `Result` instead of the default error toast:

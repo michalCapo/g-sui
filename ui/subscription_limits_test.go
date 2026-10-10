@@ -136,7 +136,7 @@ func TestSubscriptionAuthorizationBeforeRegistration(t *testing.T) {
 	app.Subscription("feed", func(*Context) error { return nil })
 	st, newContext := subscriptionConnection(t, app)
 	allowed := true
-	app.Authorize = func(ctx *Context, action string) error {
+	app.Authorize = func(ctx *Context, _ string) error {
 		if ctx.pushCtx != st.ctx || ctx.subscription != "" {
 			t.Fatal("subscription context created before authorization")
 		}

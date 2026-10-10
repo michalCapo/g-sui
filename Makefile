@@ -159,7 +159,16 @@ check:
 	fi
 	echo
 
-	run deadcode ./...
+	# Exported API is the library surface, so report only dead unexported code.
+	echo "==> deadcode -test ./..."
+	dead="$$(deadcode -test ./...)" || status=1
+	dead="$$(grep -Ev 'unreachable func: ([A-Za-z0-9_]+\.)?[A-Z]' <<<"$$dead")"
+	if [[ -n "$$dead" ]]; then
+	  status=1
+	  echo "$$dead" >&2
+	fi
+	echo
+
 	run "$$MAKE" --no-print-directory build
 	run "$$MAKE" --no-print-directory test
 

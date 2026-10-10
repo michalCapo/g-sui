@@ -494,7 +494,7 @@ func TestRegisterSubscriptionDecodesAndValidates(t *testing.T) {
 	app := NewApp()
 	app.Page("/", func(*Context) *Node { return Div() })
 	got := make(chan string, 1)
-	RegisterSubscription(app, "feed", func(ctx *Context, in feedInput) error {
+	RegisterSubscription(app, "feed", func(_ *Context, in feedInput) error {
 		got <- in.Folder
 		return nil
 	})
@@ -550,4 +550,14 @@ func TestSubscribeRejectsNonObjectData(t *testing.T) {
 		}
 	}()
 	Div().Subscribe("feed", "inbox")
+}
+
+func TestRuntimePingSkipsAuthorization(t *testing.T) {
+	app := NewApp()
+	app.Page("/", func(*Context) *Node { return Div() })
+	app.Authorize = func(*Context, string) error { return errors.New("no session") }
+	ws := runtimeSocket(t, app)
+	if js := runtimeCall(t, ws, "__ping", "", 0, nil); js != "" {
+		t.Fatalf("ping reply %q", js)
+	}
 }
