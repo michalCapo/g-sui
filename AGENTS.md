@@ -57,6 +57,8 @@ local actions.
 | Combine updates from several helpers | `ui.Merge(a, b)` / `r.Add(...)` |
 | Run later | `ui.Delay(2*time.Second, action)` |
 | Toast | `ui.Toast(msg)`, `ui.Notify(variant, msg)`; in a handler `Result.Toast` |
+| Skeleton while a page loads | `app.Skeleton(prefix, ui.SkeletonList())`; style with `ui.SkeletonStyle{...}` |
+| No loading overlay | `app.Loader = ui.LoaderNone`, or `action.NoLoader()` for one call |
 | Custom reply when authorization rejects | Return `ui.Deny(result)` from `app.Authorize` |
 | Copy to clipboard | `ui.CopyText(text)`, `ui.CopyFrom(inputID)` |
 | Set text or input value | `ui.SetText(id, text)`, `ui.SetValue(id, value)` |

@@ -93,7 +93,7 @@ do not write raw JavaScript. Raw JS is only available through `Unsafe*` APIs.
 - **Progress** -- gradient, striped, animated, indeterminate, labels
 - **Step Progress** -- step X of Y with progress bar
 - **Confirm Dialog** -- overlay with confirm/cancel actions
-- **Skeleton Loaders** -- table, cards, list, component, page, form
+- **Skeleton Loaders** -- table, cards, list, component, page, form; themeable with `SkeletonStyle`, shown during slow navigation with `app.Skeleton(prefix, node)`; `app.Loader = ui.LoaderNone` drops the overlay
 - **Markdown** -- goldmark renderer
 - **Icon** -- Material Icons Round with `IconText` helper, inline SVG with automatic namespace
 - **Theme Switcher** -- System/Light/Dark toggle

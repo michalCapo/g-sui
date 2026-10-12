@@ -17,6 +17,9 @@ const contentID = "__content__"
 func main() {
 	app := r.NewApp()
 	app.Layout(layout)
+	// Pages with a skeleton (see pages/skeleton.go) show it while they load;
+	// no page-wide overlay.
+	app.Loader = r.LoaderNone
 
 	// Register all pages (each file owns its routes + actions)
 	pages.RegisterShowcase(app)

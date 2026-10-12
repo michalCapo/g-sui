@@ -85,7 +85,8 @@ func TestPingActionIsRegistered(t *testing.T) {
 
 // TestClientJSBehavior runs the embedded client source in Node against a fake
 // DOM and a scriptable WebSocket (ui/testdata/client_harness.js), covering the
-// reconnect state machine, rejected offline calls, holds, subscriptions and the badge.
+// reconnect state machine, rejected offline calls, holds, subscriptions, the
+// badge, the loader and navigation skeletons.
 func TestClientJSBehavior(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {
@@ -100,6 +101,15 @@ func TestClientJSBehavior(t *testing.T) {
 	if err := os.WriteFile(client, []byte(wsClientJS), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	app := NewApp()
+	app.InstanceID = "harness"
+	app.Loader = LoaderNone
+	app.Skeleton("/mail", SkeletonList())
+	app.Skeleton("/mail/drafts", nil)
+	cfg := filepath.Join(dir, "cfg.js")
+	if err := os.WriteFile(cfg, []byte(app.wsConfigJS()), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	// Copy the harness through the test binary so it counts as a test input:
 	// node reads it in a subprocess, which go test's cache would not notice.
 	harness, err := os.ReadFile("testdata/client_harness.js")
@@ -110,7 +120,7 @@ func TestClientJSBehavior(t *testing.T) {
 	if err := os.WriteFile(harnessCopy, harness, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command(node, harnessCopy, stub, client).CombinedOutput()
+	out, err := exec.Command(node, harnessCopy, stub, client, cfg).CombinedOutput()
 	if err != nil {
 		t.Fatalf("client harness failed: %v\n%s", err, out)
 	}

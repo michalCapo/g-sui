@@ -2,12 +2,14 @@
 // Runs the real client source in a fake DOM against a scriptable WebSocket so
 // the reconnect state machine is exercised, not just pattern-matched.
 //
-// Usage: node client_harness.js <stub.js> <client.js>
+// Usage: node client_harness.js <stub.js> <client.js> <cfg.js>
+// cfg.js is the __gsuiCfg script of an app with navigation skeletons.
 const fs = require('fs');
 const vm = require('vm');
 
 const stubSrc = fs.readFileSync(process.argv[2], 'utf8');
 const clientSrc = fs.readFileSync(process.argv[3], 'utf8');
+const cfgSrc = fs.readFileSync(process.argv[4], 'utf8');
 
 let failures = 0;
 function check(name, cond, extra) {
@@ -25,18 +27,25 @@ async function waitFor(cond, ms) {
 function makeEl(tag) {
   const attrs = {}, classes = new Set();
   const el = {
-    tagName: (tag || 'div').toUpperCase(), style: {cssText: '', opacity: ''},
-    dataset: {}, children: [], parentNode: null, className: '', textContent: '',
+    tagName: (tag || 'div').toUpperCase(), style: {cssText: '', opacity: '', display: ''},
+    dataset: {}, children: [], parentNode: null, className: '', textContent: '', id: '',
+    get firstChild() { return el.children[0] || null; },
     classList: {
       add(...names) { names.forEach(name => classes.add(name)); },
       remove(...names) { names.forEach(name => classes.delete(name)); },
       contains: name => classes.has(name),
     },
     appendChild(c) { c.parentNode = el; el.children.push(c); return c; },
+    insertBefore(c, ref) {
+      c.parentNode = el; const i = el.children.indexOf(ref);
+      if (i < 0) el.children.push(c); else el.children.splice(i, 0, c);
+      return c;
+    },
+    hasAttribute: name => name in attrs, focus() {},
     removeChild(c) { el.children = el.children.filter(x => x !== c); c.parentNode = null; },
     remove() { if (el.parentNode) el.parentNode.removeChild(el); },
     querySelector: () => null, querySelectorAll: () => [],
-    addEventListener() {}, getAttribute: name => attrs[name] || null,
+    addEventListener() {}, getAttribute: name => name in attrs ? attrs[name] : null,
     setAttribute(name, value) { attrs[name] = value; }, removeAttribute(name) { delete attrs[name]; },
   };
   return el;
@@ -87,7 +96,10 @@ function makeEnv() {
   const document = {
     documentElement: documentEl, body, hidden: false, readyState: 'complete',
     createElement: makeEl,
-    getElementById: id => body.children.find(c => c.id === id) || null,
+    getElementById: id => {
+      const find = el => el.children.reduce((hit, c) => hit || (c.id === id ? c : find(c)), null);
+      return find(body);
+    },
     querySelector: () => null, querySelectorAll: () => [],
     addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
     fonts: null,
@@ -96,19 +108,29 @@ function makeEnv() {
     addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
     dispatchEvent(e) { (listeners[e.type] || []).forEach(fn => fn(e)); return true; },
     matchMedia: () => ({matches: false, addEventListener() {}}),
+    scrollTo() {}, scrollX: 0, scrollY: 0,
   };
-  const location = {protocol: 'http:', host: 'x', pathname: '/', search: '', reload() { reloads++; }};
+  const location = {
+    protocol: 'http:', host: 'x', origin: 'http://x', pathname: '/', search: '', hash: '', reload() { reloads++; },
+    get href() { return 'http://x' + location.pathname + location.search + location.hash; },
+    assign(url) { location.assigned = url; },
+  };
 
-  const history = {pushed: [], pushState(_state, _title, url) { history.pushed.push(url); location.pathname = url; }};
+  const history = {
+    pushed: [], state: null,
+    pushState(state, _title, url) { history.pushed.push(url); history.state = state; location.pathname = url; },
+    replaceState(state) { history.state = state; },
+  };
   const sandbox = {
-    window, document, location, history, WebSocket: FakeWebSocket, console,
+    window, document, location, history, WebSocket: FakeWebSocket, console, URL,
     setTimeout, clearTimeout, setInterval, clearInterval, JSON, Object, Date, Math,
     requestAnimationFrame: fn => setTimeout(fn, 0),
     CustomEvent: class { constructor(t, o) { this.type = t; this.detail = o && o.detail; } },
     Event: class { constructor(t) { this.type = t; } },
   };
-  sandbox.window.window = sandbox.window;
-  sandbox.window.history = history;
+  // As in a browser, window is the global object.
+  Object.assign(sandbox, window);
+  sandbox.window = sandbox;
   vm.createContext(sandbox);
   // Use the sandbox's own Function so that `new Function(js)` in the client
   // (how server responses are executed) sees the fake window/document.
@@ -728,7 +750,237 @@ const tests = {
     const subs = b.sent.filter(m => JSON.parse(m).act === 'clock.start');
     check('subscription survives the hello frame', subs.length === 1, 'sent=' + subs.length);
   },
+
+  async skeletonShownAfterDelayAndRemovedOnSuccess() {
+    const nav = navEnv({skelDelay: 30});
+    nav.ws.navigate('/slow/7');
+    const req = nav.lastNav();
+    check('skeleton nav is sent', req && req.act === '__nav' && req.data.url === '/slow/7');
+    check('region is busy at once, skeleton not yet shown', nav.content.getAttribute('aria-busy') === 'true' && !nav.skeleton());
+    check('loading-start carries the url', nav.events.length === 1 && nav.events[0].type === 'gsui:loading-start' &&
+      nav.events[0].detail.url === '/slow/7');
+    await sleep(60);
+    check('skeleton shown after delay and old content hidden', nav.skeleton() === nav.content.children[0] &&
+      nav.old.style.display === 'none');
+    await sleep(150);
+    check('skeleton nav shows no loader overlay', !nav.loader());
+    nav.reply(req);
+    check('success removes skeleton and busy state', !nav.skeleton() && !nav.content.getAttribute('aria-busy') &&
+      nav.content.children.length === 1 && nav.content.children[0].tagName === 'SECTION');
+    check('success pushes history', nav.env.history.pushed[0] === '/slow/7');
+    const end = nav.events[nav.events.length - 1];
+    check('loading-end reports success', end.type === 'gsui:loading-end' && end.detail.url === '/slow/7' && end.detail.ok === true);
+  },
+
+  async fastNavigationShowsNoSkeleton() {
+    const nav = navEnv({skelDelay: 50});
+    nav.ws.navigate('/slow');
+    await sleep(10);
+    nav.reply(nav.lastNav());
+    await sleep(80);
+    check('fast navigation never builds a skeleton', nav.built() === 0 && !nav.skeleton());
+    check('fast navigation ends busy state', !nav.content.getAttribute('aria-busy'));
+  },
+
+  async failedNavigationRestoresOldContent() {
+    const nav = navEnv({skelDelay: -1});
+    nav.old.style.display = 'flex';
+    nav.ws.navigate('/slow');
+    check('negative delay shows skeleton at once', !!nav.skeleton());
+    const req = nav.lastNav();
+    nav.socket.deliver(JSON.stringify({__r: 1, id: req.id, version: req.version, js: 'window.notified=true'}));
+    check('error reply ran', nav.env.sandbox.window.notified === true);
+    check('error reply restores old content', !nav.skeleton() && nav.content.children[0] === nav.old &&
+      nav.old.style.display === 'flex' && !nav.content.getAttribute('aria-busy'));
+    const end = nav.events[nav.events.length - 1];
+    check('loading-end reports failure', end.type === 'gsui:loading-end' && end.detail.ok === false);
+    check('failed navigation keeps the url', nav.env.history.pushed.length === 0);
+  },
+
+  async socketDropAndReconnectRestoreOldContent() {
+    const nav = navEnv({skelDelay: -1});
+    nav.ws.navigate('/slow');
+    check('skeleton visible before drop', !!nav.skeleton());
+    nav.socket.drop();
+    check('socket drop restores old content', !nav.skeleton() && nav.old.style.display === '' &&
+      !nav.content.getAttribute('aria-busy'));
+    await waitFor(() => nav.env.latest() !== nav.socket, 3000);
+    nav.env.latest().accept();
+    await sleep(20);
+    check('reconnect does not bring the skeleton back', !nav.skeleton() && nav.old.style.display === '');
+  },
+
+  async restartRestoresOldContent() {
+    const nav = navEnv({skelDelay: -1});
+    nav.ws.navigate('/slow');
+    nav.ws.restart().catch(() => {});
+    check('restart restores old content', !nav.skeleton() && nav.old.style.display === '');
+  },
+
+  async backForwardAndPrefixMatching() {
+    const nav = navEnv({skelDelay: -1});
+    nav.env.sandbox.location.pathname = '/slow/3';
+    nav.env.sandbox.window.__gsuiPop({state: null});
+    const req = nav.lastNav();
+    check('back/forward shows the skeleton', !!nav.skeleton() && req.data.history === 'none');
+    nav.reply(req);
+    nav.ws.navigate('/slowpoke');
+    check('prefix matches whole segments only', !nav.skeleton() && !nav.content.getAttribute('aria-busy'));
+    nav.reply(nav.lastNav());
+    nav.ws.navigate('/slow/off/1');
+    check('nil skeleton turns a sub-path off', !nav.skeleton());
+    await sleep(200);
+    check('navigation without skeleton keeps the loader', !!nav.loader());
+    nav.reply(nav.lastNav());
+  },
+
+  async failedSendDoesNotLeaveSkeleton() {
+    const nav = navEnv({skelDelay: -1});
+    nav.ws.navigate('/slow/1');
+    check('first navigation shows skeleton', !!nav.skeleton());
+    nav.socket.send = () => { throw new Error('send failed'); };
+    nav.ws.navigate('/slow/2');
+    check('unsent navigation restores old content', !nav.skeleton() && nav.old.style.display === '' &&
+      !nav.content.getAttribute('aria-busy'));
+    check('unsent call returns 0', nav.ws.call('x', {}) === 0);
+  },
+
+  async loadingEndListenerCanStartNavigation() {
+    const nav = navEnv({skelDelay: 20});
+    let once = true;
+    nav.env.sandbox.window.addEventListener('gsui:loading-end', () => {
+      if (once) { once = false; nav.ws.navigate('/slow/c'); }
+    });
+    nav.ws.navigate('/slow/a');
+    nav.ws.navigate('/slow/b');
+    await sleep(60);
+    check('reentrant navigation shows one skeleton', nav.content.children.filter(c => c.getAttribute('data-gsui-skeleton') !== null).length === 1);
+    nav.socket.drop();
+    check('drop after reentrant navigation restores old content', !nav.skeleton() && nav.old.style.display === '');
+    await waitFor(() => nav.env.latest() !== nav.socket, 3000);
+    nav.env.latest().accept();
+  },
+
+  async loadingEndListenerCanRestart() {
+    const nav = navEnv({skelDelay: -1});
+    let once = true, done;
+    nav.env.sandbox.window.addEventListener('gsui:loading-end', () => {
+      if (once) { once = false; done = nav.ws.restart(); }
+    });
+    nav.ws.navigate('/slow/a');
+    nav.ws.navigate('/slow/b');
+    check('restart from loading-end restores old content', !nav.skeleton() && nav.old.style.display === '' &&
+      !nav.content.getAttribute('aria-busy'));
+    nav.env.latest().accept();
+    await done;
+    check('content stays visible after the restart', !nav.skeleton() && nav.old.style.display === '');
+  },
+
+  async pingReplyKeepsSkeleton() {
+    const nav = navEnv({skelDelay: -1});
+    const version = nav.env.sandbox.__gsuiVersion;
+    nav.ws.navigate('/slow');
+    nav.socket.deliver(JSON.stringify({__r: 1, id: 0, version, js: ''}));
+    nav.socket.deliver(JSON.stringify({__r: 1, id: 0, version: version + 1, js: ''}));
+    check('ping reply keeps the navigation skeleton', !!nav.skeleton() && nav.old.style.display === 'none' &&
+      nav.content.getAttribute('aria-busy') === 'true');
+  },
+
+  async patchNavigationShowsNoSkeleton() {
+    const nav = navEnv({skelDelay: -1});
+    nav.ws.navigate('/slow?q=1', {patch: true});
+    check('patch navigation is sent', nav.lastNav().data.patch === true);
+    check('patch navigation shows no skeleton or events', !nav.skeleton() && nav.events.length === 0 &&
+      !nav.content.getAttribute('aria-busy'));
+  },
+
+  async supersededNavigationReplacesSkeleton() {
+    const nav = navEnv({skelDelay: -1});
+    nav.ws.navigate('/slow/1');
+    const first = nav.lastNav();
+    nav.ws.navigate('/slow/2');
+    const second = nav.lastNav();
+    check('second navigation shows one skeleton', nav.content.children.filter(c => c.getAttribute('data-gsui-skeleton') !== null).length === 1 &&
+      nav.old.style.display === 'none');
+    nav.reply(first);
+    check('stale reply does not end the newer navigation', !!nav.skeleton());
+    nav.reply(second);
+    check('newer reply finishes it', !nav.skeleton() && nav.env.history.pushed.join() === '/slow/2');
+  },
+
+  async loaderNoneCreatesNoOverlay() {
+    const env = makeEnv();
+    const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1, loader: 'none'});
+    env.latest().accept();
+    const id = ws.call('slow.action', {});
+    await sleep(200);
+    check('loader none creates no overlay', id > 0 && !env.body.children.some(c => c.id === '__ws-loader'));
+  },
+
+  async quietCallSkipsLoader() {
+    const env = makeEnv();
+    const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1});
+    const a = env.latest(); a.accept();
+    const quiet = ws.call('autosave', {}, null, null, {loader: false});
+    await sleep(200);
+    const loader = () => env.body.children.find(c => c.id === '__ws-loader');
+    check('quiet call shows no loader', quiet > 0 && !loader());
+    const loud = ws.call('save', {});
+    await sleep(200);
+    check('normal call still shows the loader', !!loader());
+    a.deliver(JSON.stringify({__r: 1, id: loud, version: 1, js: ''}));
+    await sleep(200);
+    check('loader hides while only a quiet call is pending', !loader());
+  },
+
+  // The skeleton factory comes from Go (App.Skeleton) through cfg.js.
+  async goSkeletonConfigBuildsSkeleton() {
+    const env = makeEnv();
+    vm.runInContext(cfgSrc, env.sandbox);
+    const cfg = env.sandbox.window.__gsuiCfg;
+    check('go cfg sets loader none and default delay', cfg.loader === 'none' && cfg.skelDelay === 100);
+    check('go cfg lists the longest prefix first', cfg.skeletons[0][0] === '/mail/drafts' && cfg.skeletons[0][1] === null);
+    const content = makeEl('main'); content.id = '__content__';
+    env.body.appendChild(content);
+    env.run(Object.assign({}, cfg, {grace: -1, reloadAfter: -1, keepAlive: -1, skelDelay: -1}));
+    env.latest().accept();
+    env.sandbox.__ws.navigate('/mail/inbox');
+    const sk = content.children[0];
+    check('go skeleton is built with status role and label', sk && sk.getAttribute('role') === 'status' &&
+      sk.getAttribute('aria-label') === 'Loading' && sk.getAttribute('data-gsui-skeleton') === '' &&
+      sk.className.includes('motion-reduce:animate-none') && sk.children.length === 5);
+  },
 };
+
+// navEnv starts a connected client with #__content__ holding one old child
+// and skeletons for /slow (sub-path /slow/off disabled).
+function navEnv(cfg) {
+  const env = makeEnv();
+  let built = 0;
+  const events = [];
+  const content = makeEl('main'); content.id = '__content__';
+  const old = makeEl('div'); content.appendChild(old);
+  env.body.appendChild(content);
+  const build = () => { built++; const el = makeEl('div'); el.setAttribute('data-gsui-skeleton', ''); return el; };
+  const ws = env.run(Object.assign({grace: -1, reloadAfter: -1, keepAlive: -1,
+    skeletons: [['/slow/off', null], ['/slow', build]]}, cfg));
+  const socket = env.latest(); socket.accept();
+  ['gsui:loading-start', 'gsui:loading-end'].forEach(t => env.sandbox.window.addEventListener(t, e => events.push(e)));
+  return {
+    env, ws, socket, content, old, events, built: () => built,
+    skeleton: () => content.children.find(c => c.getAttribute('data-gsui-skeleton') !== null) || null,
+    loader: () => env.body.children.find(c => c.id === '__ws-loader') || null,
+    lastNav: () => socket.sent.map(m => JSON.parse(m)).filter(m => m.act === '__nav').pop(),
+    // reply answers a __nav request the way the server does: replace the
+    // content, then finish the navigation.
+    reply(req) {
+      socket.deliver(JSON.stringify({__r: 1, id: req.id, version: req.version, js:
+        "var c=document.getElementById('__content__');c.children.slice().forEach(function(x){c.removeChild(x)});" +
+        "c.appendChild(document.createElement('section'));" +
+        '__gsuiNavigationDone(' + JSON.stringify({url: req.data.url, history: req.data.history, patch: req.data.patch, x: 0, y: 0}) + ');'}));
+    },
+  };
+}
 
 function hello(sock, id) { sock.deliver(JSON.stringify({__hello: id})); }
 

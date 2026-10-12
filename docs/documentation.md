@@ -126,6 +126,9 @@ Creates the application instance. Holds page routes, action handlers, WebSocket 
 | `Title` | `string` | Default document title |
 | `Description` | `string` | Meta description tag |
 | `HTMLHead` | `[]string` | Additional raw HTML injected into `<head>`; trusted raw API, never pass untrusted input |
+| `Loader` | `LoaderMode` | Loading overlay for actions: `LoaderOverlay` (default) or `LoaderNone`. See [loading feedback](#loading-feedback) |
+| `SkeletonDelayMs` | `int` | Delay before a navigation skeleton appears. Default 100, `-1` shows it at once |
+| `SkeletonTarget` | `string` | Element id that shows navigation skeletons. Default `__content__`, else `<main>`, else `<body>` |
 
 ### Page Routes
 
@@ -547,6 +550,7 @@ Compose actions:
 | `Confirm(message, action)` | Ask with a native confirm dialog, then run the action |
 | `Delay(d, action)` | Run the action after a duration |
 | `action.Collect(ids...)` | Send element values with the server calls in the action |
+| `action.NoLoader()` | Run the server calls in the action without the loading overlay |
 
 Server calls and local steps mix freely, for example
 `ui.Seq(ui.Hide("menu"), save.Call(input))`. A click with a server call
@@ -878,6 +882,42 @@ ui.SkeletonList()        // 5 rows with avatar + text lines
 ui.SkeletonComponent()   // Single card with title + text + button
 ui.SkeletonPage()        // Header + sidebar + main content area
 ui.SkeletonForm()        // 4 label+input pairs + submit button
+```
+
+Skeletons pulse with `animate-pulse motion-reduce:animate-none`, so the pulse
+stops when the user prefers reduced motion.
+
+`SkeletonStyle` changes the look. Empty fields keep the defaults, so
+`ui.SkeletonStyle{}.List()` renders the same as `ui.SkeletonList()`. Keep one
+style for the app and copy it to change a field for one call:
+
+```go
+var skeletons = ui.SkeletonStyle{
+    BarClass:     "bg-zinc-200 dark:bg-zinc-800",          // bar colour
+    RoundClass:   "rounded-md",                            // bar corners
+    CardClass:    "bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800",
+    DividerClass: "border-zinc-200 dark:border-zinc-800",  // table, list and sidebar lines
+    NoAvatar:     true,                                    // List without avatar circles
+}
+
+skeletons.List()
+
+s := skeletons
+s.Rows = 8 // table/list rows, cards or form fields
+s.Lines = 2 // text lines of Component and Page
+s.Table()
+```
+
+Use `"bg-transparent"` as `CardClass` or `"border-transparent"` as
+`DividerClass` to hide cards or lines.
+
+Build your own skeleton from the parts:
+
+```go
+ui.SkeletonBlock("flex items-center gap-3",  // pulsing container
+    skeletons.Bar("h-10 w-10 rounded-full"), // styled bar; class sets size
+    ui.SkeletonBar("h-4 w-1/3"),             // bar in the default colours
+)
 ```
 
 ### Markdown
@@ -1676,7 +1716,7 @@ make example
 | `/shared` | Reusable form template pattern |
 | `/invoices` | Full CRUD invoice management |
 | `/routes` | Route parameters and query parameters |
-| `/skeleton` | All skeleton loader variants |
+| `/skeleton` | All skeleton loader variants, a themed `SkeletonStyle`, and a slow page with a navigation skeleton |
 | `/reload-redirect` | Client-side navigation and redirects |
 | `/append` | Append/prepend DOM operations |
 | `/button`, `/text`, `/password`, `/number`, `/date`, `/area`, `/select`, `/checkbox`, `/radio` | Individual input demos |
@@ -1724,6 +1764,8 @@ go get github.com/michalCapo/g-sui@v1.1.0
 | `Action` | What a node does on an event: server calls and local UI steps |
 | `ActionRef[T]` | Typed server action returned by `RegisterAction`; `Call(data)` builds an `Action` |
 | `App` | Application container (routes, actions, WS clients) |
+| `LoaderMode` | Loading overlay mode for `App.Loader` |
+| `SkeletonStyle` | Look of the skeleton loaders |
 | `LayoutHandler` | `func(ctx *Context) *Node` |
 | `PageHandler` | `func(ctx *Context) *Node` |
 | `Context` | Request data for pages and WS actions |
@@ -1781,6 +1823,8 @@ go get github.com/michalCapo/g-sui@v1.1.0
 
 **Collate Filter Types:** `CollateBool`, `CollateDateRange`, `CollateSelect`, `CollateMultiCheck`
 
+**Loader Modes:** `LoaderOverlay`, `LoaderNone`
+
 #### App Methods
 
 | Method | Signature | Description |
@@ -1796,6 +1840,7 @@ go get github.com/michalCapo/g-sui@v1.1.0
 | `Listen` | `(addr string) error` | Start HTTP server |
 | `Broadcast` | `(result Result) error` | Send effects to all connected clients |
 | `Widget` | `(name, mount string)` | Register a client widget mount function |
+| `Skeleton` | `(prefix string, node *Node)` | Show `node` while a navigation under `prefix` loads |
 | `Subscription` | `(name string, run func(*Context) error)` | Register cancellable background work started by `node.Subscribe` |
 
 #### Context Methods
@@ -1851,6 +1896,9 @@ go get github.com/michalCapo/g-sui@v1.1.0
 | `SkeletonComponent()` | `*Node` | Component skeleton |
 | `SkeletonPage()` | `*Node` | Page skeleton |
 | `SkeletonForm()` | `*Node` | Form skeleton |
+| `SkeletonBar(class)` | `*Node` | One skeleton bar; class sets size |
+| `SkeletonBlock(class, children...)` | `*Node` | Pulsing skeleton container |
+| `SkeletonStyle{...}.Table()` ... `.Form()`, `.Bar(class)` | `*Node` | Styled skeletons |
 
 ---
 
@@ -1900,6 +1948,49 @@ fall back to HTTP so the address, status and visible page agree.
 `Node.Title("Projects")` updates the document title. `App.Title` remains the
 initial HTML title. Back/Forward rerenders the destination and restores its saved
 scroll position. Normal navigation focuses a heading (or the content container).
+
+### Loading feedback
+
+By default a slow action blurs the page with a loading overlay
+(`#__ws-loader`). Turn it off for the app, or for one call:
+
+```go
+app.Loader = ui.LoaderNone                       // never create the overlay
+ui.Button().OnClick(autosave.Call(in).NoLoader()) // skip it for this call
+```
+
+Request tracking, busy buttons, reconnect, holds and the offline badge work the
+same in both modes. From JavaScript, `__ws.call(act, data, collect, el, {loader:false})`
+skips the overlay.
+
+`App.Skeleton(prefix, node)` shows a skeleton in place of the page content while
+a navigation loads:
+
+```go
+app.Loader = ui.LoaderNone
+app.Skeleton("/", ui.SkeletonList())             // every page
+app.Skeleton("/settings", ui.SkeletonForm())     // /settings and /settings/...
+app.Skeleton("/reports/live", nil)               // no skeleton here
+```
+
+- Prefixes match whole path segments; the longest one wins.
+- It works for `NavLink`, `Navigate`, `__ws.navigate` and Back/Forward. Patch
+  navigations (`PatchURL`, `data-gsui-patch`) show no skeleton.
+- The skeleton appears after `App.SkeletonDelayMs` (default 100), so fast pages
+  show nothing. It hides the children of `App.SkeletonTarget` (default
+  `__content__`) and is removed when the new page arrives.
+- When navigation fails (error reply, lost socket, `__ws.restart()`) the
+  skeleton goes away and the old content comes back.
+- The region gets `aria-busy="true"` while a skeleton navigation loads. The
+  skeleton root gets `role="status"`, `aria-label="Loading"` (unless the node
+  sets its own) and `data-gsui-skeleton`.
+- A navigation with a skeleton shows no loading overlay.
+- The node is built in the browser on every slow navigation; keep it static
+  (no actions, ids or `UnsafeJS`). Register skeletons before serving requests.
+
+Every non-patch navigation dispatches `gsui:loading-start` with `detail.url` and
+`gsui:loading-end` with `detail.url` and `detail.ok` (false when it failed or a
+newer navigation replaced it).
 
 ### Authorization and identity
 

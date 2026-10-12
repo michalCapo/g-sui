@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -12,9 +13,11 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -132,11 +135,42 @@ type App struct {
 	// release id) on all of them so only a real deploy triggers a reload.
 	InstanceID string
 
+	// Loader sets the overlay shown while an action runs. LoaderOverlay (the
+	// default) blurs the page after 120ms; LoaderNone never creates it.
+	// Use Action.NoLoader to skip it for one call.
+	Loader LoaderMode
+
+	// SkeletonDelayMs is how long a page navigation may take before its
+	// skeleton (see App.Skeleton) appears. Default 100. Use -1 to show it at once.
+	SkeletonDelayMs int
+
+	// SkeletonTarget is the id of the element that shows navigation
+	// skeletons. Default: #__content__, else <main>, else <body>.
+	SkeletonTarget string
+
 	// AllowedOrigins adds browser WebSocket origins allowed to connect to /__ws.
 	// By default, only same-origin requests are accepted; requests without an
 	// Origin header are allowed for non-browser clients. Use "*" to disable
 	// origin validation entirely.
 	AllowedOrigins []string
+
+	skeletons []skeletonRoute
+}
+
+// LoaderMode selects the loading overlay. See App.Loader.
+type LoaderMode string
+
+const (
+	// LoaderOverlay blurs the page while an action runs. It is the default.
+	LoaderOverlay LoaderMode = "overlay"
+	// LoaderNone shows no overlay. Request tracking, reconnect and the
+	// offline badge keep working.
+	LoaderNone LoaderMode = "none"
+)
+
+type skeletonRoute struct {
+	prefix string
+	js     string // JS function that builds the skeleton and returns it
 }
 
 // PageHandler builds the initial DOM for a GET route.
@@ -608,6 +642,8 @@ func (app *App) helloFrame() string {
 func (app *App) wsConfigJS() string {
 	app.mu.RLock()
 	grace, reloadAfter, keepAlive := app.OfflineGraceMs, app.ReconnectReloadAfterMs, app.KeepAliveMs
+	loader, skelDelay, skelTarget := app.Loader, app.SkeletonDelayMs, app.SkeletonTarget
+	skeletons := app.skeletons
 	app.mu.RUnlock()
 
 	if grace == 0 {
@@ -619,7 +655,65 @@ func (app *App) wsConfigJS() string {
 	if keepAlive == 0 {
 		keepAlive = 25000
 	}
-	return fmt.Sprintf(`window.__gsuiCfg={grace:%d,reloadAfter:%d,keepAlive:%d,inst:'%s'};`, grace, reloadAfter, keepAlive, escJS(app.instance()))
+	var b strings.Builder
+	fmt.Fprintf(&b, `window.__gsuiCfg={grace:%d,reloadAfter:%d,keepAlive:%d,inst:'%s'`, grace, reloadAfter, keepAlive, escJS(app.instance()))
+	if loader == LoaderNone {
+		b.WriteString(`,loader:'none'`)
+	}
+	if len(skeletons) > 0 {
+		if skelDelay == 0 {
+			skelDelay = 100
+		}
+		fmt.Fprintf(&b, `,skelDelay:%d,skelTarget:'%s',skeletons:[`, max(skelDelay, 0), escJS(skelTarget))
+		for i, s := range skeletons {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			fmt.Fprintf(&b, `['%s',%s]`, escJS(s.prefix), s.js)
+		}
+		b.WriteByte(']')
+	}
+	b.WriteString(`};`)
+	return b.String()
+}
+
+// Skeleton shows node in place of the page content while a navigation to a
+// path under prefix loads. It covers links, Navigate and back/forward.
+// Prefixes match whole path segments and the longest one wins; "/" matches
+// every page. A nil node turns skeletons off for prefix.
+// Fast navigations (see SkeletonDelayMs) show nothing. The old content comes
+// back when navigation fails. Register skeletons before serving requests.
+//
+//	app.Skeleton("/", ui.SkeletonList())
+//	app.Skeleton("/settings", ui.SkeletonForm())
+//
+// The node is rendered in the browser on every slow navigation, so keep it
+// static: no actions, ids or UnsafeJS. It gets role="status" and
+// aria-label="Loading" unless it sets its own.
+func (app *App) Skeleton(prefix string, node *Node) {
+	prefix = "/" + strings.Trim(prefix, "/")
+	js := "null"
+	if node != nil {
+		root := *node
+		root.attrs = maps.Clone(node.attrs)
+		root.Attr("role", cmp.Or(root.attrs["role"], "status"))
+		root.Attr("aria-label", cmp.Or(root.attrs["aria-label"], "Loading"))
+		root.Attr("data-gsui-skeleton", "")
+		var b strings.Builder
+		b.WriteString("function(){")
+		counter := 0
+		var postJS []string
+		v := root.compile(&b, &counter, &postJS)
+		b.WriteString(strings.Join(postJS, ""))
+		fmt.Fprintf(&b, "return %s;}", v)
+		js = b.String()
+	}
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	app.skeletons = slices.DeleteFunc(app.skeletons, func(s skeletonRoute) bool { return s.prefix == prefix })
+	app.skeletons = append(app.skeletons, skeletonRoute{prefix: prefix, js: js})
+	// Longest prefix first, so the client takes the first match.
+	slices.SortStableFunc(app.skeletons, func(a, b skeletonRoute) int { return len(b.prefix) - len(a.prefix) })
 }
 
 // wsStubJS installs a queuing stub for __ws synchronously in <head>. The real
@@ -785,7 +879,9 @@ var __ws=(function(){
     try{window.dispatchEvent(new CustomEvent('gsui:serverchanged',{detail:{was:inst,now:id}}))}catch(_){}
     if(!restarting)requestReload('server-restart');
   }
+  function loud(){for(var id in inflight)if(inflight[id])return true;return false}
   function showLoader(){
+    if(__gsuiCfg.loader==='none')return;
     // While disconnected there is no pending request; the offline badge already
     // says so, and a blocking loader would lock the page for the whole outage.
     if(!ready||loaderEl||loaderTimer)return;
@@ -808,7 +904,7 @@ var __ws=(function(){
     },120);
   }
   function hideLoader(){
-    if(Object.keys(inflight).length)return;
+    if(loud())return;
     if(loaderTimer){clearTimeout(loaderTimer);loaderTimer=0;}
     if(loaderEl){loaderEl.style.opacity='0';var el=loaderEl;loaderEl=null;setTimeout(function(){try{if(el&&el.parentNode)el.parentNode.removeChild(el)}catch(_){}},160);}
   }
@@ -833,6 +929,7 @@ var __ws=(function(){
   function releaseCalls(){
     inflight={};hideLoader();
     Object.keys(busy).forEach(function(id){release(id)});
+    window.__gsuiLoadEnd(0,false);
   }
   // markDown is the single place that records "the connection is gone". It
   // runs from onclose and when a silently dead socket is discovered, so the
@@ -919,7 +1016,7 @@ var __ws=(function(){
       // connection. Without this a silent
       // reconnect leaves live regions frozen.
       subs.forEach(function(s){rawSend(message(s.act,s.data,0,s.key))});
-      if(Object.keys(inflight).length)showLoader();
+      if(loud())showLoader();
       if(restarting)finishRestart();
       if(hadClose){
         hadClose=false;
@@ -940,12 +1037,12 @@ var __ws=(function(){
       if(!m||(!m.__r&&!m.__push))return;
       if(!m.broadcast&&(!Number.isInteger(m.version)||m.version<1))return;
       if(m&&m.__r){delete inflight[m.id];delete uncertain[m.id];release(m.id);hideLoader()}
-      if(m&&m.version&&m.version!==window.__gsuiVersion)return;
+      if(m&&m.version&&m.version!==window.__gsuiVersion){if(m.__r&&m.id)window.__gsuiLoadEnd(m.id,false);return}
       if(m&&m.__push&&m.subscription&&!subs.some(function(s){return s.key===m.subscription}))return;
       window.__gsuiPushSubscription=m&&m.subscription||'';
       var js=m.js;
       try{if(js)new Function(js)()}catch(err){console.error('ws exec error:',err)}
-      finally{window.__gsuiPushSubscription=''}
+      finally{window.__gsuiPushSubscription='';if(m.__r&&m.id)window.__gsuiLoadEnd(m.id,false)}
       try{window.dispatchEvent(new Event('gsui:updated'))}catch(_){}
     };
     sock.onclose=function(){
@@ -1033,7 +1130,8 @@ var __ws=(function(){
       subs=subs.filter(function(s){return key?s.key!==key:s.act!==act});
       rawSend(message('__unsubscribe',{name:act,key:key}));
     },
-    call:function(act,data,collect,source){
+    // opts.loader=false skips the loading overlay for this call.
+    call:function(act,data,collect,source,opts){
       if(!api.connected()){window.__gsuiReport('You are offline. Reconnect before trying again.');return 0}
       var d=Object.assign({},data||{});
       if(collect&&collect.length){
@@ -1043,7 +1141,8 @@ var __ws=(function(){
       uncertain[id]=true;
       if(source&&/^(BUTTON|FORM)$/.test(source.tagName)){busy[id]=source;source.disabled=true;source.setAttribute('aria-busy','true');if(source.form)source.form.setAttribute('aria-busy','true');source.classList.add('gsui-busy','opacity-60','cursor-wait')}
       var msg=message(act,d,id);
-        if(rawSend(msg)){inflight[id]=true;showLoader()}else{release(id);delete uncertain[id];window.__gsuiReport('Connection lost before sending. Please try again.')}
+      if(!rawSend(msg)){release(id);delete uncertain[id];window.__gsuiReport('Connection lost before sending. Please try again.');return 0}
+      inflight[id]=!(opts&&opts.loader===false);if(inflight[id])showLoader();
       return id;
     },
     notfound:function(id){

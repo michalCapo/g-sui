@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -12,19 +13,96 @@ import (
 // 1. Skeleton Loaders
 // ---------------------------------------------------------------------------
 
+// SkeletonStyle sets the look of the skeleton loaders. Empty fields use the
+// defaults, so SkeletonStyle{} renders the same as SkeletonTable() and the
+// other package functions. Keep one value for the app and copy it to change
+// a field for one call:
+//
+//	var skeletons = ui.SkeletonStyle{BarClass: "bg-zinc-200 dark:bg-zinc-800", NoAvatar: true}
+//	s := skeletons
+//	s.Rows = 8
+//	s.List()
+type SkeletonStyle struct {
+	// BarClass colours every bar. Default "bg-gray-200 dark:bg-gray-700".
+	BarClass string
+	// RoundClass rounds every bar. Default "rounded".
+	RoundClass string
+	// CardClass styles the cards of Cards and Component. Default
+	// "bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700".
+	// Use "bg-transparent" for no card.
+	CardClass string
+	// DividerClass colours the lines between table rows, list rows and the
+	// page sidebar, e.g. "border-zinc-200 dark:border-zinc-800". Default gray.
+	// Use "border-transparent" to hide them.
+	DividerClass string
+	// NoAvatar removes the avatar circles of List.
+	NoAvatar bool
+	// Rows is the number of table rows, list rows, cards or form fields.
+	// Defaults: table 5, list 5, cards 6, form 4.
+	Rows int
+	// Lines is the number of text lines in Component and Page. Default 3.
+	Lines int
+}
+
+const (
+	skeletonPulse   = "animate-pulse motion-reduce:animate-none"
+	skeletonBar     = "bg-gray-200 dark:bg-gray-700"
+	skeletonCard    = "bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+	skeletonDivider = "border-gray-200 dark:border-gray-700"
+)
+
+// SkeletonBar returns one placeholder bar in the default colours. class sets
+// its size, e.g. "h-4 w-1/2". Put bars inside a SkeletonBlock.
+func SkeletonBar(class string) *Node { return SkeletonStyle{}.Bar(class) }
+
+// SkeletonBlock returns a pulsing container for custom skeletons. The pulse
+// stops when the user prefers reduced motion.
+//
+//	ui.SkeletonBlock("flex flex-col gap-2", ui.SkeletonBar("h-4 w-1/3"), ui.SkeletonBar("h-3 w-full"))
+func SkeletonBlock(class string, children ...*Node) *Node {
+	return Div(joinClass(skeletonPulse, class)).Render(children...)
+}
+
+// Bar returns one placeholder bar in this style. class sets its size.
+func (s SkeletonStyle) Bar(class string) *Node {
+	size, width, _ := strings.Cut(class, " ")
+	return Div(joinClass(size, s.bar(), s.round(), width))
+}
+
+func (s SkeletonStyle) bar() string   { return cmp.Or(s.BarClass, skeletonBar) }
+func (s SkeletonStyle) round() string { return cmp.Or(s.RoundClass, "rounded") }
+func (s SkeletonStyle) card() string  { return cmp.Or(s.CardClass, skeletonCard) }
+func (s SkeletonStyle) divider(def string) string {
+	return cmp.Or(s.DividerClass, def)
+}
+func (s SkeletonStyle) rows(def int) int  { return max(cmp.Or(s.Rows, def), 1) }
+func (s SkeletonStyle) lines(def int) int { return max(cmp.Or(s.Lines, def), 1) }
+
+func joinClass(parts ...string) string {
+	out := parts[:0:0]
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// pick cycles through widths so any row count gets varied bars.
+func pick(widths []string, i int) string { return widths[i%len(widths)] }
+
 // SkeletonTable returns an animated pulse skeleton representing a 4-column
 // table with a header row and 5 data rows.
-func SkeletonTable() *Node {
-	bar := func(w string) *Node {
-		return Div("h-4 bg-gray-200 dark:bg-gray-700 rounded " + w)
-	}
+func SkeletonTable() *Node { return SkeletonStyle{}.Table() }
 
+// Table returns a 4-column table skeleton with a header and Rows data rows.
+func (s SkeletonStyle) Table() *Node {
 	headerCells := make([]*Node, 4)
 	widths := []string{"w-20", "w-28", "w-24", "w-16"}
 	for i := range 4 {
-		headerCells[i] = Th("px-4 py-3").Render(bar(widths[i]))
+		headerCells[i] = Th("px-4 py-3").Render(s.Bar("h-4 " + widths[i]))
 	}
-	header := Thead().Render(Tr("border-b border-gray-200 dark:border-gray-600").Render(headerCells...))
+	header := Thead().Render(Tr("border-b " + s.divider("border-gray-200 dark:border-gray-600")).Render(headerCells...))
 
 	rowWidths := [][]string{
 		{"w-24", "w-32", "w-20", "w-16"},
@@ -33,39 +111,45 @@ func SkeletonTable() *Node {
 		{"w-16", "w-24", "w-28", "w-20"},
 		{"w-24", "w-16", "w-32", "w-12"},
 	}
-	rows := make([]*Node, 5)
-	for i := range 5 {
+	rows := make([]*Node, s.rows(5))
+	for i := range rows {
 		cells := make([]*Node, 4)
 		for j := range 4 {
-			cells[j] = Td("px-4 py-3").Render(bar(rowWidths[i][j]))
+			cells[j] = Td("px-4 py-3").Render(s.Bar("h-4 " + rowWidths[i%len(rowWidths)][j]))
 		}
-		rows[i] = Tr("border-b border-gray-100 dark:border-gray-700").Render(cells...)
+		rows[i] = Tr("border-b " + s.divider("border-gray-100 dark:border-gray-700")).Render(cells...)
 	}
 	body := Tbody().Render(rows...)
 
-	return Div("animate-pulse").Render(
+	return SkeletonBlock("").Render(
 		Table("w-full").Render(header, body),
 	)
 }
 
 // SkeletonCards returns an animated pulse skeleton of a 6-card responsive grid.
-func SkeletonCards() *Node {
-	cards := make([]*Node, 6)
+func SkeletonCards() *Node { return SkeletonStyle{}.Cards() }
+
+// Cards returns a responsive grid of Rows card skeletons.
+func (s SkeletonStyle) Cards() *Node {
+	cards := make([]*Node, s.rows(6))
 	barWidths := []string{"w-3/4", "w-1/2", "w-2/3", "w-5/6", "w-3/5", "w-4/5"}
-	for i := range 6 {
-		cards[i] = Div("bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-3").Render(
-			Div("h-32 bg-gray-200 dark:bg-gray-700 rounded"),
-			Div("h-4 bg-gray-200 dark:bg-gray-700 rounded "+barWidths[i]),
-			Div("h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"),
-			Div("h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3"),
+	for i := range cards {
+		cards[i] = Div(s.card()+" p-5 flex flex-col gap-3").Render(
+			s.Bar("h-32"),
+			s.Bar("h-4 "+pick(barWidths, i)),
+			s.Bar("h-3 w-1/2"),
+			s.Bar("h-3 w-2/3"),
 		)
 	}
-	return Div("animate-pulse grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4").Render(cards...)
+	return SkeletonBlock("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4", cards...)
 }
 
 // SkeletonList returns an animated pulse skeleton of 5 list rows, each with
 // a circle avatar placeholder and two text line placeholders.
-func SkeletonList() *Node {
+func SkeletonList() *Node { return SkeletonStyle{}.List() }
+
+// List returns Rows list rows, each with an optional avatar and two lines.
+func (s SkeletonStyle) List() *Node {
 	textWidths := [][]string{
 		{"w-3/4", "w-1/2"},
 		{"w-2/3", "w-2/5"},
@@ -73,70 +157,90 @@ func SkeletonList() *Node {
 		{"w-1/2", "w-3/5"},
 		{"w-3/5", "w-2/5"},
 	}
-	rows := make([]*Node, 5)
-	for i := range 5 {
-		rows[i] = Div("flex items-center gap-4 py-3").Render(
-			Div("w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full flex-shrink-0"),
+	rows := make([]*Node, s.rows(5))
+	for i := range rows {
+		row := "flex items-center gap-4 py-3"
+		if s.DividerClass != "" && i > 0 {
+			row += " border-t " + s.DividerClass
+		}
+		var avatar *Node
+		if !s.NoAvatar {
+			avatar = Div("w-10 h-10 " + s.bar() + " rounded-full flex-shrink-0")
+		}
+		widths := textWidths[i%len(textWidths)]
+		rows[i] = Div(row).Render(
+			avatar,
 			Div("flex-1 flex flex-col gap-2").Render(
-				Div("h-4 bg-gray-200 dark:bg-gray-700 rounded "+textWidths[i][0]),
-				Div("h-3 bg-gray-200 dark:bg-gray-700 rounded "+textWidths[i][1]),
+				s.Bar("h-4 "+widths[0]),
+				s.Bar("h-3 "+widths[1]),
 			),
 		)
 	}
-	return Div("animate-pulse flex flex-col divide-y divide-gray-200 dark:divide-gray-700").Render(rows...)
+	if s.DividerClass != "" {
+		return SkeletonBlock("flex flex-col", rows...)
+	}
+	return SkeletonBlock("flex flex-col divide-y divide-gray-200 dark:divide-gray-700", rows...)
 }
+
+// componentLines are the default text line widths of Component and Page.
+var componentLines = []string{"w-full", "w-5/6", "w-2/3"}
 
 // SkeletonComponent returns an animated pulse skeleton of a single card with
 // a title, 3 text lines, and a button placeholder.
-func SkeletonComponent() *Node {
-	return Div("animate-pulse bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 flex flex-col gap-4").Render(
-		Div("h-5 bg-gray-200 dark:bg-gray-700 rounded w-1/3"),
-		Div("h-3 bg-gray-200 dark:bg-gray-700 rounded w-full"),
-		Div("h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6"),
-		Div("h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3"),
-		Div("h-9 bg-gray-200 dark:bg-gray-700 rounded w-28 mt-2"),
-	)
+func SkeletonComponent() *Node { return SkeletonStyle{}.Component() }
+
+// Component returns a card skeleton with a title, Lines text lines and a button.
+func (s SkeletonStyle) Component() *Node {
+	parts := []*Node{s.Bar("h-5 w-1/3")}
+	for i := range s.lines(3) {
+		parts = append(parts, s.Bar("h-3 "+pick(componentLines, i)))
+	}
+	parts = append(parts, s.Bar("h-9 w-28 mt-2"))
+	return SkeletonBlock(s.card()+" p-6 flex flex-col gap-4", parts...)
 }
 
 // SkeletonPage returns an animated pulse skeleton of a full page layout with
 // a header bar, sidebar column, and main content area.
-func SkeletonPage() *Node {
+func SkeletonPage() *Node { return SkeletonStyle{}.Page() }
+
+// Page returns a page skeleton with a header, sidebar and Lines text lines.
+func (s SkeletonStyle) Page() *Node {
 	sidebarItems := make([]*Node, 5)
 	sw := []string{"w-3/4", "w-1/2", "w-2/3", "w-4/5", "w-3/5"}
 	for i := range 5 {
-		sidebarItems[i] = Div("h-4 bg-gray-200 dark:bg-gray-700 rounded " + sw[i])
+		sidebarItems[i] = s.Bar("h-4 " + sw[i])
 	}
+	main := []*Node{s.Bar("h-6 w-1/3")}
+	for i := range s.lines(3) {
+		main = append(main, s.Bar("h-4 "+pick(componentLines, i)))
+	}
+	main = append(main, s.Bar("h-32 w-full mt-4"))
 
-	return Div("animate-pulse flex flex-col gap-0 min-h-[400px]").Render(
-		Div("h-14 bg-gray-200 dark:bg-gray-700 rounded-t-lg"),
+	return SkeletonBlock("flex flex-col gap-0 min-h-[400px]",
+		Div("h-14 "+s.bar()+" rounded-t-lg"),
 		Div("flex flex-1 gap-0").Render(
-			Div("w-48 border-r border-gray-200 dark:border-gray-700 p-4 flex flex-col gap-4").Render(sidebarItems...),
-			Div("flex-1 p-6 flex flex-col gap-4").Render(
-				Div("h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3"),
-				Div("h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"),
-				Div("h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"),
-				Div("h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3"),
-				Div("h-32 bg-gray-200 dark:bg-gray-700 rounded w-full mt-4"),
-			),
+			Div("w-48 border-r "+s.divider(skeletonDivider)+" p-4 flex flex-col gap-4").Render(sidebarItems...),
+			Div("flex-1 p-6 flex flex-col gap-4").Render(main...),
 		),
 	)
 }
 
 // SkeletonForm returns an animated pulse skeleton of a form with 4 label+input
 // pairs and a submit button placeholder.
-func SkeletonForm() *Node {
+func SkeletonForm() *Node { return SkeletonStyle{}.Form() }
+
+// Form returns a form skeleton with Rows label and input pairs and a button.
+func (s SkeletonStyle) Form() *Node {
 	labelWidths := []string{"w-20", "w-24", "w-16", "w-28"}
-	fields := make([]*Node, 4)
-	for i := range 4 {
-		fields[i] = Div("flex flex-col gap-2").Render(
-			Div("h-3 bg-gray-200 dark:bg-gray-700 rounded "+labelWidths[i]),
-			Div("h-10 bg-gray-200 dark:bg-gray-700 rounded w-full"),
-		)
+	fields := make([]*Node, 0, s.rows(4)+1)
+	for i := range s.rows(4) {
+		fields = append(fields, Div("flex flex-col gap-2").Render(
+			s.Bar("h-3 "+pick(labelWidths, i)),
+			s.Bar("h-10 w-full"),
+		))
 	}
-	return Div("animate-pulse flex flex-col gap-5").Render(
-		fields[0], fields[1], fields[2], fields[3],
-		Div("h-10 bg-gray-200 dark:bg-gray-700 rounded w-32 mt-2"),
-	)
+	fields = append(fields, s.Bar("h-10 w-32 mt-2"))
+	return SkeletonBlock("flex flex-col gap-5", fields...)
 }
 
 // ---------------------------------------------------------------------------

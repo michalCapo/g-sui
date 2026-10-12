@@ -27,6 +27,7 @@ type step struct {
 	collect []string
 	js      string // local code; may use `event` and `el` (the element that handled the event)
 	server  bool   // js wraps a server call
+	quiet   bool   // no loading overlay for this call
 }
 
 // UnsafeJS runs raw JavaScript as an action. `event` and `el` (the element
@@ -81,6 +82,22 @@ func (a *Action) Collect(ids ...string) *Action {
 	return out
 }
 
+// NoLoader runs the server calls in a without the loading overlay. Use it for
+// background calls such as autosave or polling. Like Collect, it applies to
+// the calls in a, so call it before wrapping a in Confirm, Delay or Seq.
+func (a *Action) NoLoader() *Action {
+	if a == nil {
+		return nil
+	}
+	out := &Action{steps: append([]step(nil), a.steps...)}
+	for i := range out.steps {
+		if out.steps[i].call != "" {
+			out.steps[i].quiet = true
+		}
+	}
+	return out
+}
+
 func (a *Action) server() bool {
 	for _, s := range a.steps {
 		if s.call != "" || s.server {
@@ -108,7 +125,11 @@ func (a *Action) code() string {
 		if len(s.collect) > 0 {
 			collect, _ = json.Marshal(s.collect)
 		}
-		fmt.Fprintf(&b, "__ws.call(%s,%s,%s,el);", name, data, collect)
+		opts := ""
+		if s.quiet {
+			opts = ",{loader:false}"
+		}
+		fmt.Fprintf(&b, "__ws.call(%s,%s,%s,el%s);", name, data, collect, opts)
 	}
 	return b.String()
 }

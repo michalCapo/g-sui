@@ -113,14 +113,80 @@
     if (options.history !== 'none') rememberScroll();
     if (!options.patch) window.__gsuiVersion++;
     __ws.beginNavigation(!!options.patch);
-    __ws.call('__nav', {
-      url: url.pathname + url.search + url.hash,
+    var target = url.pathname + url.search + url.hash;
+    var build = options.patch ? null : skeletonFor(url.pathname);
+    var id = __ws.call('__nav', {
+      url: target,
       history: options.history || (options.replace ? 'replace' : 'push'),
       patch: !!options.patch,
       x: options.x || 0, y: options.y || 0
-    });
+    }, null, null, build ? {loader:false} : undefined);
+    if (options.patch) return;
+    if (id) window.__gsuiLoadStart(id, target, build);
+    else window.__gsuiLoadEnd(0, false); // not sent: nothing will arrive
+  };
+
+  // Navigation skeletons (App.Skeleton). A slow page load hides the content
+  // and shows a skeleton; a failed one shows the old content again.
+  var load = null;
+  function skeletonFor(path) {
+    var list = (window.__gsuiCfg || {}).skeletons || [];
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i][0];
+      if (p === '/' || path === p || path.indexOf(p + '/') === 0) return list[i][1];
+    }
+    return null;
+  }
+  function skeletonRoot() {
+    var id = (window.__gsuiCfg || {}).skelTarget;
+    return (id && document.getElementById(id)) || document.getElementById('__content__') || document.querySelector('main') || document.body;
+  }
+  function showSkeleton(l) {
+    l.timer = 0;
+    try { l.el = l.build(); } catch (e) { console.error('gsui: skeleton failed:', e); return; }
+    l.hidden = Array.from(l.root.children).map(function (c) { var d = c.style.display; c.style.display = 'none'; return [c, d]; });
+    l.root.insertBefore(l.el, l.root.firstChild);
+  }
+  function loadEvent(name, detail) {
+    try { window.dispatchEvent(new CustomEvent(name, {detail: detail})); } catch (_) {}
+  }
+  // finish clears load l. Events are sent by the callers once the state is
+  // final, so listeners that navigate or restart the socket see it settled.
+  function finish(l) {
+    if (load === l) load = null;
+    if (l.timer) clearTimeout(l.timer);
+    if (l.el) {
+      l.el.remove();
+      l.hidden.forEach(function (h) { h[0].style.display = h[1]; });
+    }
+    if (l.root) l.root.removeAttribute('aria-busy');
+  }
+  window.__gsuiLoadStart = function (id, url, build) {
+    var prev = load, shown = !!(prev && prev.el);
+    if (prev) finish(prev);
+    var l = load = {id: id, url: url, build: build, timer: 0};
+    if (build) {
+      l.root = skeletonRoot();
+      l.root.setAttribute('aria-busy', 'true');
+      var delay = (window.__gsuiCfg || {}).skelDelay;
+      if (typeof delay !== 'number') delay = 100;
+      // A skeleton already on screen is replaced at once to avoid a flash.
+      if (shown || delay <= 0) showSkeleton(l);
+      else l.timer = setTimeout(function () { if (load === l) showSkeleton(l); }, delay);
+    }
+    if (prev) loadEvent('gsui:loading-end', {url: prev.url, ok: false});
+    if (load === l) loadEvent('gsui:loading-start', {url: url});
+  };
+  // __gsuiLoadEnd ends the navigation with request id (0: any). It runs on
+  // success, on an error reply and when the socket drops.
+  window.__gsuiLoadEnd = function (id, ok) {
+    var l = load;
+    if (!l || (id && l.id !== id)) return;
+    finish(l);
+    loadEvent('gsui:loading-end', {url: l.url, ok: !!ok});
   };
   window.__gsuiNavigationDone = function (request) {
+    if (!request.patch) window.__gsuiLoadEnd(0, true);
     if (request.history === 'push') history.pushState({__gsuiKey: ++historyKey}, '', request.url);
     if (request.history === 'replace') history.replaceState(history.state, '', request.url);
     var root = document.getElementById('__content__') || document.querySelector('main') || document.body;
