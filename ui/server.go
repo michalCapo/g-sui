@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/websocket"
+	"github.com/coder/websocket"
 )
 
 // connState tracks per-connection cancellation so that server-side Push
@@ -58,8 +58,8 @@ type App struct {
 	mu                  sync.RWMutex
 	actions             map[string]actionHandler
 	subscriptionActions map[string]bool
-	clients             map[*websocket.Conn]bool
-	connStates          map[*websocket.Conn]*connState
+	clients             map[*socket]bool
+	connStates          map[*socket]*connState
 	mux                 *http.ServeMux
 	pageMux             *http.ServeMux
 	layout              LayoutHandler
@@ -185,8 +185,8 @@ func NewApp() *App {
 	return &App{
 		actions:             make(map[string]actionHandler),
 		subscriptionActions: make(map[string]bool),
-		clients:             make(map[*websocket.Conn]bool),
-		connStates:          make(map[*websocket.Conn]*connState),
+		clients:             make(map[*socket]bool),
+		connStates:          make(map[*socket]*connState),
 		mux:                 http.NewServeMux(),
 		pageMux:             http.NewServeMux(),
 	}
@@ -276,7 +276,27 @@ func (app *App) Assets(fsys fs.FS, dir, prefix string) {
 	if err != nil {
 		log.Fatalf("gsui: assets: fs.Sub(%q): %v", dir, err)
 	}
-	app.mux.Handle(prefix, http.StripPrefix(prefix, http.FileServerFS(sub)))
+	files := http.FileServerFS(sub)
+	var tags sync.Map // name -> ETag of files without a modification time
+	app.mux.Handle(prefix, http.StripPrefix(prefix, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Embedded files have no modification time, so the browser cannot
+		// revalidate them. A content ETag lets it get 304 instead of the file.
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if info, err := fs.Stat(sub, name); err == nil && !info.IsDir() && info.ModTime().IsZero() {
+			tag, ok := tags.Load(name)
+			if !ok {
+				if b, err := fs.ReadFile(sub, name); err == nil {
+					sum := sha256.Sum256(b)
+					tag, _ = tags.LoadOrStore(name, `"`+hex.EncodeToString(sum[:12])+`"`)
+				}
+			}
+			if tag != nil {
+				w.Header().Set("ETag", tag.(string))
+				w.Header().Set("Cache-Control", "no-cache")
+			}
+		}
+		files.ServeHTTP(w, r)
+	})))
 }
 
 // Layout registers a layout handler that wraps every page render.
@@ -359,7 +379,7 @@ func (app *App) setupRoutes() {
 	app.mux.HandleFunc("GET /__ws.js", app.serveWSClient)
 
 	// WebSocket endpoint
-	app.mux.Handle("/__ws", websocket.Server{Handshake: app.wsHandshake, Handler: app.handleWS})
+	app.mux.HandleFunc("/__ws", app.acceptWS)
 
 	// Page routes (catch-all). The nested mux provides ServeMux pattern
 	// matching and populates Request.PathValue for Page handlers.
@@ -1167,9 +1187,32 @@ type wsMessage struct {
 	Sub     string         `json:"sub"`
 }
 
+// socket is one WebSocket and the request that opened it.
+type socket struct {
+	*websocket.Conn
+	req *http.Request
+}
+
+// acceptWS opens a WebSocket. Replies are large, repetitive JS, so they are
+// compressed (permessage-deflate) when the browser supports it.
+func (app *App) acceptWS(w http.ResponseWriter, r *http.Request) {
+	if err := app.wsHandshake(r); err != nil {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true, // wsHandshake checked the origin
+		CompressionMode:    websocket.CompressionNoContextTakeover,
+	})
+	if err != nil {
+		return
+	}
+	app.handleWS(&socket{Conn: c, req: r})
+}
+
 // wsHandshake accepts same-origin browser requests, configured origins, and
 // non-browser clients that do not send Origin.
-func (app *App) wsHandshake(_ *websocket.Config, r *http.Request) error {
+func (app *App) wsHandshake(r *http.Request) error {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return nil
@@ -1191,7 +1234,7 @@ func (app *App) wsHandshake(_ *websocket.Config, r *http.Request) error {
 
 // send serializes outbound frames for a connection shared by handler replies,
 // Push calls, and broadcasts.
-func (app *App) send(ws *websocket.Conn, s string) error {
+func (app *App) send(ws *socket, s string) error {
 	app.mu.RLock()
 	st, ok := app.connStates[ws]
 	app.mu.RUnlock()
@@ -1200,15 +1243,14 @@ func (app *App) send(ws *websocket.Conn, s string) error {
 	}
 	st.writeMu.Lock()
 	defer st.writeMu.Unlock()
-	if err := ws.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
-		return err
-	}
-	return websocket.Message.Send(ws, s)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return ws.Write(ctx, websocket.MessageText, []byte(s))
 }
 
 // cancelConn cancels the push context for a connection and creates a fresh
 // one. Any goroutine holding the old context will see ctx.pushCtx.Err() != nil.
-func (app *App) cancelConn(ws *websocket.Conn) {
+func (app *App) cancelConn(ws *socket) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 	if st, ok := app.connStates[ws]; ok {
@@ -1229,7 +1271,7 @@ func (app *App) cancelConn(ws *websocket.Conn) {
 }
 
 // pushCtxForConn returns the current push context for a connection.
-func (app *App) pushCtxForConn(ws *websocket.Conn) context.Context {
+func (app *App) pushCtxForConn(ws *socket) context.Context {
 	app.mu.RLock()
 	defer app.mu.RUnlock()
 	if st, ok := app.connStates[ws]; ok {
@@ -1238,12 +1280,12 @@ func (app *App) pushCtxForConn(ws *websocket.Conn) context.Context {
 	return context.Background()
 }
 
-func (app *App) handleWS(ws *websocket.Conn) {
+func (app *App) handleWS(ws *socket) {
 	// Register client and create initial push context
-	connectionCtx, connectionCancel := context.WithCancel(ws.Request().Context())
+	connectionCtx, connectionCancel := context.WithCancel(ws.req.Context())
 	defer connectionCancel()
 	pushCtx, pushCancel := context.WithCancel(connectionCtx)
-	ws.MaxPayloadBytes = 1 << 20
+	ws.SetReadLimit(1 << 20)
 	app.mu.Lock()
 	app.clients[ws] = true
 	app.connStates[ws] = &connState{ctx: pushCtx, connectionCtx: connectionCtx, connectionCancel: connectionCancel, cancel: pushCancel, session: make(map[string]any), subscriptions: make(map[string]subscription)}
@@ -1267,7 +1309,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		}
 		delete(app.clients, ws)
 		app.mu.Unlock()
-		_ = ws.Close()
+		_ = ws.CloseNow()
 	}()
 
 	// Read independently so disconnect cancels a running action. Dispatch is
@@ -1277,10 +1319,11 @@ func (app *App) handleWS(ws *websocket.Conn) {
 		defer connectionCancel()
 		defer close(messages)
 		for {
-			var raw string
-			if err := websocket.Message.Receive(ws, &raw); err != nil {
+			_, data, err := ws.Read(connectionCtx)
+			if err != nil {
 				return
 			}
+			raw := string(data)
 			select {
 			case messages <- raw:
 			case <-connectionCtx.Done():
@@ -1321,7 +1364,7 @@ func (app *App) handleWS(ws *websocket.Conn) {
 
 		// Build context with current push context
 		ctx := &Context{
-			Request:    ws.Request(),
+			Request:    ws.req,
 			PathParams: make(map[string]string),
 			Query:      make(map[string]string),
 			wsConn:     ws,
@@ -1390,7 +1433,7 @@ type Context struct {
 	Session      map[string]any // connection-local scratch state; reset on reconnect
 	PathParams   map[string]string
 	Query        map[string]string
-	wsConn       *websocket.Conn
+	wsConn       *socket
 	wsData       map[string]any
 	app          *App
 	pushCtx      context.Context // cancelled when client navigates away or reports element not found
@@ -1553,7 +1596,7 @@ func (app *App) Broadcast(result Result) error {
 	}
 	frame, _ := json.Marshal(map[string]any{"__push": true, "broadcast": true, "js": js})
 	app.mu.RLock()
-	clients := make([]*websocket.Conn, 0, len(app.clients))
+	clients := make([]*socket, 0, len(app.clients))
 	for conn := range app.clients {
 		clients = append(clients, conn)
 	}

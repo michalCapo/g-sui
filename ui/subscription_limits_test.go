@@ -17,7 +17,7 @@ func subscriptionConnection(t *testing.T, app *App) (*connState, func() *Context
 	t.Helper()
 	life, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	ws := &websocket.Conn{}
+	ws := &socket{}
 	st := &connState{ctx: life, session: make(map[string]any), subscriptions: make(map[string]subscription)}
 	app.connStates[ws] = st
 	return st, func() *Context {

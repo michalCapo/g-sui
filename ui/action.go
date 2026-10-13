@@ -238,6 +238,15 @@ func Navigate(path string) *Action { return op("nav", path, false, false) }
 // replace=true replaces the current history entry (useful for search input).
 func PatchURL(path string, replace bool) *Action { return op("nav", path, true, replace) }
 
+// PatchRegions is PatchURL that morphs only the named regions (see Region).
+// The rest of the page is not sent. Without regions it is PatchURL.
+func PatchRegions(path string, replace bool, regions ...string) *Action {
+	if len(regions) == 0 {
+		return PatchURL(path, replace)
+	}
+	return op("nav", path, true, replace, regions)
+}
+
 // Redirect loads a URL with a full page load.
 func Redirect(url string) *Action { return op("redirect", url) }
 

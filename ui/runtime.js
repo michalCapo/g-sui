@@ -119,6 +119,7 @@
       url: target,
       history: options.history || (options.replace ? 'replace' : 'push'),
       patch: !!options.patch,
+      regions: options.patch && options.regions || undefined,
       x: options.x || 0, y: options.y || 0
     }, null, null, build ? {loader:false} : undefined);
     if (options.patch) return;

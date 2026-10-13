@@ -311,6 +311,55 @@ func TestRuntimeViewsAreIsolatedAndPatchPreservesState(t *testing.T) {
 	}
 }
 
+// The first patch on a new connection must morph the page, not reload it.
+func TestRuntimeFirstPatchMorphs(t *testing.T) {
+	app := NewApp()
+	app.Page("/items", func(ctx *Context) *Node { return Span().Text("item:" + ctx.Request.URL.Query().Get("id")) })
+	app.Page("/other", func(_ *Context) *Node { return Span().Text("other") })
+	ws := runtimeSocket(t, app)
+	js := runtimeCall(t, ws, "__nav", "/items?id=1", 1, map[string]any{"url": "/items?id=2", "patch": true})
+	if !strings.Contains(js, "item:2") || strings.Contains(js, "redirect") {
+		t.Fatal("first patch did not morph", js)
+	}
+	ws = runtimeSocket(t, app)
+	js = runtimeCall(t, ws, "__nav", "/other", 1, map[string]any{"url": "/items?id=2", "patch": true})
+	if strings.Contains(js, "item:2") {
+		t.Fatal("patch to another page must reload", js)
+	}
+}
+
+// A region patch sends only its regions; a missing region morphs the page.
+func TestRuntimePatchRegions(t *testing.T) {
+	app := NewApp()
+	app.Page("/items", func(ctx *Context) *Node {
+		id := ctx.Request.URL.Query().Get("id")
+		return Div().Render(Region("form", Span().Text("form:"+id)), Span().Text("grid:"+id))
+	})
+	ws := runtimeSocket(t, app)
+	js := runtimeCall(t, ws, "__nav", "/items?id=1", 1, map[string]any{"url": "/items?id=2", "patch": true, "regions": []string{"form"}})
+	if !strings.Contains(js, "form:2") || strings.Contains(js, "grid:2") || !strings.Contains(js, `__gsuiPage="/items?id=2"`) {
+		t.Fatal("region patch", js)
+	}
+	js = runtimeCall(t, ws, "__nav", "/items?id=2", 1, map[string]any{"url": "/items?id=3", "patch": true, "regions": []string{"nope"}})
+	if !strings.Contains(js, "grid:3") {
+		t.Fatal("missing region must morph the page", js)
+	}
+}
+
+// Result.PatchURL renders the new page in the action reply.
+func TestRuntimeResultPatchURLInline(t *testing.T) {
+	app := NewApp()
+	app.Page("/items", func(ctx *Context) *Node { return Span().Text("item:" + ctx.Request.URL.Query().Get("id")) })
+	RegisterAction(app, "save", func(_ *Context, _ map[string]any) (Result, error) {
+		return Result{}.PatchURL("/items?id=9", true), nil
+	})
+	ws := runtimeSocket(t, app)
+	js := runtimeCall(t, ws, "save", "/items?id=1", 1, map[string]any{})
+	if !strings.Contains(js, "item:9") || !strings.Contains(js, "__gsuiNavigationDone") || strings.Contains(js, "__gsui.nav") {
+		t.Fatal("PatchURL was not inline", js)
+	}
+}
+
 type runtimeInput struct {
 	Name string `json:"name"`
 }

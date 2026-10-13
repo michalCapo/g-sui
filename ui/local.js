@@ -52,7 +52,7 @@
       navigator.clipboard.writeText(text).then(function () { g.notify(el, 'success', 'Copied to clipboard'); },
         function () { g.notify(el, 'error', 'Copy failed'); });
     },
-    nav: function (el, path, patch, replace) { __ws.navigate(path, {patch: patch, replace: replace}); },
+    nav: function (el, path, patch, replace, regions) { __ws.navigate(path, {patch: patch, replace: replace, regions: regions}); },
     redirect: function (el, url) {
       document.body.style.visibility = 'hidden';
       setTimeout(function () { window.location.href = url; }, 200);

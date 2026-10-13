@@ -11,8 +11,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"golang.org/x/net/websocket"
 )
 
 //go:embed runtime.js
@@ -94,6 +92,19 @@ func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
 	ctx.Session = st.session
 	app.mu.RUnlock()
 	if msg.Act == "__nav" {
+		// A new connection does not know its page yet. Take it from the
+		// message, so the first patch morphs instead of reloading the page.
+		if previous == nil && msg.Page != "" {
+			if r, err := pageRequest(ctx.Request, msg.Page); err == nil {
+				if _, matched, ok := app.matchPage(r); ok {
+					app.mu.Lock()
+					if st.request == nil {
+						st.request = matched
+					}
+					app.mu.Unlock()
+				}
+			}
+		}
 		return nil
 	} // destination authorization is in navigate
 	if previous != nil && msg.Version != version {
@@ -153,11 +164,12 @@ func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
 }
 
 type navigationRequest struct {
-	URL     string  `json:"url"`
-	History string  `json:"history"` // push, replace, or none (popstate)
-	Patch   bool    `json:"patch"`
-	X       float64 `json:"x"` // CSS pixels can be fractional with zoom/display scaling.
-	Y       float64 `json:"y"`
+	URL     string   `json:"url"`
+	History string   `json:"history"` // push, replace, or none (popstate)
+	Patch   bool     `json:"patch"`
+	Regions []string `json:"regions,omitempty"` // patch only these regions
+	X       float64  `json:"x"`                 // CSS pixels can be fractional with zoom/display scaling.
+	Y       float64  `json:"y"`
 }
 
 func (app *App) navigate(ctx *Context) string {
@@ -165,6 +177,13 @@ func (app *App) navigate(ctx *Context) string {
 	if err := ctx.body(&req); err != nil {
 		return Notify("error", "Invalid navigation").script()
 	}
+	return app.renderNavigation(ctx, req)
+}
+
+// renderNavigation renders req.URL and returns the JS that shows it. A patch
+// with regions morphs only those regions; it morphs the whole page when one
+// of them is missing.
+func (app *App) renderNavigation(ctx *Context, req navigationRequest) string {
 	r, err := pageRequest(ctx.Request, req.URL)
 	if err != nil {
 		return Notify("error", "Invalid navigation").script()
@@ -202,12 +221,15 @@ func (app *App) navigate(ctx *Context) string {
 	}
 	var js string
 	if req.Patch {
+		js = regionsJS(node, req.Regions)
+	}
+	if req.Patch && js == "" {
 		if app.layout != nil {
 			js = node.toJSMorphInner("__content__")
 		} else {
 			js = node.toJSMorphBody()
 		}
-	} else {
+	} else if !req.Patch {
 		if app.layout != nil {
 			js = node.toJSInner("__content__")
 		} else {
@@ -229,7 +251,7 @@ type subscription struct {
 	cancel context.CancelFunc
 }
 
-func (app *App) cancelSubscription(wsConn *websocket.Conn, name, key string) {
+func (app *App) cancelSubscription(wsConn *socket, name, key string) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 	if st, ok := app.connStates[wsConn]; ok {
@@ -246,7 +268,7 @@ func (app *App) cancelSubscription(wsConn *websocket.Conn, name, key string) {
 // Call alongside http.Server.Shutdown, which does not close upgraded sockets.
 func (app *App) Close() error {
 	app.mu.RLock()
-	var clients []*websocket.Conn
+	var clients []*socket
 	var cancels []context.CancelFunc
 	for conn := range app.clients {
 		clients = append(clients, conn)
@@ -260,7 +282,7 @@ func (app *App) Close() error {
 	}
 	var errs []error
 	for _, conn := range clients {
-		if err := conn.Close(); err != nil {
+		if err := conn.CloseNow(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -395,8 +417,20 @@ func (r Result) Toast(message string) Result {
 	return r.Notify("success", message)
 }
 func (r Result) Navigate(path string) Result { return r.Run(Navigate(path)) }
-func (r Result) PatchURL(path string, replace bool) Result {
-	return r.Run(PatchURL(path, replace))
+
+// PatchURL changes the URL and morphs the page in the same reply, without a
+// second request. Regions limit the morph like PatchRegions.
+func (r Result) PatchURL(path string, replace bool, regions ...string) Result {
+	return r.effect(func(ctx *Context) (string, error) {
+		if ctx == nil || ctx.app == nil || ctx.wsConn == nil {
+			return PatchRegions(path, replace, regions...).script(), nil
+		}
+		history := "push"
+		if replace {
+			history = "replace"
+		}
+		return ctx.app.renderNavigation(ctx, navigationRequest{URL: path, History: history, Patch: true, Regions: regions}), nil
+	})
 }
 
 // Run runs local actions in the browser, e.g. Run(ui.CloseDialog("edit")).
@@ -459,6 +493,19 @@ func findRegion(n *Node, id string) *Node {
 		}
 	}
 	return nil
+}
+
+// regionsJS morphs the named regions of root. It returns "" when one is missing.
+func regionsJS(root *Node, regions []string) string {
+	var b strings.Builder
+	for _, id := range regions {
+		n := findRegion(root, id)
+		if n == nil {
+			return ""
+		}
+		b.WriteString(n.toJSMorph(id))
+	}
+	return b.String()
 }
 func (r Result) build(ctx *Context) (string, error) {
 	var b strings.Builder

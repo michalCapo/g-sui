@@ -53,14 +53,14 @@ func TestWebSocketOriginHandshake(t *testing.T) {
 		r.Header.Set("Origin", origin)
 		return r
 	}
-	if err := app.wsHandshake(nil, request("https://example.test")); err != nil {
+	if err := app.wsHandshake(request("https://example.test")); err != nil {
 		t.Fatalf("same origin rejected: %v", err)
 	}
-	if err := app.wsHandshake(nil, request("https://other.test")); err == nil {
+	if err := app.wsHandshake(request("https://other.test")); err == nil {
 		t.Fatal("cross origin accepted")
 	}
 	app.AllowedOrigins = []string{"https://other.test"}
-	if err := app.wsHandshake(nil, request("https://other.test")); err != nil {
+	if err := app.wsHandshake(request("https://other.test")); err != nil {
 		t.Fatalf("allowed origin rejected: %v", err)
 	}
 }

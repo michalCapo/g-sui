@@ -2,9 +2,11 @@ package ui
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"golang.org/x/net/websocket"
 )
@@ -126,5 +128,25 @@ func TestWebSocketNavigationSupportsPagePathValues(t *testing.T) {
 	}
 	if !strings.Contains(reply.JS, "ws-token:ws-token") {
 		t.Fatalf("navigation response does not contain both path values: %s", reply.JS)
+	}
+}
+
+// Embedded assets get a content ETag, so a repeat request gets 304.
+func TestAssetsETag(t *testing.T) {
+	app := NewApp()
+	app.Assets(fstest.MapFS{"static/a.txt": {Data: []byte("hello")}}, "static", "/static/")
+	h := app.Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/static/a.txt", nil))
+	tag := rec.Header().Get("ETag")
+	if rec.Code != 200 || tag == "" || rec.Body.String() != "hello" {
+		t.Fatal(rec.Code, tag, rec.Body.String())
+	}
+	req := httptest.NewRequest("GET", "/static/a.txt", nil)
+	req.Header.Set("If-None-Match", tag)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotModified {
+		t.Fatal("want 304, got", rec.Code)
 	}
 }
