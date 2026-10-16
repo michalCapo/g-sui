@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -80,6 +81,13 @@ type App struct {
 	// Values <= 0 use the default of 64. Configure before serving requests.
 	// New IDs are rejected at the limit; existing IDs may be restarted.
 	MaxSubscriptions int
+
+	// MessageLimit returns the inbound WebSocket message limit for a
+	// connection from its handshake request. Nil, or values <= 0, use the
+	// default of 1 MiB. Grant larger limits only to authenticated requests.
+	// A larger message closes the connection; the client reports it as lost.
+	// Configure before serving requests.
+	MessageLimit func(*http.Request) int64
 
 	// Favicon is the URL path for the site favicon (e.g. "/assets/favicon.svg").
 	// When set, a <link rel="icon"> tag is emitted in the HTML shell.
@@ -335,8 +343,8 @@ func (app *App) setup() {
 
 func (app *App) setupRoutes() {
 	app.pageHandler = app.pageMux
-	for i := len(app.middleware) - 1; i >= 0; i-- {
-		app.pageHandler = app.middleware[i](app.pageHandler)
+	for _, v := range slices.Backward(app.middleware) {
+		app.pageHandler = v(app.pageHandler)
 	}
 	// Built-in __nav action: handles popstate (browser back/forward).
 	// Looks up the page handler for the URL and replaces content.
@@ -1285,7 +1293,14 @@ func (app *App) handleWS(ws *socket) {
 	connectionCtx, connectionCancel := context.WithCancel(ws.req.Context())
 	defer connectionCancel()
 	pushCtx, pushCancel := context.WithCancel(connectionCtx)
-	ws.SetReadLimit(1 << 20)
+	var limit int64
+	if app.MessageLimit != nil {
+		limit = app.MessageLimit(ws.req)
+	}
+	if limit <= 0 {
+		limit = 1 << 20
+	}
+	ws.SetReadLimit(limit)
 	app.mu.Lock()
 	app.clients[ws] = true
 	app.connStates[ws] = &connState{ctx: pushCtx, connectionCtx: connectionCtx, connectionCancel: connectionCancel, cancel: pushCancel, session: make(map[string]any), subscriptions: make(map[string]subscription)}
@@ -1313,8 +1328,9 @@ func (app *App) handleWS(ws *socket) {
 	}()
 
 	// Read independently so disconnect cancels a running action. Dispatch is
-	// serial and the inbound queue is bounded.
+	// serial and the inbound queue is bounded, in messages and in bytes.
 	messages := make(chan string, 16)
+	var queued atomic.Int64
 	go func() {
 		defer connectionCancel()
 		defer close(messages)
@@ -1324,6 +1340,10 @@ func (app *App) handleWS(ws *socket) {
 				return
 			}
 			raw := string(data)
+			if queued.Add(int64(len(raw))) > 2*limit {
+				// Large messages queued behind a slow action would hold memory.
+				return
+			}
 			select {
 			case messages <- raw:
 			case <-connectionCtx.Done():
@@ -1336,6 +1356,7 @@ func (app *App) handleWS(ws *socket) {
 		}
 	}()
 	for raw := range messages {
+		queued.Add(-int64(len(raw)))
 		if connectionCtx.Err() != nil {
 			return
 		}

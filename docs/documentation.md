@@ -2246,7 +2246,11 @@ frees its slot; navigation and disconnect clear all slots.
 Pass `ctx.Context()` to blocking work and stop on cancellation. Reads continue
 while an action runs so disconnect can cancel it. Actions remain serial per
 connection: keep them short and use subscriptions/background jobs for streams.
-The inbound message limit is 1 MiB; writes have a ten-second deadline.
+The inbound message limit is 1 MiB. Set `app.MessageLimit` before serving to
+choose a limit per connection from its handshake request, such as a larger one
+for signed-in users whose actions carry inline images. Grant larger limits only
+to authenticated requests. A larger message closes the connection, and so do
+queued messages over twice the limit. Writes have a ten-second deadline.
 
 Call `app.Close()` alongside `http.Server.Shutdown()` to close upgraded sockets.
 The example uses `app.Listen` for simple startup. For graceful shutdown, use a

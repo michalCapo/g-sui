@@ -610,3 +610,54 @@ func TestRuntimePingSkipsAuthorization(t *testing.T) {
 		t.Fatalf("ping reply %q", js)
 	}
 }
+
+// MessageLimit raises the inbound limit; the default closes on larger messages.
+func TestRuntimeMessageLimit(t *testing.T) {
+	large := strings.Repeat("a", 2<<20)
+	newApp := func(limit int64) *App {
+		app := NewApp()
+		app.MessageLimit = func(*http.Request) int64 { return limit }
+		app.Page("/", func(*Context) *Node { return Span() })
+		RegisterAction(app, "save", func(_ *Context, in runtimeInput) (Result, error) {
+			return Result{}.Toast(fmt.Sprint("saved:", len(in.Name))), nil
+		})
+		return app
+	}
+	ws := runtimeSocket(t, newApp(3<<20))
+	if js := runtimeCall(t, ws, "save", "/", 1, map[string]any{"name": large}); !strings.Contains(js, fmt.Sprint("saved:", len(large))) {
+		t.Fatal("raised limit rejected the message", js)
+	}
+	ws = runtimeSocket(t, newApp(0))
+	b, _ := json.Marshal(wsMessage{Act: "save", Data: map[string]any{"name": large}, ID: 1, Page: "/", Version: 1})
+	if err := websocket.Message.Send(ws, string(b)); err != nil {
+		t.Fatal(err)
+	}
+	var raw string
+	if err := websocket.Message.Receive(ws, &raw); err == nil {
+		t.Fatal("default limit accepted a 2 MiB message", raw)
+	}
+}
+
+// Large messages queued behind a slow action close the connection.
+func TestRuntimeQueuedBytesLimit(t *testing.T) {
+	app := NewApp()
+	app.Page("/", func(*Context) *Node { return Span() })
+	canceled := make(chan struct{})
+	RegisterAction(app, "slow", func(ctx *Context, _ runtimeInput) (Result, error) {
+		<-ctx.Context().Done()
+		close(canceled)
+		return Result{}, nil
+	})
+	ws := runtimeSocket(t, app)
+	b, _ := json.Marshal(wsMessage{Act: "slow", Data: map[string]any{"name": strings.Repeat("a", 900<<10)}, ID: 1, Page: "/", Version: 1})
+	for range 4 {
+		if err := websocket.Message.Send(ws, string(b)); err != nil {
+			break
+		}
+	}
+	select {
+	case <-canceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("queued bytes over twice the limit kept the connection")
+	}
+}
