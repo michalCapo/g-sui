@@ -436,8 +436,10 @@ func (n *Node) toJSInsert(parentID, afterID string) string {
 
 // moveJS moves the element id right after afterID in its parent, or first
 // when afterID is empty or elsewhere. Missing elements are skipped.
+// moveBefore keeps focus, selection and running media; where the browser
+// lacks it, focus inside the element is put back after the move.
 func moveJS(id, afterID string) string {
-	return fmt.Sprintf("(function(){var _e=document.getElementById('%s');if(!_e||!_e.parentNode)return;var _p=_e.parentNode,_a=%s;if(_a===_e)return;if(_a&&_a.parentNode===_p){if(_a.nextSibling!==_e)_a.after(_e);}else if(_p.firstChild!==_e)_p.prepend(_e);})();", escJS(id), afterJS(afterID))
+	return fmt.Sprintf("(function(){var _e=document.getElementById('%s');if(!_e||!_e.parentNode)return;var _p=_e.parentNode,_a=%s;if(_a===_e)return;var _r;if(_a&&_a.parentNode===_p){if(_a.nextSibling===_e)return;_r=_a.nextSibling}else{if(_p.firstChild===_e)return;_r=_p.firstChild}if(_p.moveBefore){try{_p.moveBefore(_e,_r);return}catch(_){}}var _f=document.activeElement;_p.insertBefore(_e,_r);if(_f&&_f!==document.activeElement&&_e.contains(_f)&&_f.focus)_f.focus({preventScroll:true});})();", escJS(id), afterJS(afterID))
 }
 
 func afterJS(afterID string) string {

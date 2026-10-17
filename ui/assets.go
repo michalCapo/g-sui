@@ -71,7 +71,7 @@ func (app *App) serveAsset(w http.ResponseWriter, r *http.Request) {
 	h.Del("Expires")
 	h.Add("Vary", "Accept-Encoding")
 	body := file.data
-	if file.gzipped != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+	if file.gzipped != nil && acceptsGzip(r) {
 		h.Set("Content-Encoding", "gzip")
 		body = file.gzipped
 	}
@@ -142,4 +142,29 @@ func (app *App) styleHeadHTML() string {
 `)
 	}
 	return b.String()
+}
+
+// acceptsGzip reports whether the request accepts a gzip body. "gzip;q=0"
+// refuses it.
+func acceptsGzip(r *http.Request) bool {
+	gzipQ, starQ := "", ""
+	for part := range strings.SplitSeq(r.Header.Get("Accept-Encoding"), ",") {
+		name, params, _ := strings.Cut(strings.TrimSpace(part), ";")
+		q := "1"
+		for param := range strings.SplitSeq(params, ";") {
+			if key, value, ok := strings.Cut(strings.TrimSpace(param), "="); ok && strings.EqualFold(strings.TrimSpace(key), "q") {
+				q = strings.TrimSpace(value)
+			}
+		}
+		switch strings.ToLower(strings.TrimSpace(name)) {
+		case "gzip", "x-gzip":
+			gzipQ = q
+		case "*":
+			starQ = q
+		}
+	}
+	if gzipQ == "" {
+		gzipQ = starQ
+	}
+	return gzipQ != "" && strings.Trim(gzipQ, "0.") != ""
 }

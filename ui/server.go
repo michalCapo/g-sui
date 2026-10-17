@@ -127,12 +127,15 @@ type App struct {
 
 	// HeartbeatTimeoutMs is how long the client waits for the answer to a
 	// keep-alive heartbeat before it replaces the socket as dead. The server
-	// answers heartbeats before queued actions. Default 5000.
+	// answers heartbeats before queued actions, but after a frame it is
+	// writing, which may take up to its 10s write limit on a slow link; a
+	// page shown again waits 4s. Default 12000.
 	HeartbeatTimeoutMs int
 
 	// HandshakeTimeoutMs gives up a connection attempt that has not been
-	// greeted by the server in time and tries again. Default 8000. Use -1
-	// to wait for the browser.
+	// greeted by the server in time and tries again; each timed out attempt
+	// waits twice as long, up to 30s. Default 8000. Use -1 to wait for the
+	// browser.
 	HandshakeTimeoutMs int
 
 	// ReconnectReloadAfterMs controls the page reload that happens after the
@@ -591,7 +594,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 
 	// Use gzip compression if the client supports it
 	var writer io.Writer = w
-	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+	if acceptsGzip(r) {
 		w.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(w)
 		defer func() { _ = gz.Close() }()
@@ -634,7 +637,7 @@ func (app *App) serveWSClient(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 
 	// Gzip compress if supported
-	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+	if acceptsGzip(r) {
 		w.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(w)
 		defer func() { _ = gz.Close() }()
@@ -939,7 +942,7 @@ var __offline=(function(){
 var __ws=(function(){
   var ws,ready=false,seq=0,inflight={},loaderEl=null,loaderTimer=0,hadClose=false,backoff=500;
   var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],api,busy={},uncertain={},restartPending=null;
-  var hbSeq=0,hbTimer=0,hsTimer=0;
+  var hbSeq=0,hbTimer=0,hsTimer=0,hsFails=0;
   function message(act,data,id,sub){return JSON.stringify({act:act,data:data||{},id:id||0,sub:sub||'',page:window.__gsuiPage||location.pathname+location.search,version:window.__gsuiVersion})}
   function release(id){var el=busy[id];if(el){el.disabled=false;el.removeAttribute('aria-busy');if(el.form)el.form.removeAttribute('aria-busy');el.classList.remove('gsui-busy','opacity-60','cursor-wait');delete busy[id]}}
   var inst=typeof __gsuiCfg.inst==='string'?__gsuiCfg.inst:'',serverChanged=false,pendingReload='';
@@ -1024,7 +1027,7 @@ var __ws=(function(){
     // Idle WebSockets get closed by proxies; a periodic heartbeat keeps the
     // connection alive during long client-side work such as file uploads,
     // and finds a dead one.
-    pingTimer=setInterval(function(){probe(__gsuiOpt('hbTimeout',5000))},iv);
+    pingTimer=setInterval(function(){probe(__gsuiOpt('hbTimeout',12000))},iv);
   }
   function stopPing(){if(pingTimer){clearInterval(pingTimer);pingTimer=0}alive()}
   // rawSend never throws: readyState can already be CLOSING/CLOSED before the
@@ -1115,9 +1118,11 @@ var __ws=(function(){
     ws=sock;
     // A handshake that hangs (common right after a phone wakes up) is given
     // up early; the server greets every connection at once.
+    // Each timed out attempt waits twice as long, up to 30s, so a very slow
+    // network still gets through.
     if(hsTimer)clearTimeout(hsTimer);
     var hs=__gsuiOpt('handshakeTimeout',8000);
-    if(hs>=0)hsTimer=setTimeout(function(){hsTimer=0;if(ws===sock&&!sock.__gsuiHello){ws=null;try{sock.close()}catch(_){}if(restarting)finishRestart(new Error('WebSocket restart timed out'));retry()}},hs);
+    if(hs>=0)hsTimer=setTimeout(function(){hsTimer=0;if(ws===sock&&!sock.__gsuiHello){hsFails++;ws=null;try{sock.close()}catch(_){}if(restarting)finishRestart(new Error('WebSocket restart timed out'));retry()}},Math.min(Math.max(hs,30000),hs*Math.pow(2,hsFails)));
     sock.onopen=function(){
       if(ws!==sock){try{sock.close()}catch(_){}return;}
       ready=true;backoff=500;
@@ -1147,7 +1152,7 @@ var __ws=(function(){
       alive();
       var m;try{m=JSON.parse(e.data)}catch(_){return}
       if(m&&m.__hb)return;
-      if(m&&m.__hello){sock.__gsuiHello=true;if(hsTimer){clearTimeout(hsTimer);hsTimer=0}onHello(m.__hello,restarting);return}
+      if(m&&m.__hello){sock.__gsuiHello=true;hsFails=0;if(hsTimer){clearTimeout(hsTimer);hsTimer=0}onHello(m.__hello,restarting);return}
       if(!m||(!m.__r&&!m.__push))return;
       if(!m.broadcast&&(!Number.isInteger(m.version)||m.version<1))return;
       if(m&&m.__r){delete inflight[m.id];delete uncertain[m.id];release(m.id);hideLoader()}
@@ -1178,13 +1183,13 @@ var __ws=(function(){
   function resume(){
     if(document.hidden)return;
     __offline.resume();
-    if(ws&&ws.readyState===1&&ready){probe(__gsuiOpt('resumeTimeout',2500));return}
+    if(ws&&ws.readyState===1&&ready){probe(__gsuiOpt('resumeTimeout',4000));return}
     if(!api.connected()&&hadClose)__offline.down();
     reconnectNow();
   }
   connect();
   window.addEventListener('online',resume);
-  window.addEventListener('offline',function(){if(!api.connected())__offline.down();else probe(__gsuiOpt('resumeTimeout',2500))});
+  window.addEventListener('offline',function(){if(!api.connected())__offline.down();else probe(__gsuiOpt('resumeTimeout',4000))});
   window.addEventListener('pageshow',function(e){if(e&&e.persisted)resume()});
   document.addEventListener('visibilitychange',resume);
   window.addEventListener('popstate',function(event){window.__gsuiPop(event)});

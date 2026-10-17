@@ -68,3 +68,16 @@ func TestCompiledStylesReplaceCDN(t *testing.T) {
 		}
 	}
 }
+
+func TestAcceptsGzipHonoursQuality(t *testing.T) {
+	for header, want := range map[string]bool{
+		"gzip": true, "br, gzip": true, "gzip;q=0.5": true, "*": true, "": false,
+		"gzip;q=0": false, "gzip;q=0.0, br": false, "br": false, "*;q=0": false, "*, gzip;q=0": false,
+	} {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept-Encoding", header)
+		if got := acceptsGzip(req); got != want {
+			t.Errorf("acceptsGzip(%q) = %v, want %v", header, got, want)
+		}
+	}
+}
