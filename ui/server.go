@@ -182,6 +182,10 @@ type App struct {
 	AllowedOrigins []string
 
 	skeletons []skeletonRoute
+
+	assets      map[string]*assetFile
+	tailwindURL string
+	iconFontURL string
 }
 
 // LoaderMode selects the loading overlay. See App.Loader.
@@ -404,6 +408,7 @@ func (app *App) setupRoutes() {
 
 	// Serve the tiny WS client script
 	app.mux.HandleFunc("GET /__ws.js", app.serveWSClient)
+	app.mux.HandleFunc("GET "+assetPrefix, app.serveAsset)
 
 	// WebSocket endpoint
 	app.mux.HandleFunc("/__ws", app.acceptWS)
@@ -601,23 +606,12 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 %s
 %s
 %s
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <script>%s
 %s
 %s
 %s
 %s</script>
-
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" data-gsui-style-engine async onload="this.dataset.gsuiLoaded='true'" onerror="this.dataset.gsuiLoaded='error'"></script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" media="print" onload="this.media='all';this.dataset.gsuiLoaded='true'" onerror="this.dataset.gsuiLoaded='error'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"></noscript>
-<style type="text/tailwindcss">
-@custom-variant dark (&:where(.dark, .dark *));
-@theme{--font-sans:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;}
-</style>
-<style>%s</style>
+%s<style>%s</style>
 %s
 <script src="/__ws.js?v=%s" defer></script>
 <style>%s</style>
@@ -628,7 +622,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 %s
 </script>
 </body>
-</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS(), localJS, app.widgetJS(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
+</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS(), localJS, app.widgetJS(), app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -799,10 +793,11 @@ apply(localStorage.getItem('theme')||'system');
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){var s=localStorage.getItem('theme')||'';if(!s||s==='system')apply('system')});
 })();`
 
-// bootInitJS keeps the application hidden until its initial DOM, stylesheets,
-// Tailwind-generated CSS, and active web fonts are ready to paint. Waiting on
-// these resources instead of window.load avoids holding the UI for images. The
-// timeout is a fail-safe for stalled third-party resources.
+// bootInitJS keeps the application hidden until its initial DOM, stylesheets
+// and Tailwind-generated CSS are ready to paint. Web fonts are not awaited:
+// text shows in a fallback font and swaps. Waiting on these resources instead
+// of window.load avoids holding the UI for images. The timeout is a fail-safe
+// for stalled third-party resources.
 const bootInitJS = `(function(){
 if(window.__gsuiBootInit)return;window.__gsuiBootInit=true;
 var d=document.documentElement,done=false,preparing=false,pending=0,domReady=document.readyState!=='loading',timer;
@@ -818,8 +813,7 @@ function paintReveal(){
  })});
 }
 function prepareReveal(){
- if(preparing||done)return;preparing=true;
- if(document.fonts&&document.fonts.ready){document.fonts.ready.then(paintReveal,paintReveal)}else{paintReveal()}
+ if(preparing||done)return;preparing=true;paintReveal();
 }
 function check(){if(domReady&&pending===0)prepareReveal()}
 function waitFor(el){
@@ -831,6 +825,10 @@ function waitFor(el){
  el.addEventListener('load',settle,{once:true});el.addEventListener('error',settle,{once:true});
 }
 document.querySelectorAll('link[rel~="stylesheet"],script[data-gsui-style-engine],script[src*="@tailwindcss/browser"]').forEach(waitFor);
+// The in-browser Tailwind engine styles the DOM once it is complete. A
+// compiled stylesheet styles it at once, so the page shows when parsing
+// ends, without waiting for deferred scripts.
+if(!document.querySelector('script[data-gsui-style-engine]')){domReady=document.readyState!=='loading';if(!domReady)document.addEventListener('readystatechange',function(){if(document.readyState!=='loading'){domReady=true;check()}})}
 if(!domReady){document.addEventListener('DOMContentLoaded',function(){domReady=true;check()},{once:true})}
 check();
 timer=setTimeout(paintReveal,4000);

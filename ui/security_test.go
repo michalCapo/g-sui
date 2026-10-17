@@ -154,7 +154,9 @@ func TestAppShellGatesInitialPaintUntilStylesAreReady(t *testing.T) {
 	expect(t, body, `html.gsui-booting body{visibility:hidden;opacity:0}`)
 	expect(t, body, `transition:opacity 160ms cubic-bezier(.22,1,.36,1)`)
 	expect(t, body, `@media (prefers-reduced-motion:reduce)`)
-	expect(t, body, `document.fonts.ready.then(paintReveal,paintReveal)`)
+	if strings.Contains(body, "document.fonts.ready") {
+		t.Error("usable content must not wait for web fonts")
+	}
 	expect(t, body, `d.classList.remove('gsui-booting','gsui-loading-dark')`)
 	expect(t, body, `window.dispatchEvent(new Event('gsui:ready'))`)
 	expect(t, body, `timer=setTimeout(paintReveal,4000)`)

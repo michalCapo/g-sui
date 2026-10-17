@@ -1631,6 +1631,18 @@ ui.NewStepProgress(2, 5).
 - **Auto-reconnect**: Dropped connections are retried with exponential backoff (see [Connection resilience](#connection-resilience))
 - **Not-found handling**: Missing DOM targets cancel Push goroutines and notify the server
 
+### Local styles and assets
+
+By default pages load the Tailwind browser engine from a CDN and the icon font from Google Fonts, and stay hidden until the engine has styled them. For a fast start, compile the stylesheet at build time and serve it with the app:
+
+```go
+app.TailwindCSS(compiledCSS)     // <link> to a hashed, year-cached file; no CDN engine
+app.IconFont(materialIconsWoff2) // Material Icons Round, preloaded, no Google Fonts
+url := app.Asset("app.js", js)   // any file at a content-hashed, year-cached URL
+```
+
+The compiled CSS must cover every class the pages use, including g-sui's own (add the g-sui `ui` directory as a Tailwind `@source`), and declare `@custom-variant dark (&:where(.dark, .dark *));`. With it the page shows as soon as parsing ends. Web fonts are never awaited.
+
 ### Connection resilience
 
 Brief disconnects are invisible. The client keeps the page fully usable while the socket is down, so long-running in-page work (large file uploads, multi-step forms) survives a hiccup.
