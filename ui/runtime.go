@@ -756,6 +756,30 @@ func (r Result) Prepend(id string, node *Node) Result {
 	})
 }
 
+// Insert puts node into the element parentID right after its child afterID,
+// or first when afterID is "" or not a child of parentID. An element with
+// the node's id is taken out first, so Insert also moves and updates an
+// element that is already there. Use it to slide a new row into a list at
+// its place; with Move and Remove a list follows server order without being
+// rendered again. A missing parent is skipped.
+func (r Result) Insert(parentID, afterID string, node *Node) Result {
+	return r.effect(func(*Context) (string, error) {
+		if node == nil {
+			return "", errors.New("nil node")
+		}
+		return node.toJSInsert(parentID, afterID), nil
+	})
+}
+
+// Move moves the element id right after its sibling afterID, or first in
+// its parent when afterID is "" or not a sibling. The element keeps its
+// state, such as focus, open details and scroll. A missing element is
+// skipped.
+func (r Result) Move(id, afterID string) Result {
+	js := moveJS(id, afterID)
+	return r.effect(func(*Context) (string, error) { return js, nil })
+}
+
 func (r Result) SetText(id, text string) Result {
 	return r.Run(SetText(id, text))
 }

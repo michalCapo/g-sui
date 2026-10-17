@@ -393,6 +393,42 @@ func (n *Node) toJSPrepend(parentID string) string {
 	return b.String()
 }
 
+// toJSInsert compiles JS that puts this node into parentID right after its
+// child afterID, or first when afterID is empty or not a child. An element
+// with the node's id is taken out first, so inserting again moves and
+// updates it instead of doubling it. A missing parent is skipped quietly:
+// the page moved on, which is no reason to stop the sender.
+func (n *Node) toJSInsert(parentID, afterID string) string {
+	var b strings.Builder
+	b.WriteString("(function(){")
+	fmt.Fprintf(&b, "var _p=document.getElementById('%s');if(!_p)return;", escJS(parentID))
+	counter := 0
+	var postJS []string
+	root := n.compile(&b, &counter, &postJS)
+	if n.id != "" {
+		fmt.Fprintf(&b, "var _o=document.getElementById('%s');if(_o){if(window.__gsuiDispose)__gsuiDispose(_o);_o.remove();}", escJS(n.id))
+	}
+	fmt.Fprintf(&b, "var _a=%s;if(_a&&_a.parentNode===_p)_a.after(%s);else _p.prepend(%s);", afterJS(afterID), root, root)
+	for _, js := range postJS {
+		b.WriteString(js)
+	}
+	b.WriteString("})();")
+	return b.String()
+}
+
+// moveJS moves the element id right after afterID in its parent, or first
+// when afterID is empty or elsewhere. Missing elements are skipped.
+func moveJS(id, afterID string) string {
+	return fmt.Sprintf("(function(){var _e=document.getElementById('%s');if(!_e||!_e.parentNode)return;var _p=_e.parentNode,_a=%s;if(_a===_e)return;if(_a&&_a.parentNode===_p){if(_a.nextSibling!==_e)_a.after(_e);}else if(_p.firstChild!==_e)_p.prepend(_e);})();", escJS(id), afterJS(afterID))
+}
+
+func afterJS(afterID string) string {
+	if afterID == "" {
+		return "null"
+	}
+	return "document.getElementById('" + escJS(afterID) + "')"
+}
+
 // toJSInner compiles JS that replaces the innerHTML of a target element
 // with this node (sets target's children to just this node).
 func (n *Node) toJSInner(targetID string) string {
