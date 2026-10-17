@@ -1631,6 +1631,20 @@ ui.NewStepProgress(2, 5).
 - **Auto-reconnect**: Dropped connections are retried with exponential backoff (see [Connection resilience](#connection-resilience))
 - **Not-found handling**: Missing DOM targets cancel Push goroutines and notify the server
 
+### Keyed list updates
+
+A list can follow server order without being rendered again. Give each item a stable id, then send only what changed:
+
+```go
+r := ui.Result{}.
+    Remove("item-7").                      // left the list
+    Morph("item-3", renderItem(item3)).     // content changed, keeps state
+    Insert("list", "", renderItem(item9)). // new, first in #list
+    Move("item-5", "item-9")               // order changed: after item-9
+```
+
+`Insert` puts a node after a sibling, or first when the anchor is `""` or not in the parent, and replaces an element with the same id. `Move` keeps the element, with its focus and scroll. Both skip missing targets quietly. Node compilation is deterministic (attributes in sorted order), so `DebugJS` output can be hashed to see whether an item changed. `Result.Empty` reports a result without effects; `Node.GetID` and `Node.GetAttr` read back what a node was given.
+
 ### Local styles and assets
 
 By default pages load the Tailwind browser engine from a CDN and the icon font from Google Fonts, and stay hidden until the engine has styled them. For a fast start, compile the stylesheet at build time and serve it with the app:

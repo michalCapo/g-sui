@@ -401,6 +401,9 @@ func (r Result) effect(fn func(*Context) (string, error)) Result {
 	return r
 }
 
+// Empty reports whether r has no effects, so sending it would do nothing.
+func (r Result) Empty() bool { return len(r.effects) == 0 }
+
 // Add appends the effects of others after r's own, in order.
 func (r Result) Add(others ...Result) Result {
 	effects := append([]func(*Context) (string, error){}, r.effects...)

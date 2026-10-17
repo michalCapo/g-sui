@@ -13,6 +13,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -191,6 +193,22 @@ func voidEl(tag string, class ...string) *Node {
 
 // ID sets the element id attribute.
 func (n *Node) ID(id string) *Node { n.id = id; return n }
+
+// GetID returns the element id, "" when none is set.
+func (n *Node) GetID() string {
+	if n == nil {
+		return ""
+	}
+	return n.id
+}
+
+// GetAttr returns the value of an attribute set with Attr, "" when unset.
+func (n *Node) GetAttr(key string) string {
+	if n == nil {
+		return ""
+	}
+	return n.attrs[key]
+}
 
 // Class appends additional CSS classes (space-separated) to any classes
 // already set via the constructor. Useful for conditional class additions.
@@ -490,18 +508,20 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 		fmt.Fprintf(b, "%s.textContent='%s';", varName, escJS(n.text))
 	}
 
-	// Attributes
-	for k, v := range n.attrs {
-		fmt.Fprintf(b, "%s.setAttribute('%s','%s');", varName, escJS(k), escJS(v))
+	// Attributes, styles and events go out in a fixed order, so the same
+	// node always compiles to the same code: it can be hashed and compared.
+	for _, k := range slices.Sorted(maps.Keys(n.attrs)) {
+		fmt.Fprintf(b, "%s.setAttribute('%s','%s');", varName, escJS(k), escJS(n.attrs[k]))
 	}
 
 	// Inline styles
-	for k, v := range n.styles {
-		fmt.Fprintf(b, "%s.style['%s']='%s';", varName, escJS(k), escJS(v))
+	for _, k := range slices.Sorted(maps.Keys(n.styles)) {
+		fmt.Fprintf(b, "%s.style['%s']='%s';", varName, escJS(k), escJS(n.styles[k]))
 	}
 
 	// Events
-	for event, action := range n.events {
+	for _, event := range slices.Sorted(maps.Keys(n.events)) {
+		action := n.events[event]
 		if action == nil {
 			continue
 		}
