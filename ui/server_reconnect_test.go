@@ -22,7 +22,7 @@ func shellBody(t *testing.T, app *App) string {
 
 func TestReconnectConfigDefaults(t *testing.T) {
 	body := shellBody(t, NewApp())
-	if !strings.Contains(body, `window.__gsuiCfg={grace:3000,reloadAfter:15000,keepAlive:25000,inst:'`+serverInstanceID+`'};`) {
+	if !strings.Contains(body, `window.__gsuiCfg={grace:12000,reloadAfter:15000,keepAlive:25000,inst:'`+serverInstanceID+`'};`) {
 		t.Fatalf("default reconnect config missing from shell:\n%s", body)
 	}
 }
@@ -32,8 +32,11 @@ func TestReconnectConfigOverrides(t *testing.T) {
 	app.OfflineGraceMs = 5000
 	app.ReconnectReloadAfterMs = -1
 	app.KeepAliveMs = -1
+	app.ConnectingGraceMs = -1
+	app.HeartbeatTimeoutMs = 3000
+	app.HandshakeTimeoutMs = 6000
 	body := shellBody(t, app)
-	if !strings.Contains(body, `window.__gsuiCfg={grace:5000,reloadAfter:-1,keepAlive:-1,inst:'`+serverInstanceID+`'};`) {
+	if !strings.Contains(body, `window.__gsuiCfg={grace:5000,reloadAfter:-1,keepAlive:-1,inst:'`+serverInstanceID+`',connectingGrace:-1,hbTimeout:3000,handshakeTimeout:6000};`) {
 		t.Fatalf("reconnect config overrides missing from shell:\n%s", body)
 	}
 }
@@ -44,10 +47,11 @@ func TestClientKeepsPageUsableWhileOffline(t *testing.T) {
 		t.Error("offline indicator must not disable pointer events on the body")
 	}
 	for _, want := range []string{
-		"__offline.schedule()",
+		"__offline.down()",
 		"window.__gsuiHolds>0",
 		"gsui:reconnected",
-		"message('__ping'",
+		`{"act":"__hb","hb":`,
+		"gsui:connection",
 	} {
 		if !strings.Contains(wsClientJS, want) {
 			t.Errorf("client script missing %q", want)
@@ -58,7 +62,7 @@ func TestClientKeepsPageUsableWhileOffline(t *testing.T) {
 // The stub runs before /__ws.js loads; every documented helper must exist on
 // it, and hold() must share its counter with the real client.
 func TestStubExposesFullClientAPI(t *testing.T) {
-	for _, want := range []string{"call", "subscribe", "unsubscribe", "notfound", "hold", "holds", "connected", "offline", "reconnect", "restart"} {
+	for _, want := range []string{"call", "subscribe", "unsubscribe", "notfound", "hold", "holds", "connected", "offline", "state", "reconnect", "restart"} {
 		if !strings.Contains(wsStubJS, want+":function") {
 			t.Errorf("stub missing %q", want)
 		}
@@ -80,6 +84,43 @@ func TestPingActionIsRegistered(t *testing.T) {
 	app.mu.RUnlock()
 	if !ok {
 		t.Fatal("__ping action not registered")
+	}
+}
+
+// The server answers a heartbeat at once, even while an action runs, so a
+// busy connection is never taken for a dead one.
+func TestHeartbeatIsAnsweredWhileActionRuns(t *testing.T) {
+	app := NewApp()
+	app.Page("/", func(*Context) *Node { return Div() })
+	started, release := make(chan struct{}), make(chan struct{})
+	app.action("wait", func(*Context) string {
+		close(started)
+		<-release
+		return ""
+	})
+	defer close(release)
+	ws := runtimeSocket(t, app)
+	if err := websocket.Message.Send(ws, `{"act":"wait","page":"/","version":1}`); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	if err := websocket.Message.Send(ws, `{"act":"__hb","hb":7}`); err != nil {
+		t.Fatal(err)
+	}
+	var reply string
+	if err := websocket.Message.Receive(ws, &reply); err != nil {
+		t.Fatal(err)
+	}
+	if reply != `{"__hb":7}` {
+		t.Fatalf("heartbeat reply = %q", reply)
+	}
+}
+
+func TestHeartbeatID(t *testing.T) {
+	for raw, want := range map[string]string{`{"act":"__hb","hb":12}`: "12", `{"act":"__hb","hb":"1"}`: "", `{"act":"__hb","hb":}`: "", `{"act":"__ping"}`: ""} {
+		if got, _ := heartbeatID(raw); got != want {
+			t.Errorf("heartbeatID(%s) = %q, want %q", raw, got, want)
+		}
 	}
 }
 

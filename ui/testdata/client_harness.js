@@ -629,21 +629,121 @@ const tests = {
     check('reused badge is visible', env.badge() && env.badge().style.opacity === '1');
   },
 
-  // Keep-alive pings must flow on an open socket and stop on close.
+  // Keep-alive heartbeats must flow on an open socket and stop on close.
   async keepAlivePings() {
     const env = makeEnv();
-    env.run({grace: -1, reloadAfter: -1, keepAlive: 40});
+    env.run({grace: -1, reloadAfter: -1, keepAlive: 40, hbTimeout: 1000});
     const a = env.sockets[0];
     a.accept();
-    await sleep(100);
-    const pings = a.sent.filter(m => JSON.parse(m).act === '__ping').length;
-    check('pings sent while open', pings >= 1, 'pings=' + pings);
-    check('ping carries no id', a.sent.filter(m => JSON.parse(m).act === '__ping')
-      .every(m => !JSON.parse(m).id));
+    const beats = () => a.sent.filter(m => JSON.parse(m).act === '__hb');
+    await sleep(60);
+    check('heartbeat sent while open', beats().length === 1, 'beats=' + beats().length);
+    a.deliver(JSON.stringify({__hb: JSON.parse(beats()[0]).hb}));
+    await sleep(60);
+    check('next heartbeat after the answer', beats().length >= 2, 'beats=' + beats().length);
     a.drop();
     const after = a.sent.length;
     await sleep(120);
-    check('pings stop after close', a.sent.length === after);
+    check('heartbeats stop after close', a.sent.length === after);
+  },
+
+  // A socket that looks open but never answers is replaced quickly.
+  async unansweredHeartbeatReplacesSocket() {
+    const env = makeEnv();
+    const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: 30, hbTimeout: 40});
+    const a = env.sockets[0];
+    a.accept(); hello(a, 'x');
+    await waitFor(() => env.sockets.length > 1, 500);
+    check('dead socket replaced without a close event', env.sockets.length === 2 && a.readyState >= 2,
+      'sockets=' + env.sockets.length + ' state=' + a.readyState);
+    check('client is not connected while replacing', !ws.connected());
+    const b = env.latest(); b.accept(); hello(b, 'x');
+    check('replacement connects', ws.connected() && ws.state() === 'connected');
+  },
+
+  // Coming back from the background probes an open socket at once.
+  async resumeProbesOpenSocket() {
+    const env = makeEnv();
+    env.run({grace: -1, reloadAfter: -1, keepAlive: -1, resumeTimeout: 40});
+    const a = env.sockets[0];
+    a.accept(); hello(a, 'x');
+    env.sandbox.document.hidden = true;
+    env.fire('visibilitychange');
+    check('hidden page sends nothing', a.sent.length === 0);
+    env.sandbox.document.hidden = false;
+    env.fire('visibilitychange');
+    check('resume sends a heartbeat', a.sent.some(m => JSON.parse(m).act === '__hb'));
+    await sleep(80);
+    check('unanswered resume heartbeat replaces the socket', env.sockets.length === 2);
+  },
+
+  // A socket that died in the background reconnects on resume without
+  // flashing "Offline", however long it was down.
+  async resumeAfterLongOutageDoesNotFlashOffline() {
+    const env = makeEnv();
+    // The grace outlasts the one-second reconnect cooldown.
+    const ws = env.run({grace: 1200, connectingGrace: -1, reloadAfter: -1, keepAlive: -1});
+    const a = env.sockets[0];
+    a.accept(); hello(a, 'x');
+    env.sandbox.document.hidden = true;
+    a.drop();
+    await sleep(1300);
+    check('no badge while hidden', !env.badge());
+    check('state reports offline while hidden', ws.state() === 'offline', ws.state());
+    env.sandbox.document.hidden = false;
+    env.fire('visibilitychange');
+    await sleep(20);
+    check('no offline flash right after resume', !env.badge());
+    check('resume reports connecting', ws.state() === 'connecting', ws.state());
+    await waitFor(() => env.latest().readyState === 0, 1100);
+    env.latest().accept(); hello(env.latest(), 'x');
+    await sleep(80);
+    check('no badge after a quick reconnect', !env.badge() && ws.state() === 'connected');
+  },
+
+  // A short reconnect shows the quiet "Connecting…" badge, not "Offline",
+  // and every state change is reported.
+  async connectingBadgeAndStateEvents() {
+    const env = makeEnv();
+    const states = [];
+    const ws = env.run({grace: 2000, connectingGrace: 30, reloadAfter: -1, keepAlive: -1});
+    env.sandbox.window.addEventListener('gsui:connection', e => states.push(e.detail.state));
+    const a = env.sockets[0];
+    a.accept(); hello(a, 'x');
+    a.drop();
+    await sleep(80);
+    const connecting = env.body.children.find(c => c.id === '__connecting__');
+    check('connecting badge shows', !!connecting && !env.badge());
+    check('connecting badge does not block input', connecting && /pointer-events:none/.test(connecting.style.cssText));
+    await waitFor(() => env.latest() !== a, 1500);
+    env.latest().accept(); hello(env.latest(), 'x');
+    await sleep(200);
+    check('connecting badge is gone after reconnect', !env.body.children.find(c => c.id === '__connecting__'));
+    check('states reported in order', states.join(',') === 'connected,connecting,connected', states.join(','));
+    check('html carries the state', env.sandbox.document.documentElement.getAttribute('data-gsui-connection') === 'connected');
+    check('state() matches', ws.state() === 'connected');
+  },
+
+  // A browser that reports no network shows "Offline" at once.
+  async browserOfflineShowsOfflineAtOnce() {
+    const env = makeEnv();
+    env.sandbox.navigator = {onLine: true};
+    env.run({grace: 5000, reloadAfter: -1, keepAlive: -1});
+    const a = env.sockets[0];
+    a.accept(); hello(a, 'x');
+    env.sandbox.navigator.onLine = false;
+    a.drop();
+    await sleep(20);
+    check('offline badge at once without network', !!env.badge());
+  },
+
+  // A handshake that hangs is given up and tried again.
+  async hangingHandshakeIsRetried() {
+    const env = makeEnv();
+    env.run({grace: -1, reloadAfter: -1, keepAlive: -1, handshakeTimeout: 40});
+    const a = env.sockets[0];
+    await waitFor(() => env.sockets.length > 1, 1500);
+    check('hanging handshake retried', env.sockets.length === 2 && a.readyState >= 2, 'sockets=' + env.sockets.length);
   },
 
   // Reconnecting to the same process must never reload: the DOM is still valid.
@@ -990,4 +1090,6 @@ function hello(sock, id) { sock.deliver(JSON.stringify({__hello: id})); }
   }
   if (failures) { console.log(failures + ' failure(s)'); process.exit(1); }
   console.log('ok - ' + Object.keys(tests).length + ' client scenarios');
+  // Clients of finished scenarios keep retrying their sockets; stop them.
+  process.exit(0);
 })();

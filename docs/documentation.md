@@ -1637,8 +1637,11 @@ Brief disconnects are invisible. The client keeps the page fully usable while th
 
 | Behavior | Detail |
 | --- | --- |
-| Keep-alive ping | Every `App.KeepAliveMs` (default 25000, `-1` disables). Prevents proxies and load balancers from dropping idle sockets, the usual cause of "offline" during a slow upload. |
-| Offline badge | Appears only after the outage outlives `App.OfflineGraceMs` (default 3000, `-1` never shows). It is a small non-blocking badge -- it never dims the page or swallows clicks. |
+| Heartbeat | Every `App.KeepAliveMs` (default 25000, `-1` disables) the client sends a heartbeat that the server answers at once, even while an action runs. No answer within `App.HeartbeatTimeoutMs` (default 5000) replaces the socket as dead. A page shown again probes its socket the same way. |
+| Handshake timeout | A connection attempt the server has not greeted within `App.HandshakeTimeoutMs` (default 8000, `-1` waits for the browser) is given up and retried. |
+| Connecting badge | A quiet "Connecting…" badge appears when a reconnect takes longer than `App.ConnectingGraceMs` (default 1500, `-1` never shows). |
+| Offline badge | Appears only after reconnecting keeps failing for `App.OfflineGraceMs` (default 12000, `-1` never shows), or at once when the browser reports no network. A page coming back from the background starts a fresh wait, so a socket that died while hidden never flashes "Offline". Badges never dim the page or swallow clicks. |
+| Connection state | The client emits `gsui:connection` with `detail.state` `connecting`, `connected` or `offline`, sets the same value as `data-gsui-connection` on `<html>`, and `__ws.state()` returns it. |
 | Reconnect reload | The page reloads after reconnect only when the outage lasted at least `App.ReconnectReloadAfterMs` (default 15000, `-1` never reloads) **and** no hold is active. |
 | Holds | `window.__ws.hold()` registers critical work and returns a release function. While any hold is active a reconnect never reloads the page. |
 | Fast retry | Reconnect is attempted immediately on the browser `online` event and when a hidden tab becomes visible again, instead of waiting out the backoff. |

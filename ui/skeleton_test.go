@@ -124,7 +124,7 @@ func TestAppSkeletonConfig(t *testing.T) {
 	app.Skeleton("/", SkeletonList()) // replaces the earlier "/"
 
 	cfg := app.wsConfigJS()
-	prefix := `window.__gsuiCfg={grace:3000,reloadAfter:15000,keepAlive:25000,inst:'i',loader:'none',skelDelay:0,skelTarget:'main-content',skeletons:[['/mail/drafts',null],['/mail',function(){`
+	prefix := `window.__gsuiCfg={grace:12000,reloadAfter:15000,keepAlive:25000,inst:'i',loader:'none',skelDelay:0,skelTarget:'main-content',skeletons:[['/mail/drafts',null],['/mail',function(){`
 	if !strings.HasPrefix(cfg, prefix) || !strings.HasSuffix(cfg, "]};") {
 		t.Fatalf("cfg:\n%s", cfg)
 	}

@@ -109,12 +109,31 @@ type App struct {
 	// This is a trusted raw API: never pass untrusted/user-controlled input to it.
 	HTMLHead []string
 
-	// OfflineGraceMs is how long the WebSocket may stay down before the
-	// "Offline" indicator appears. Short blips (tab wake-ups, proxy hiccups,
-	// congested links during a large upload) reconnect silently within the
-	// grace window and the user never sees anything. Default 3000.
-	// Use -1 to never show the indicator.
+	// OfflineGraceMs is how long reconnecting may keep failing before the
+	// "Offline" indicator appears. It shows at once when the browser reports
+	// no network. Short blips (tab wake-ups, proxy hiccups, congested links
+	// during a large upload) reconnect within the grace window. A page coming
+	// back from the background starts a fresh wait, so a socket that died
+	// while hidden never flashes "Offline". Default 12000. Use -1 to never
+	// show the indicator.
 	OfflineGraceMs int
+
+	// ConnectingGraceMs is how long a reconnect may take before a quiet
+	// "Connecting…" badge appears. Default 1500. Use -1 to never show it.
+	// The client emits a "gsui:connection" event with detail.state
+	// "connecting", "connected" or "offline", and sets the same value as
+	// the data-gsui-connection attribute of <html>.
+	ConnectingGraceMs int
+
+	// HeartbeatTimeoutMs is how long the client waits for the answer to a
+	// keep-alive heartbeat before it replaces the socket as dead. The server
+	// answers heartbeats before queued actions. Default 5000.
+	HeartbeatTimeoutMs int
+
+	// HandshakeTimeoutMs gives up a connection attempt that has not been
+	// greeted by the server in time and tries again. Default 8000. Use -1
+	// to wait for the browser.
+	HandshakeTimeoutMs int
 
 	// ReconnectReloadAfterMs controls the page reload that happens after the
 	// socket comes back. The reload only runs when the outage lasted at least
@@ -670,12 +689,13 @@ func (app *App) helloFrame() string {
 func (app *App) wsConfigJS() string {
 	app.mu.RLock()
 	grace, reloadAfter, keepAlive := app.OfflineGraceMs, app.ReconnectReloadAfterMs, app.KeepAliveMs
+	connecting, hbTimeout, handshake := app.ConnectingGraceMs, app.HeartbeatTimeoutMs, app.HandshakeTimeoutMs
 	loader, skelDelay, skelTarget := app.Loader, app.SkeletonDelayMs, app.SkeletonTarget
 	skeletons := app.skeletons
 	app.mu.RUnlock()
 
 	if grace == 0 {
-		grace = 3000
+		grace = 12000
 	}
 	if reloadAfter == 0 {
 		reloadAfter = 15000
@@ -685,6 +705,15 @@ func (app *App) wsConfigJS() string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, `window.__gsuiCfg={grace:%d,reloadAfter:%d,keepAlive:%d,inst:'%s'`, grace, reloadAfter, keepAlive, escJS(app.instance()))
+	// Defaults live in the client; only set values are sent.
+	for _, opt := range []struct {
+		name  string
+		value int
+	}{{"connectingGrace", connecting}, {"hbTimeout", hbTimeout}, {"handshakeTimeout", handshake}} {
+		if opt.value != 0 {
+			fmt.Fprintf(&b, `,%s:%d`, opt.name, opt.value)
+		}
+	}
 	if loader == LoaderNone {
 		b.WriteString(`,loader:'none'`)
 	}
@@ -755,7 +784,7 @@ func (app *App) Skeleton(prefix string, node *Node) {
 // counter, so a hold taken before the client loads still suppresses the
 // reconnect reload and its release function keeps working afterwards.
 const wsStubJS = `window.__gsuiHolds=window.__gsuiHolds||0;
-window.__ws||(window.__ws={__q:[],navigate:function(){this.__q.push(['navigate',arguments])},call:function(){this.__q.push(['call',arguments])},subscribe:function(){this.__q.push(['subscribe',arguments])},unsubscribe:function(){this.__q.push(['unsubscribe',arguments])},notfound:function(){this.__q.push(['notfound',arguments])},hold:function(){window.__gsuiHolds++;var r=false;return function(){if(r)return;r=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1)}},holds:function(){return window.__gsuiHolds},connected:function(){return false},offline:function(){return false},reconnect:function(){},restart:function(){var q=this.__q;return new Promise(function(resolve,reject){q.push(['restart',[],resolve,reject])})}});`
+window.__ws||(window.__ws={__q:[],navigate:function(){this.__q.push(['navigate',arguments])},call:function(){this.__q.push(['call',arguments])},subscribe:function(){this.__q.push(['subscribe',arguments])},unsubscribe:function(){this.__q.push(['unsubscribe',arguments])},notfound:function(){this.__q.push(['notfound',arguments])},hold:function(){window.__gsuiHolds++;var r=false;return function(){if(r)return;r=true;window.__gsuiHolds=Math.max(0,window.__gsuiHolds-1)}},holds:function(){return window.__gsuiHolds},connected:function(){return false},offline:function(){return false},state:function(){return 'connecting'},reconnect:function(){},restart:function(){var q=this.__q;return new Promise(function(resolve,reject){q.push(['restart',[],resolve,reject])})}});`
 
 // themeInitJS runs synchronously in <head> before the body renders to
 // prevent FOUC. It reads the stored theme from localStorage, applies the
@@ -829,53 +858,90 @@ var wsClientJS = runtimeClientJS + `var __wsPre=window.__ws;
 var __gsuiCfg=window.__gsuiCfg||{};
 function __gsuiOpt(k,d){var v=__gsuiCfg[k];return typeof v==='number'?v:d}
 var __offline=(function(){
-  var timer=0,shown=false,removeTimer=0,el=null;
-  function build(){
+  // Two quiet badges: "Connecting…" while a reconnect is under way and
+  // "Offline" once reconnecting keeps failing or the browser reports no
+  // network. A page coming back from the background starts a fresh wait, so
+  // a socket that died while hidden never flashes "Offline" on resume.
+  var connTimer=0,offTimer=0,removeTimers={},els={},shown='',state='connecting';
+  function online(){return typeof navigator==='undefined'||navigator.onLine!==false}
+  function setState(next){
+    if(state===next)return;state=next;
+    try{document.documentElement.setAttribute('data-gsui-connection',next)}catch(_){}
+    try{window.dispatchEvent(new CustomEvent('gsui:connection',{detail:{state:next}}))}catch(_){}
+  }
+  function build(kind){
     // A badge from a previous outage may still be fading out; cancel its
     // pending removal and fade it back in instead of leaving a dead node.
-    if(removeTimer){clearTimeout(removeTimer);removeTimer=0;}
+    if(removeTimers[kind]){clearTimeout(removeTimers[kind]);delete removeTimers[kind];}
+    var el=els[kind];
     if(el&&el.parentNode){el.style.opacity='1';return;}
-    var o=document.createElement('div');o.id='__offline__';
+    var off=kind==='offline';
+    var o=document.createElement('div');o.id=off?'__offline__':'__connecting__';
+    o.setAttribute('role','status');
     // Badge only: never covers the page and never blocks input, so work in
     // progress (uploads, typing, drag & drop) keeps running while offline.
     o.style.cssText='position:fixed;top:12px;left:12px;z-index:2147483647;pointer-events:none;opacity:0;transition:opacity 160ms ease-out';
     var b=document.createElement('div');
     b.className='flex items-center gap-2 rounded-full px-3 py-1 text-white shadow-lg ring-1 ring-white/30';
-    b.style.background='linear-gradient(135deg,#ef4444,#ec4899)';
+    b.style.background=off?'linear-gradient(135deg,#ef4444,#ec4899)':'rgba(63,63,70,0.88)';
     var dot=document.createElement('span');dot.className='inline-block h-2.5 w-2.5 rounded-full bg-white/95 animate-pulse';
-    var lbl=document.createElement('span');lbl.className='font-semibold tracking-wide';lbl.style.color='#fff';lbl.textContent='Offline';
-    var sub=document.createElement('span');sub.className='ml-1 text-xs';sub.style.color='rgba(255,255,255,0.9)';sub.textContent='Trying to reconnect\u2026';
-    b.appendChild(dot);b.appendChild(lbl);b.appendChild(sub);o.appendChild(b);
+    var lbl=document.createElement('span');lbl.className=off?'font-semibold tracking-wide':'text-xs tracking-wide';lbl.style.color='#fff';lbl.textContent=off?'Offline':'Connecting…';
+    b.appendChild(dot);b.appendChild(lbl);
+    if(off){var sub=document.createElement('span');sub.className='ml-1 text-xs';sub.style.color='rgba(255,255,255,0.9)';sub.textContent='Trying to reconnect…';b.appendChild(sub)}
+    o.appendChild(b);
     document.body.appendChild(o);
     requestAnimationFrame(function(){o.style.opacity='1';});
-    el=o;
+    els[kind]=o;
   }
-  // Only surface the badge once the outage outlives the grace window.
-  function schedule(){
-    var grace=__gsuiOpt('grace',3000);
-    if(grace<0||shown||timer)return;
-    timer=setTimeout(function(){timer=0;shown=true;build()},grace);
-  }
-  function hide(){
-    if(timer){clearTimeout(timer);timer=0;}
-    shown=false;
-    if(!el)return;
-    var o=el;
+  function fade(kind){
+    var o=els[kind];if(!o)return;
     try{o.style.opacity='0';}catch(_){}
-    if(removeTimer)clearTimeout(removeTimer);
-    // el is kept until the node is actually gone so a new outage inside the
-    // fade window reuses this element instead of orphaning it.
-    removeTimer=setTimeout(function(){
-      removeTimer=0;
+    if(removeTimers[kind])clearTimeout(removeTimers[kind]);
+    // The element is kept until the node is actually gone so a new outage
+    // inside the fade window reuses it instead of orphaning it.
+    removeTimers[kind]=setTimeout(function(){
+      delete removeTimers[kind];
       try{if(o&&o.parentNode){o.parentNode.removeChild(o);}}catch(_){}
-      if(el===o)el=null;
+      if(els[kind]===o)delete els[kind];
     },150);
   }
-  return{schedule:schedule,hide:hide,visible:function(){return shown}};
+  function show(kind){
+    if(kind==='offline')setState('offline');
+    // A hidden page shows nothing; it starts over when it is shown again.
+    if(document.hidden||shown===kind)return;
+    if(shown)fade(shown);
+    shown=kind;build(kind);
+  }
+  function clearTimers(){
+    if(connTimer){clearTimeout(connTimer);connTimer=0}
+    if(offTimer){clearTimeout(offTimer);offTimer=0}
+  }
+  // down runs when the socket is gone. The badges wait: first the quiet
+  // "Connecting…", then "Offline" when the outage outlives the grace window.
+  function down(){
+    var grace=__gsuiOpt('grace',12000),conn=__gsuiOpt('connectingGrace',1500);
+    if(state!=='offline')setState('connecting');
+    if(grace>=0&&!online()){clearTimers();show('offline');return}
+    if(conn>=0&&!connTimer&&!shown)connTimer=setTimeout(function(){connTimer=0;if(!shown)show('connecting')},conn);
+    if(grace>=0&&!offTimer&&shown!=='offline')offTimer=setTimeout(function(){offTimer=0;show('offline')},grace);
+  }
+  // resume restarts the waits of an outage that began while hidden.
+  function resume(){
+    clearTimers();
+    if(shown){fade(shown);shown=''}
+    if(state==='offline')state='connecting';
+  }
+  function hide(){
+    clearTimers();
+    if(shown){fade(shown);shown=''}
+    setState('connected');
+  }
+  return{down:down,resume:resume,hide:hide,visible:function(){return shown==='offline'},state:function(){return state}};
 })();
 var __ws=(function(){
   var ws,ready=false,seq=0,inflight={},loaderEl=null,loaderTimer=0,hadClose=false,backoff=500;
   var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],api,busy={},uncertain={},restartPending=null;
+  var hbSeq=0,hbTimer=0,hsTimer=0;
   function message(act,data,id,sub){return JSON.stringify({act:act,data:data||{},id:id||0,sub:sub||'',page:window.__gsuiPage||location.pathname+location.search,version:window.__gsuiVersion})}
   function release(id){var el=busy[id];if(el){el.disabled=false;el.removeAttribute('aria-busy');if(el.form)el.form.removeAttribute('aria-busy');el.classList.remove('gsui-busy','opacity-60','cursor-wait');delete busy[id]}}
   var inst=typeof __gsuiCfg.inst==='string'?__gsuiCfg.inst:'',serverChanged=false,pendingReload='';
@@ -936,18 +1002,33 @@ var __ws=(function(){
     if(loaderTimer){clearTimeout(loaderTimer);loaderTimer=0;}
     if(loaderEl){loaderEl.style.opacity='0';var el=loaderEl;loaderEl=null;setTimeout(function(){try{if(el&&el.parentNode)el.parentNode.removeChild(el)}catch(_){}},160);}
   }
+  // A heartbeat is answered by the server's reader at once, even while an
+  // action runs. No answer within hbTimeout means a socket that looks open
+  // but is dead (a proxy or a suspended phone dropped it): replace it now
+  // instead of waiting for TCP to notice. Any frame from the server counts.
+  function probe(timeout){
+    if(!ready||!ws||ws.readyState!==1||hbTimer)return;
+    var sock=ws,id=++hbSeq;
+    if(!rawSend('{"act":"__hb","hb":'+id+'}'))return;
+    hbTimer=setTimeout(function(){hbTimer=0;if(ws===sock)replaceDead(sock)},timeout);
+  }
+  function alive(){if(hbTimer){clearTimeout(hbTimer);hbTimer=0}}
+  function replaceDead(sock){
+    ws=null;try{sock.close()}catch(_){}
+    markDown();
+    if(retryTimer){clearTimeout(retryTimer);retryTimer=0}
+    connect();
+  }
   function startPing(){
     stopPing();
     var iv=__gsuiOpt('keepAlive',25000);
     if(iv<0)return;
-    // Idle WebSockets get closed by proxies; a periodic no-op keeps the
-    // connection alive during long client-side work such as file uploads.
-    pingTimer=setInterval(function(){
-      if(!ready||!ws||ws.readyState!==1)return;
-      rawSend(message('__ping',{}));
-    },iv);
+    // Idle WebSockets get closed by proxies; a periodic heartbeat keeps the
+    // connection alive during long client-side work such as file uploads,
+    // and finds a dead one.
+    pingTimer=setInterval(function(){probe(__gsuiOpt('hbTimeout',5000))},iv);
   }
-  function stopPing(){if(pingTimer){clearInterval(pingTimer);pingTimer=0}}
+  function stopPing(){if(pingTimer){clearInterval(pingTimer);pingTimer=0}alive()}
   // rawSend never throws: readyState can already be CLOSING/CLOSED before the
   // close event fires, and send() would then throw and lose the message.
   function rawSend(msg){
@@ -970,7 +1051,7 @@ var __ws=(function(){
     // No action is replayed after reconnect.
     releaseCalls();
     if(!downSince)downSince=Date.now();
-    __offline.schedule();hadClose=true;
+    __offline.down();hadClose=true;
   }
   function reconnectNow(){
     // readyState is authoritative: a socket can be dead while the ready flag
@@ -1034,6 +1115,11 @@ var __ws=(function(){
     try{sock=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/__ws')}
     catch(err){if(restarting)finishRestart(err);retry();return;}
     ws=sock;
+    // A handshake that hangs (common right after a phone wakes up) is given
+    // up early; the server greets every connection at once.
+    if(hsTimer)clearTimeout(hsTimer);
+    var hs=__gsuiOpt('handshakeTimeout',8000);
+    if(hs>=0)hsTimer=setTimeout(function(){hsTimer=0;if(ws===sock&&!sock.__gsuiHello){ws=null;try{sock.close()}catch(_){}if(restarting)finishRestart(new Error('WebSocket restart timed out'));retry()}},hs);
     sock.onopen=function(){
       if(ws!==sock){try{sock.close()}catch(_){}return;}
       ready=true;backoff=500;
@@ -1060,8 +1146,10 @@ var __ws=(function(){
     };
     sock.onmessage=function(e){
       if(ws!==sock)return;
+      alive();
       var m;try{m=JSON.parse(e.data)}catch(_){return}
-      if(m&&m.__hello){onHello(m.__hello,restarting);return}
+      if(m&&m.__hb)return;
+      if(m&&m.__hello){sock.__gsuiHello=true;if(hsTimer){clearTimeout(hsTimer);hsTimer=0}onHello(m.__hello,restarting);return}
       if(!m||(!m.__r&&!m.__push))return;
       if(!m.broadcast&&(!Number.isInteger(m.version)||m.version<1))return;
       if(m&&m.__r){delete inflight[m.id];delete uncertain[m.id];release(m.id);hideLoader()}
@@ -1085,11 +1173,22 @@ var __ws=(function(){
     };
     return sock;
   }
+  // resume runs when the page is shown again or the network comes back: an
+  // open socket must prove it is alive, a closed one reconnects at once.
+  // The badges wait from now, not from when the socket died in the
+  // background.
+  function resume(){
+    if(document.hidden)return;
+    __offline.resume();
+    if(ws&&ws.readyState===1&&ready){probe(__gsuiOpt('resumeTimeout',2500));return}
+    if(!api.connected()&&hadClose)__offline.down();
+    reconnectNow();
+  }
   connect();
-  // Retry immediately when the browser regains connectivity or the tab is
-  // brought back, instead of waiting out the backoff.
-  window.addEventListener('online',reconnectNow);
-  document.addEventListener('visibilitychange',function(){if(!document.hidden)reconnectNow()});
+  window.addEventListener('online',resume);
+  window.addEventListener('offline',function(){if(!api.connected())__offline.down();else probe(__gsuiOpt('resumeTimeout',2500))});
+  window.addEventListener('pageshow',function(e){if(e&&e.persisted)resume()});
+  document.addEventListener('visibilitychange',resume);
   window.addEventListener('popstate',function(event){window.__gsuiPop(event)});
   function collectValue(id,d){
     var el=document.getElementById(id);
@@ -1144,6 +1243,9 @@ var __ws=(function(){
     holds:function(){return window.__gsuiHolds},
     connected:function(){return ready&&!!ws&&ws.readyState===1},
     offline:function(){return __offline.visible()},
+    // state is "connecting", "connected" or "offline"; a gsui:connection
+    // event reports each change.
+    state:function(){return __offline.state()},
     reconnect:reconnectNow,
     restart:restartNow,
     // Managed subscriptions restart once per connection and stop on navigation.
@@ -1340,6 +1442,14 @@ func (app *App) handleWS(ws *socket) {
 				return
 			}
 			raw := string(data)
+			if id, ok := heartbeatID(raw); ok {
+				// Answer here, not after queued actions, so a busy connection
+				// is never mistaken for a dead one.
+				if app.send(ws, `{"__hb":`+id+`}`) != nil {
+					return
+				}
+				continue
+			}
 			if queued.Add(int64(len(raw))) > 2*limit {
 				// Large messages queued behind a slow action would hold memory.
 				return
@@ -1442,6 +1552,24 @@ func (app *App) handleWS(ws *socket) {
 			start()
 		}
 	}
+}
+
+// heartbeatID returns the id of a client heartbeat, {"act":"__hb","hb":N}.
+func heartbeatID(raw string) (string, bool) {
+	rest, ok := strings.CutPrefix(raw, `{"act":"__hb","hb":`)
+	if !ok {
+		return "", false
+	}
+	id, ok := strings.CutSuffix(rest, "}")
+	if !ok || id == "" || len(id) > 16 {
+		return "", false
+	}
+	for _, r := range id {
+		if r < '0' || r > '9' {
+			return "", false
+		}
+	}
+	return id, true
 }
 
 // ---------------------------------------------------------------------------
