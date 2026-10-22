@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -594,7 +596,42 @@ func FormFor[T any](id string, class ...string) *TypedForm[T] {
 }
 func (f *TypedForm[T]) Render(children ...*Node) *TypedForm[T] { f.node.Render(children...); return f }
 func (f *TypedForm[T]) Submit(action ActionRef[T]) *Node {
-	return f.node.Attr("data-gsui-form", "").OnSubmit(UnsafeJS(fmt.Sprintf("__gsuiSubmit(event,'%s');", escJS(action.name))))
+	values := 0
+	if _, ok := any(new(T)).(*FormValues); ok {
+		values = 1
+	}
+	return f.node.Attr("data-gsui-form", "").OnSubmit(UnsafeJS(fmt.Sprintf("__gsuiSubmit(event,'%s',%d);", escJS(action.name), values)))
+}
+
+// FormValues is the input of a FormFor[FormValues] form: its fields exactly
+// as a browser posts them, in document order. Repeated names keep every
+// value, a checked checkbox sends its value and the submit button its
+// name and value. File inputs are left out.
+type FormValues struct{ url.Values }
+
+// MarshalJSON sends the values as FormFor does, so ActionRef.Call works too.
+func (v FormValues) MarshalJSON() ([]byte, error) {
+	pairs := [][2]string{}
+	for _, name := range slices.Sorted(maps.Keys(v.Values)) {
+		for _, value := range v.Values[name] {
+			pairs = append(pairs, [2]string{name, value})
+		}
+	}
+	return json.Marshal(map[string]any{"__values": pairs})
+}
+
+func (v *FormValues) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		Values [][2]string `json:"__values"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	v.Values = url.Values{}
+	for _, pair := range raw.Values {
+		v.Add(pair[0], pair[1])
+	}
+	return nil
 }
 
 // Title sets the title used after live navigation. For initial HTTP metadata,

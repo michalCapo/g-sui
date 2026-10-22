@@ -941,11 +941,18 @@ var __offline=(function(){
 })();
 var __ws=(function(){
   var ws,ready=false,seq=0,inflight={},loaderEl=null,loaderTimer=0,hadClose=false,backoff=500;
-  var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],api,busy={},uncertain={},restartPending=null;
+  var downSince=0,retryTimer=0,pingTimer=0,lastAttempt=0,subs=[],api,busy={},restartPending=null;
   var hbSeq=0,hbTimer=0,hsTimer=0,hsFails=0;
+  // calls holds every call until its reply. A call that was never written to
+  // a socket waits, in order, for a greeted connection: while a socket that
+  // was idle in the background proves it is alive (verifying), while
+  // connecting and until the server greeting. Only a sent navigation is sent
+  // again when its socket dies, because it only reads. A sent action may have
+  // run, so it is reported and never repeated.
+  var calls={},verifying=false,greeted=false,callTimer=0,reloadAfterFlush=false;
   function message(act,data,id,sub){return JSON.stringify({act:act,data:data||{},id:id||0,sub:sub||'',page:window.__gsuiPage||location.pathname+location.search,version:window.__gsuiVersion})}
   function release(id){var el=busy[id];if(el){el.disabled=false;el.removeAttribute('aria-busy');if(el.form)el.form.removeAttribute('aria-busy');el.classList.remove('gsui-busy','opacity-60','cursor-wait');delete busy[id]}}
-  var inst=typeof __gsuiCfg.inst==='string'?__gsuiCfg.inst:'',serverChanged=false,pendingReload='';
+  var inst=typeof __gsuiCfg.inst==='string'?__gsuiCfg.inst:'',cur=inst,pendingReload='';
   // Holds live on window so the pre-client stub and the real client share one
   // counter across the stub handover.
   if(typeof window.__gsuiHolds!=='number')window.__gsuiHolds=0;
@@ -968,11 +975,17 @@ var __ws=(function(){
   // elements that do not exist and the UI would look dead. Reloading is the
   // only way to resync, so a restarted server is treated like a long outage.
   // An explicit socket restart reports the change but preserves the page.
+  // Queued calls are sent once the server is known. Calls queued for an
+  // earlier process are dropped and reported; later calls go to the new one,
+  // also when the reload is deferred or disabled.
   function onHello(id,restarting){
-    if(serverChanged||!inst||!id||id===inst)return;
-    if(!restarting)serverChanged=true;
-    try{window.dispatchEvent(new CustomEvent('gsui:serverchanged',{detail:{was:inst,now:id}}))}catch(_){}
-    if(!restarting)requestReload('server-restart');
+    if(!inst||!id||id===cur){greeted=true;flush();return}
+    greeted=true;
+    try{window.dispatchEvent(new CustomEvent('gsui:serverchanged',{detail:{was:cur,now:id}}))}catch(_){}
+    // A restart keeps the page, so a later ordinary reconnect still sees the
+    // change.
+    if(restarting){flush();return}
+    cur=id;reloadAfterFlush=false;expire(true);requestReload('server-restart');
   }
   function loud(){for(var id in inflight)if(inflight[id])return true;return false}
   function showLoader(){
@@ -1010,10 +1023,13 @@ var __ws=(function(){
   function probe(timeout){
     if(!ready||!ws||ws.readyState!==1||hbTimer)return;
     var sock=ws,id=++hbSeq;
-    if(!rawSend('{"act":"__hb","hb":'+id+'}'))return;
+    if(!rawSend('{"act":"__hb","hb":'+id+'}')){replaceDead(sock);return}
     hbTimer=setTimeout(function(){hbTimer=0;if(ws===sock)replaceDead(sock)},timeout);
   }
-  function alive(){if(hbTimer){clearTimeout(hbTimer);hbTimer=0}}
+  function clearHB(){if(hbTimer){clearTimeout(hbTimer);hbTimer=0}}
+  // alive runs for every frame from the server. A verified socket sends the
+  // calls that waited for it.
+  function alive(){clearHB();if(verifying){verifying=false;flush()}}
   function replaceDead(sock){
     ws=null;try{sock.close()}catch(_){}
     markDown();
@@ -1029,27 +1045,87 @@ var __ws=(function(){
     // and finds a dead one.
     pingTimer=setInterval(function(){probe(__gsuiOpt('hbTimeout',12000))},iv);
   }
-  function stopPing(){if(pingTimer){clearInterval(pingTimer);pingTimer=0}alive()}
+  function stopPing(){if(pingTimer){clearInterval(pingTimer);pingTimer=0}clearHB()}
   // rawSend never throws: readyState can already be CLOSING/CLOSED before the
   // close event fires, and send() would then throw and lose the message.
   function rawSend(msg){
     if(!ws||ws.readyState!==1)return false;
     try{ws.send(msg);return true}catch(_){return false}
   }
+  // Queued calls keep their busy buttons. A navigation shows the old content
+  // until its reply arrives.
   function releaseCalls(){
     inflight={};hideLoader();
-    Object.keys(busy).forEach(function(id){release(id)});
+    Object.keys(busy).forEach(function(id){if(!calls[id])release(id)});
     window.__gsuiLoadEnd(0,false);
   }
+  function hasCalls(){for(var id in calls)return true;return false}
+  // send puts one queued call on the wire, never ahead of an older one.
+  function send(id){
+    var c=calls[id];
+    if(!c||c.sent||verifying||!greeted||!api.connected())return false;
+    for(var k in calls)if(Number(k)<Number(id)&&!calls[k].sent)return false;
+    // An open socket that refuses a send is broken; replace it.
+    if(!rawSend(c.msg)){if(ws&&ws.readyState===1)replaceDead(ws);return false}
+    c.sent=true;inflight[id]=c.loader;if(c.loader)showLoader();
+    return true;
+  }
+  // flush sends the queued calls in order, then checks the socket: a call on
+  // a dead socket is found within the heartbeat timeout.
+  function flush(){
+    expire(false);
+    var any=false;
+    Object.keys(calls).map(Number).sort(function(a,b){return a-b}).forEach(function(id){if(send(id))any=true});
+    if(any)probe(__gsuiOpt('hbTimeout',12000));
+  }
+  // lost handles the sent calls whose replies can no longer arrive.
+  function lost(report){
+    var now=Date.now(),n=0;
+    Object.keys(calls).forEach(function(id){
+      var c=calls[id];if(!c.sent)return;
+      if(c.act==='__nav'){c.sent=false;c.at=now;return}
+      delete calls[id];release(id);n++;
+    });
+    if(n&&report)window.__gsuiReport('Connection lost. Your last action may have completed. Check before retrying.');
+    expireLater();
+  }
+  // A queued call waits at most queueTimeout for a connection.
+  function expireLater(){
+    if(callTimer)return;
+    for(var id in calls)if(!calls[id].sent&&calls[id].act!=='__nav'){callTimer=setTimeout(function(){callTimer=0;expire(false)},1000);return}
+  }
+  // A queued navigation only reads, so it waits for the connection however
+  // long it takes; a newer navigation replaces it. Only all=true drops it.
+  function expire(all){
+    var limit=__gsuiOpt('queueTimeout',20000),now=Date.now(),n=0;
+    Object.keys(calls).forEach(function(id){
+      var c=calls[id];
+      if(c.sent||(!all&&(c.act==='__nav'||now-c.at<limit)))return;
+      delete calls[id];delete inflight[id];release(id);window.__gsuiLoadEnd(Number(id),false);
+      if(c.act!=='__nav')n++;
+    });
+    if(!loud())hideLoader();
+    if(n)window.__gsuiReport('Connection lost before sending. Please try again.');
+    expireLater();
+    reloadIfDone();
+  }
+  // reloadIfDone runs the reload a long outage deferred for queued calls,
+  // unless a restart cancelled it meanwhile.
+  function reloadIfDone(){if(reloadAfterFlush&&!hasCalls()){reloadAfterFlush=false;requestReload('long-outage')}}
+  // At most one navigation waits (a newer one replaces it), so only actions
+  // count against the queue limit.
+  function unsent(){var n=0;for(var id in calls)if(!calls[id].sent&&calls[id].act!=='__nav')n++;return n}
+  // accepts says whether a call can be sent or queued now. A navigation
+  // replaces a waiting one, so the limit is for actions.
+  function accepts(nav){return(api.connected()||__offline.state()!=='offline')&&(nav||unsent()<__gsuiOpt('queueLimit',8))}
   // markDown is the single place that records "the connection is gone". It
   // runs from onclose and when a silently dead socket is discovered, so the
   // bookkeeping is identical either way.
   function markDown(){
     if(!ready&&hadClose)return;
-    if(Object.keys(uncertain).length){window.__gsuiReport('Connection lost. Your last action may have completed. Check before retrying.');uncertain={}}
-    ready=false;stopPing();
-    // Replies for messages that were already on the wire will never arrive;
-    // No action is replayed after reconnect.
+    ready=false;verifying=false;greeted=false;stopPing();
+    // Replies for messages that were already on the wire will never arrive.
+    lost(true);
     releaseCalls();
     if(!downSince)downSince=Date.now();
     __offline.down();hadClose=true;
@@ -1084,8 +1160,10 @@ var __ws=(function(){
     finishRestart(new Error('WebSocket restart superseded'));
     // Retire the socket before closing it so even a synchronous or late event
     // cannot turn this intentional replacement into an outage.
-    var old=ws;ws=null;ready=false;stopPing();
-    releaseCalls();uncertain={};hadClose=false;downSince=0;pendingReload='';serverChanged=false;
+    var old=ws;ws=null;ready=false;verifying=false;greeted=false;stopPing();
+    // Queued calls and navigations go out on the new socket. As before, an
+    // action already sent is released without a report.
+    lost(false);releaseCalls();reloadAfterFlush=false;hadClose=false;downSince=0;pendingReload='';
     if(retryTimer){clearTimeout(retryTimer);retryTimer=0}
     __offline.hide();
     if(old){try{old.close()}catch(_){}}
@@ -1115,7 +1193,7 @@ var __ws=(function(){
     var sock;
     try{sock=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/__ws')}
     catch(err){if(restarting)finishRestart(err);retry();return;}
-    ws=sock;
+    ws=sock;greeted=false;
     // A handshake that hangs (common right after a phone wakes up) is given
     // up early; the server greets every connection at once.
     // Each timed out attempt waits twice as long, up to 30s, so a very slow
@@ -1125,7 +1203,8 @@ var __ws=(function(){
     if(hs>=0)hsTimer=setTimeout(function(){hsTimer=0;if(ws===sock&&!sock.__gsuiHello){hsFails++;ws=null;try{sock.close()}catch(_){}if(restarting)finishRestart(new Error('WebSocket restart timed out'));retry()}},Math.min(Math.max(hs,30000),hs*Math.pow(2,hsFails)));
     sock.onopen=function(){
       if(ws!==sock){try{sock.close()}catch(_){}return;}
-      ready=true;backoff=500;
+      // Without a known server id there is no greeting to wait for.
+      ready=true;backoff=500;if(!inst)greeted=true;
       if(retryTimer){clearTimeout(retryTimer);retryTimer=0}
       __offline.hide();
       startPing();
@@ -1141,11 +1220,13 @@ var __ws=(function(){
         var after=__gsuiOpt('reloadAfter',15000),holds=window.__gsuiHolds;
         // Reload only after a long outage. While the page holds the connection
         // the reload is deferred until the work finishes, never dropped.
-        if(after>=0&&outage>=after&&requestReload('long-outage'))return;
+        // Pending calls are answered first; the reload follows their replies.
+        if(after>=0&&outage>=after){if(hasCalls())reloadAfterFlush=true;else if(requestReload('long-outage'))return}
         try{window.dispatchEvent(new CustomEvent('gsui:reconnected',{detail:{downMs:outage,holds:holds}}))}catch(_){
           try{window.dispatchEvent(new Event('gsui:reconnected'))}catch(__){}
         }
       }
+      if(greeted)flush();
     };
     sock.onmessage=function(e){
       if(ws!==sock)return;
@@ -1155,7 +1236,11 @@ var __ws=(function(){
       if(m&&m.__hello){sock.__gsuiHello=true;hsFails=0;if(hsTimer){clearTimeout(hsTimer);hsTimer=0}onHello(m.__hello,restarting);return}
       if(!m||(!m.__r&&!m.__push))return;
       if(!m.broadcast&&(!Number.isInteger(m.version)||m.version<1))return;
-      if(m&&m.__r){delete inflight[m.id];delete uncertain[m.id];release(m.id);hideLoader()}
+      if(m&&m.__r){
+        delete inflight[m.id];delete calls[m.id];release(m.id);hideLoader();
+        // The reload deferred by a long outage runs after this reply is applied.
+        if(reloadAfterFlush&&!hasCalls())setTimeout(reloadIfDone,0);
+      }
       if(m&&m.version&&m.version!==window.__gsuiVersion){if(m.__r&&m.id)window.__gsuiLoadEnd(m.id,false);return}
       if(m&&m.__push&&m.subscription&&!subs.some(function(s){return s.key===m.subscription}))return;
       window.__gsuiPushSubscription=m&&m.subscription||'';
@@ -1177,13 +1262,14 @@ var __ws=(function(){
     return sock;
   }
   // resume runs when the page is shown again or the network comes back: an
-  // open socket must prove it is alive, a closed one reconnects at once.
+  // open socket must prove it is alive before calls use it, a closed one
+  // reconnects at once.
   // The badges wait from now, not from when the socket died in the
   // background.
   function resume(){
     if(document.hidden)return;
     __offline.resume();
-    if(ws&&ws.readyState===1&&ready){probe(__gsuiOpt('resumeTimeout',4000));return}
+    if(ws&&ws.readyState===1&&ready){verifying=true;probe(__gsuiOpt('resumeTimeout',4000));return}
     if(!api.connected()&&hadClose)__offline.down();
     reconnectNow();
   }
@@ -1229,8 +1315,14 @@ var __ws=(function(){
   });
   api={
     navigate:function(path,options){window.__gsuiNavigate(path,options)},
+    accepts:accepts,
     beginNavigation:function(patch){
-      if(!patch){subs=[];inflight={};Object.keys(busy).forEach(release);hideLoader()}
+      if(!patch){
+        // Calls still on their way keep their busy controls.
+        subs=[];inflight={};Object.keys(busy).forEach(function(id){if(!calls[id])release(id)});hideLoader();
+        // Earlier navigations are superseded by this one.
+        Object.keys(calls).forEach(function(id){if(calls[id].act==='__nav')delete calls[id]});
+      }
     },
     // hold() marks critical in-page work (file upload, multi-step form).
     // While at least one hold is active, a reconnect never reloads the page,
@@ -1265,17 +1357,20 @@ var __ws=(function(){
     },
     // opts.loader=false skips the loading overlay for this call.
     call:function(act,data,collect,source,opts){
-      if(!api.connected()){window.__gsuiReport('You are offline. Reconnect before trying again.');return 0}
+      // Only a connection reported offline refuses calls. While it is
+      // connecting or being verified, calls wait in the queue.
+      if(!api.connected()&&__offline.state()==='offline'){window.__gsuiReport('You are offline. Reconnect before trying again.');return 0}
+      // The queue is bounded, below the server's inbound buffer of 16.
+      if(!accepts(act==='__nav')){window.__gsuiReport('Connection lost before sending. Please try again.');return 0}
       var d=Object.assign({},data||{});
       if(collect&&collect.length){
         collect.forEach(function(id){collectValue(id,d)});
       }
       var id=++seq;
-      uncertain[id]=true;
       if(source&&/^(BUTTON|FORM)$/.test(source.tagName)){busy[id]=source;source.disabled=true;source.setAttribute('aria-busy','true');if(source.form)source.form.setAttribute('aria-busy','true');source.classList.add('gsui-busy','opacity-60','cursor-wait')}
-      var msg=message(act,d,id);
-      if(!rawSend(msg)){release(id);delete uncertain[id];window.__gsuiReport('Connection lost before sending. Please try again.');return 0}
-      inflight[id]=!(opts&&opts.loader===false);if(inflight[id])showLoader();
+      calls[id]={act:act,msg:message(act,d,id),at:Date.now(),sent:false,loader:!(opts&&opts.loader===false)};
+      if(send(id))probe(__gsuiOpt('hbTimeout',12000));
+      else{expireLater();if(!api.connected())reconnectNow()}
       return id;
     },
     notfound:function(id){

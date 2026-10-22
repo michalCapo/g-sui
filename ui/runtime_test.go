@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -659,5 +660,39 @@ func TestRuntimeQueuedBytesLimit(t *testing.T) {
 	case <-canceled:
 	case <-time.After(2 * time.Second):
 		t.Fatal("queued bytes over twice the limit kept the connection")
+	}
+}
+
+func TestFormValuesKeepNativeEntries(t *testing.T) {
+	app := NewApp()
+	app.Page("/", func(*Context) *Node { return Div() })
+	var got url.Values
+	save := RegisterAction(app, "save", func(_ *Context, in FormValues) (Result, error) {
+		got = in.Values
+		return Result{}, nil
+	})
+	form := FormFor[FormValues]("f").Render(IText().Attr("name", "a")).Submit(save)
+	if js := form.toJS(); !strings.Contains(js, `__gsuiSubmit(event,'save',1)`) {
+		t.Fatalf("form does not submit values: %s", js)
+	}
+	ws := runtimeSocket(t, app)
+	runtimeCall(t, ws, "save", "/", 1, map[string]any{"__form": "f", "__values": [][2]string{{"group", "1"}, {"group", "2"}, {"done", "on"}}})
+	if got["group"][0] != "1" || got["group"][1] != "2" || got.Get("done") != "on" || len(got) != 2 {
+		t.Fatalf("values = %v", got)
+	}
+}
+
+func TestFormValuesRoundTripThroughCall(t *testing.T) {
+	in := FormValues{Values: url.Values{"group": {"1", "2"}, "name": {"x"}}}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out FormValues
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Values.Encode() != in.Values.Encode() {
+		t.Fatalf("round trip = %v", out.Values)
 	}
 }

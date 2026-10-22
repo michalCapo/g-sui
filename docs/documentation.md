@@ -690,7 +690,7 @@ return ui.Merge(refreshTopBar(), renderProjects(ctx), ui.Result{}.Run(ui.CloseDi
 
 | Method | Description |
 | --- | --- |
-| `Morph(id, node)` | Update a subtree while preserving drafts and focus |
+| `Morph(id, node)` | Update a subtree while preserving drafts, focus and open dialogs |
 | `Replace(id, node)` | Replace a subtree and reset its input state |
 | `Append(id, node)` / `Prepend(id, node)` | Insert a child |
 | `SetText(id, text)` | Update text |
@@ -1663,7 +1663,7 @@ Brief disconnects are invisible. The client keeps the page fully usable while th
 
 | Behavior | Detail |
 | --- | --- |
-| Heartbeat | Every `App.KeepAliveMs` (default 25000, `-1` disables) the client sends a heartbeat that the server answers at once, even while an action runs. No answer within `App.HeartbeatTimeoutMs` (default 12000, above the server's 10s write limit) replaces the socket as dead. A page shown again probes its socket with a 4s limit. |
+| Heartbeat | Every `App.KeepAliveMs` (default 25000, `-1` disables) the client sends a heartbeat that the server answers at once, even while an action runs. No answer within `App.HeartbeatTimeoutMs` (default 12000, above the server's 10s write limit) replaces the socket as dead. A page shown again probes its socket with a 4s limit, and calls made meanwhile wait until it answers. Every call also probes the socket, so a socket that died on a network switch is found within the heartbeat timeout. |
 | Handshake timeout | A connection attempt the server has not greeted within `App.HandshakeTimeoutMs` (default 8000, `-1` waits for the browser) is given up and retried; each timed out attempt waits twice as long, up to 30s. |
 | Connecting badge | A quiet "Connecting…" badge appears when a reconnect takes longer than `App.ConnectingGraceMs` (default 1500, `-1` never shows). |
 | Offline badge | Appears only after reconnecting keeps failing for `App.OfflineGraceMs` (default 12000, `-1` never shows), or at once when the browser reports no network. A page coming back from the background starts a fresh wait, so a socket that died while hidden never flashes "Offline". Badges never dim the page or swallow clicks. |
@@ -1671,7 +1671,7 @@ Brief disconnects are invisible. The client keeps the page fully usable while th
 | Reconnect reload | The page reloads after reconnect only when the outage lasted at least `App.ReconnectReloadAfterMs` (default 15000, `-1` never reloads) **and** no hold is active. |
 | Holds | `window.__ws.hold()` registers critical work and returns a release function. While any hold is active a reconnect never reloads the page. |
 | Fast retry | Reconnect is attempted immediately on the browser `online` event and when a hidden tab becomes visible again, instead of waiting out the backoff. |
-| Offline calls | Actions are rejected while disconnected and never replayed. Retry explicitly after reconnect. |
+| Queued calls | A call is written to the socket only after the server greeting, and never ahead of an older call. A call made while connecting, or while a page shown again checks its socket, waits in order (an action at most 20s, at most 8 calls; a navigation until the connection is back, replaced by a newer one) and is then sent once. A navigation whose socket dies before the reply is sent again after reconnect, because it only reads. An action whose socket dies before the reply may have run: it is reported and never repeated. Calls are refused only while the offline badge shows. After a server restart queued calls are dropped and reported. |
 | Subscriptions | `window.__ws.subscribe(act, data)` re-sends the call on every reconnect, so server-side `Push` loops are re-armed. Identical registrations are deduplicated, and the call is never queued (that would deliver it twice on reconnect). `__ws.unsubscribe(act)` drops one. |
 | Server restart | Every connection starts with the server announcing its instance id. Element ids (`ui.Target()`) are random per process, so a page rendered by an earlier process can never be patched by a new one: the client detects the change and reloads, deferring the reload while a hold is active. Set `App.InstanceID` to a shared build id when running multiple replicas, otherwise reconnecting to a different replica reloads too. |
 | Subscription lifetime | Live navigation cancels the old page's subscriptions. `Node.Subscribe` also cancels on removal. A missing target cancels only its sending subscription. See [server-driven apps](#server-driven-applications). |
@@ -1707,7 +1707,7 @@ window.addEventListener('gsui:reconnected', e => {
 
 Other client helpers: `__ws.connected()`, `__ws.offline()`, `__ws.holds()`, `__ws.reconnect()`, `__ws.restart()`. Plain `reconnect()` keeps an OPEN or CONNECTING socket and retains the one-second retry cooldown. `restart()` closes the current socket and connects immediately with the browser's current cookies. Its Promise resolves when the replacement socket opens and subscriptions have been re-armed. It rejects if that attempt fails, is superseded by another restart, or does not open within 10 seconds.
 
-Use `await window.__ws.restart()` after an HTTP request rotates login cookies. This intentional replacement preserves the DOM and form state, never reloads the page (including on a server instance change), and does not show the offline badge or emit `gsui:reconnected`. In-flight calls release their busy/loader state and are never replayed. A failed attempt resumes normal outage recovery.
+Use `await window.__ws.restart()` after an HTTP request rotates login cookies. This intentional replacement preserves the DOM and form state, never reloads the page (including on a server instance change), and does not show the offline badge or emit `gsui:reconnected`. Queued calls and navigations are sent on the new socket. Actions already sent release their busy/loader state and are never repeated. A failed attempt resumes normal outage recovery.
 
 All of these helpers -- including `hold()` and `restart()` -- are available on the pre-client stub, so they are safe to call from `Node.UnsafeJS` blocks and `ctx.UnsafeHeadJS` that run before `/__ws.js` loads. The stub queues `restart()` and forwards its Promise's result once the client initializes.
 
@@ -2101,10 +2101,11 @@ means success without a DOM update. Other effects include `Morph`, `Remove`,
 `Navigate` and `PatchURL`. Errors produce a generic user message and a server log.
 Handlers return `(Result, error)`; raw string handlers are not supported.
 
-Typed actions and live events reject new calls while disconnected. Requests
-already sent are not automatically replayed; a dropped connection can leave an
-unknown outcome. For payments or other non-repeatable operations, implement
-transaction IDs/idempotency in application storage. All actions use the same delivery policy; offline mutations are never queued.
+Calls made while the client is connecting wait for the connection and are
+sent once; calls are refused only while it is offline. Requests already sent
+are not replayed, except navigations: a dropped connection can leave an unknown
+outcome, and the client reports it. For payments or other non-repeatable
+operations, implement transaction IDs/idempotency in application storage.
 
 ### Typed forms
 
@@ -2128,6 +2129,21 @@ Input names match JSON fields. Text is sent unchanged, numbers become numbers,
 checkboxes become booleans and multi-selects become string slices. Empty number
 inputs send `null`; use pointers for optional numbers. File uploads require an
 HTTP upload endpoint. Repeated text field names are not a slice binding API.
+
+`FormFor[ui.FormValues]` sends the fields exactly as a browser posts them, in
+document order, so a form written for a native POST keeps working over the
+socket: repeated names keep every value, a checked checkbox sends its value,
+unchecked ones send nothing, and the named submit button is added last. The
+handler reads them as `url.Values`. File inputs are left out.
+
+```go
+save := ui.RegisterAction(app, "save", func(ctx *ui.Context, in ui.FormValues) (ui.Result, error) {
+    groups := in.Values["group"] // every checked group
+    _ = groups
+    return ui.Result{}.Toast("Saved " + in.Get("name")), nil
+})
+ui.FormFor[ui.FormValues]("edit").Render(fields...).Submit(save)
+```
 
 Native constraints run before sending. `RegisterAction` invokes `Validate() error`
 on the input pointer when implemented. `ValidationError` displays field messages,
@@ -2176,6 +2192,7 @@ synchronization. Use subscriptions to push independent updates instead.
 `Result.Morph` and typed refreshes preserve elements by `Key` or ID. Keys must be
 unique among siblings. Dirty inputs keep their values; active inputs keep their
 selection. Add `Attr("data-gsui-reset", "")` to explicitly replace an input value.
+An open `<dialog>` stays open; close it with `ui.CloseDialog(id)` or `dialog.close()`.
 `Preserve()` leaves an external widget and its descendants under browser ownership.
 
 `Replace` remains a destructive swap. `Node.UnsafeJS`, widgets and `Subscribe` setup

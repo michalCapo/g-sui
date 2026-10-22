@@ -53,8 +53,11 @@
     var freshSelected = fresh.tagName === 'SELECT' ? Array.from(fresh.selectedOptions).map(function (o) { return o.value; }) : [];
     var selected = old.tagName === 'SELECT' ? Array.from(old.selectedOptions).map(function (o) { return o.value; }) : [];
     var start = active ? old.selectionStart : null, end = active ? old.selectionEnd : null;
+    // An open dialog is user state, like a typed value: a morph never closes
+    // it. The page closes it when it is done (dialog.close()).
+    var openDialog = old.tagName === 'DIALOG' && old.open;
     Array.from(old.attributes).forEach(function (attr) {
-      if (!fresh.hasAttribute(attr.name)) old.removeAttribute(attr.name);
+      if (!fresh.hasAttribute(attr.name) && !(openDialog && attr.name === 'open')) old.removeAttribute(attr.name);
     });
     Array.from(fresh.attributes).forEach(function (attr) {
       if (old.getAttribute(attr.name) !== attr.value) old.setAttribute(attr.name, attr.value);
@@ -76,6 +79,9 @@
     }
     return old;
   }
+  function openDialogIn(node) {
+    return node.nodeType === 1 && (node.matches('dialog[open]') || !!node.querySelector('dialog[open]'));
+  }
   function children(old, fresh) {
     var existing = Array.from(old.childNodes), keyed = new Map();
     existing.forEach(function (n) { if (key(n)) keyed.set(key(n), n); });
@@ -86,6 +92,18 @@
       if (match && used.has(match)) match = null;
       var mounted = match ? morph(match, next) : next;
       if(match && match === cursor) cursor = mounted;
+      if (mounted !== cursor && match && mounted.parentNode === old && openDialogIn(mounted)) {
+        // Moving an open modal dialog would take it out of the top layer:
+        // the nodes before it move behind it instead, in order, unless one
+        // of them holds an open dialog too.
+        var between = [];
+        for (var n = cursor; n && n !== mounted; n = n.nextSibling) between.push(n);
+        if (!between.some(openDialogIn)) {
+          var tail = mounted.nextSibling;
+          between.forEach(function (node) { old.insertBefore(node, tail); });
+          cursor = mounted;
+        }
+      }
       if (mounted !== cursor) old.insertBefore(mounted, cursor);
       used.add(mounted);
       cursor = mounted.nextSibling;
@@ -109,7 +127,11 @@
   window.__gsuiNavigate = function (path, options) {
     options = options || {};
     var url = new URL(path, location.href);
-    if (url.origin !== location.origin || !__ws.connected()) { location.assign(url.href); return; }
+    // Before the client runs, or when the socket is reported offline, a full
+    // load is the only way. While connecting, the call waits for the socket.
+    if (url.origin !== location.origin || !__ws.beginNavigation || (!__ws.connected() && __ws.state() === 'offline')) { location.assign(url.href); return; }
+    // A full queue refuses the navigation before the page changes anything.
+    if (!__ws.accepts(true)) { window.__gsuiReport('Connection lost before sending. Please try again.'); return; }
     if (options.history !== 'none') rememberScroll();
     if (!options.patch) window.__gsuiVersion++;
     __ws.beginNavigation(!!options.patch);
@@ -123,8 +145,9 @@
       x: options.x || 0, y: options.y || 0
     }, null, null, build ? {loader:false} : undefined);
     if (options.patch) return;
-    if (id) window.__gsuiLoadStart(id, target, build);
-    else window.__gsuiLoadEnd(0, false); // not sent: nothing will arrive
+    // Refused or waiting for a connection: the old content stays meanwhile.
+    if (id && __ws.connected()) window.__gsuiLoadStart(id, target, build);
+    else window.__gsuiLoadEnd(0, false);
   };
 
   // Navigation skeletons (App.Skeleton). A slow page load hides the content
@@ -249,12 +272,22 @@
     });
     if (first) first.focus();
   };
-  window.__gsuiSubmit = function (event, action) {
+  window.__gsuiSubmit = function (event, action, values) {
     var form = event.currentTarget;
     if(form.getAttribute('aria-busy')==='true')return;
     if (!form.reportValidity()) return;
     __gsuiFormErrors(form.id,{});
     var data = {__form:form.id};
+    if (values) {
+      // FormValues: the entry list a native post would send.
+      // The submit button goes last, as in the typed mode.
+      var entries = new FormData(form), submitter = event.submitter;
+      if (submitter && submitter.name) entries.append(submitter.name, submitter.value);
+      data.__values = [];
+      entries.forEach(function (value, name) { if (typeof value === 'string') data.__values.push([name, value]); });
+      __ws.call(action,data,null,event.submitter || form);
+      return;
+    }
     Array.from(form.elements).forEach(function (el) {
       if (!el.name || el.disabled || /^(submit|button|reset|file)$/.test(el.type)) return;
       if (el.type === 'radio') { if (el.checked) data[el.name] = el.value; }

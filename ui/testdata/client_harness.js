@@ -141,6 +141,7 @@ function makeEnv() {
     fire: (type, ev) => (listeners[type] || []).forEach(fn => fn(ev || {})),
     reloads: () => reloads,
     badge: () => body.children.find(c => c.id === '__offline__') || null,
+    report: () => body.children.find(c => c.id === '__gsui-action-error') || null,
     run(cfg, extra) {
       sandbox.window.__gsuiCfg = cfg;
       sandbox.window.__gsuiVersion = 1;
@@ -155,6 +156,167 @@ function makeEnv() {
 }
 
 const tests = {
+  async resumeHoldsCallsUntilSocketAnswers() {
+    const env = makeEnv();
+    const ws = env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1', resumeTimeout: 2000});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    env.fire('visibilitychange');
+    const id = ws.call('save', {}, null, null);
+    const acts = () => a.sent.map(m => JSON.parse(m).act);
+    check('call waits while a resumed socket is verified', id > 0 && acts().includes('__hb') && !acts().includes('save'));
+    a.deliver(JSON.stringify({__hb: 1}));
+    check('call is sent once the socket answers', acts().includes('save'));
+    a.deliver(JSON.stringify({__r: 1, id, version: 1, js: ''}));
+    check('no connection report', !env.report());
+  },
+
+  async deadResumedSocketSendsCallOnNewSocket() {
+    const env = makeEnv();
+    const ws = env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1', resumeTimeout: 30});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    env.fire('visibilitychange');
+    const id = ws.call('save', {n: 1}, null, null);
+    await waitFor(() => env.latest() !== a, 2000);
+    const b = env.latest();
+    b.accept();
+    check('queued call waits for the server greeting', !b.sent.some(m => JSON.parse(m).act === 'save'));
+    hello(b, 'srv-1');
+    const saves = b.sent.map(m => JSON.parse(m)).filter(m => m.act === 'save');
+    check('queued call is sent once on the new socket', saves.length === 1 && saves[0].id === id && saves[0].data.n === 1);
+    check('a call that never left is not on the dead socket', !a.sent.some(m => JSON.parse(m).act === 'save'));
+    b.deliver(JSON.stringify({__r: 1, id, version: 1, js: ''}));
+    check('no false connection report', !env.report());
+  },
+
+  async droppedActionIsReportedNotRepeated() {
+    const env = makeEnv();
+    const ws = env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1'});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    const button = makeEl('button');
+    ws.call('save', {}, null, button);
+    a.drop();
+    check('dropped action releases its button', button.disabled === false);
+    check('dropped action is reported', env.report() && /may have completed/.test(env.report().textContent));
+    await waitFor(() => env.latest() !== a, 3000);
+    const b = env.latest();
+    b.accept(); hello(b, 'srv-1');
+    check('dropped action is never sent again', !b.sent.some(m => JSON.parse(m).act === 'save'));
+  },
+
+  async droppedNavigationIsSentAgain() {
+    const env = makeEnv();
+    const ws = env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1'});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    ws.navigate('/next');
+    a.drop();
+    check('dropped navigation is not reported', !env.report());
+    await waitFor(() => env.latest() !== a, 3000);
+    const b = env.latest();
+    b.accept();
+    check('navigation waits for the server greeting', !b.sent.some(m => JSON.parse(m).act === '__nav'));
+    hello(b, 'srv-1');
+    const navs = b.sent.map(m => JSON.parse(m)).filter(m => m.act === '__nav');
+    check('dropped navigation is sent again once', navs.length === 1 && navs[0].data.url === '/next');
+  },
+
+  async queuedCallsKeepOrder() {
+    const env = makeEnv();
+    const ws = env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1'});
+    const a = env.latest();
+    ws.call('first', {}, null, null);
+    a.accept();
+    ws.call('second', {}, null, null);
+    check('no call before the greeting', !a.sent.some(m => /first|second/.test(JSON.parse(m).act)));
+    hello(a, 'srv-1');
+    const acts = a.sent.map(m => JSON.parse(m).act).filter(act => act === 'first' || act === 'second');
+    check('queued calls go out in order after the greeting', acts.join() === 'first,second');
+  },
+
+  async newServerNeverGetsQueuedCalls() {
+    const env = makeEnv();
+    const ws = env.run({grace: 1000, reloadAfter: 15000, keepAlive: -1, inst: 'srv-1'});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    a.dieSilently();
+    ws.call('save', {}, null, null);
+    await waitFor(() => env.latest() !== a, 3000);
+    const b = env.latest();
+    b.accept(); hello(b, 'srv-2');
+    check('restarted server never gets a queued call', !b.sent.some(m => JSON.parse(m).act === 'save'));
+    check('queued call is reported and the page reloads', env.report() && /before sending/.test(env.report().textContent) &&
+      env.reloads() === 1);
+  },
+
+  async navigationKeepsQueuedButtonBusy() {
+    const env = makeEnv();
+    const ws = env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1'});
+    const button = makeEl('button');
+    ws.call('save', {}, null, button);
+    ws.beginNavigation(false);
+    check('navigation keeps a queued call busy', button.disabled === true);
+  },
+
+  async laterCallsReachChangedServerWithoutReload() {
+    const env = makeEnv();
+    const ws = env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1'});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-2');
+    ws.call('later', {}, null, null);
+    check('calls go to a changed server when reloads are off', a.sent.some(m => JSON.parse(m).act === 'later'));
+    a.drop();
+    await waitFor(() => env.latest() !== a, 3000);
+    const b = env.latest();
+    ws.call('queued', {}, null, null);
+    b.accept(); hello(b, 'srv-2');
+    check('same new server gets queued calls', b.sent.some(m => JSON.parse(m).act === 'queued'));
+  },
+
+  async queuedNavigationNeverExpires() {
+    const env = makeEnv();
+    const ws = env.run({grace: 5000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1', queueTimeout: 50, resumeTimeout: 5000});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    env.fire('visibilitychange');
+    const version = env.sandbox.window.__gsuiVersion;
+    ws.navigate('/next');
+    ws.call('after', {}, null, null);
+    await sleep(1300);
+    check('queued navigation outlives the queue timeout', env.sandbox.window.__gsuiVersion === version + 1);
+    a.deliver(JSON.stringify({__hb: 1}));
+    const acts = a.sent.map(m => JSON.parse(m).act);
+    check('queued navigation is sent; the expired action is not', acts.includes('__nav') && !acts.includes('after'));
+  },
+
+  async fullQueueStillTakesNewerNavigation() {
+    const env = makeEnv();
+    const ws = env.run({grace: 5000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1', queueLimit: 2});
+    const a = env.latest();
+    ws.navigate('/first');
+    ws.call('one', {}, null, null);
+    ws.call('two', {}, null, null);
+    ws.navigate('/latest');
+    a.accept(); hello(a, 'srv-1');
+    const navs = a.sent.map(m => JSON.parse(m)).filter(m => m.act === '__nav').map(m => m.data.url);
+    check('newer navigation replaces the queued one', navs.join() === '/latest' && !env.report(), JSON.stringify(navs) + (env.report() ? env.report().textContent : ''));
+  },
+
+  async queuedCallExpiresWithReport() {
+    const env = makeEnv();
+    const ws = env.run({grace: 5000, reloadAfter: -1, keepAlive: -1, queueTimeout: 50});
+    const button = makeEl('button');
+    const id = ws.call('save', {}, null, button);
+    check('call before the first connection is queued', id > 0 && button.disabled === true);
+    await waitFor(() => !!env.report(), 3000);
+    check('expired call reports it was not sent', env.report() && /before sending/.test(env.report().textContent) &&
+      button.disabled === false);
+    env.latest().accept(); hello(env.latest(), '');
+    check('expired call is never sent', !env.latest().sent.some(m => JSON.parse(m).act === 'save'));
+  },
+
   async plainReconnectKeepsLiveSocket() {
     const env = makeEnv();
     const ws = env.run({grace: 0, reloadAfter: 0, keepAlive: -1});
@@ -178,7 +340,7 @@ const tests = {
     env.body.appendChild(draft);
     const button = makeEl('button'); button.form = makeEl('form');
     ws.subscribe('clock.start', {id: 'compose'});
-    ws.call('save', {}, null, button);
+    const saveID = ws.call('save', {}, null, button);
     await sleep(150); // let the pending call's loader appear
     check('pending call is busy with a loader', button.disabled && button.form.getAttribute('aria-busy') &&
       env.body.children.some(c => c.id === '__ws-loader'));
@@ -201,7 +363,8 @@ const tests = {
     check('restart resolves on open', resolved && ws.connected());
     check('restart re-arms managed subscriptions exactly once',
       sent.length === 1 && sent[0].act === 'clock.start' && sent[0].sub === 'clock.start|{"id":"compose"}');
-    check('restart never replays in-flight calls', !sent.some(m => m.act === 'save'));
+    check('restart never replays in-flight calls', !sent.some(m => m.act === 'save') && saveID > 0);
+    check('restart does not report a released call', !env.report());
     check('restart preserves the same DOM node and form value', env.sandbox.document.getElementById('draft') === draft &&
       draft.value === 'Unsaved compose text');
     check('restart does not navigate, reload, change page version or emit an outage event',
@@ -363,7 +526,7 @@ const tests = {
       'new sockets=' + (env.sockets.length - before));
   },
 
-  // A dead socket must reject mutations without throwing or replaying them.
+  // A call on a dead socket never left, so it waits and goes out once.
   async sendOnDeadSocketRejectsWithoutThrowing() {
     const env = makeEnv();
     const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1});
@@ -379,8 +542,9 @@ const tests = {
     const b = env.latest();
     b.accept();
     await sleep(10);
-    check('offline call is not replayed after reconnect',
-      !b.sent.some(m => JSON.parse(m).act === 'doThing'), JSON.stringify(b.sent));
+    check('call that never left is sent once after reconnect',
+      b.sent.filter(m => JSON.parse(m).act === 'doThing').length === 1, JSON.stringify(b.sent));
+    check('call that never left is not reported', !env.report());
   },
 
   // Rejected offline calls must not leave orphan inflight ids (stuck loader).
@@ -584,8 +748,8 @@ const tests = {
     check('current page subscription is replayed', acts.includes('table.live'), JSON.stringify(acts));
   },
 
-  // Offline calls are rejected; reconnect must not send them or show a loader.
-  async offlineCallIsNotReplayed() {
+  // A call made while reconnecting waits without a loader, then goes out once.
+  async reconnectingCallIsSentOnce() {
     const env = makeEnv();
     const ws = env.run({grace: -1, reloadAfter: -1, keepAlive: -1});
     const a = env.sockets[0];
@@ -599,9 +763,9 @@ const tests = {
     const b = env.latest();
     b.accept();
     await sleep(200);
-    check('no loader after reconnect', !env.body.children.find(c => c.id === '__ws-loader'));
-    const sent = b.sent.map(m => JSON.parse(m)).find(m => m.act === 'save');
-    check('offline call was not delivered', !sent);
+    const sent = b.sent.map(m => JSON.parse(m)).filter(m => m.act === 'save');
+    check('queued call is delivered once', sent.length === 1);
+    b.deliver(JSON.stringify({__r: 1, id: sent[0] && sent[0].id, version: 1, js: ''}));
     await sleep(220);
     check('loader clears on reply', !env.body.children.find(c => c.id === '__ws-loader'));
   },
@@ -942,7 +1106,7 @@ const tests = {
     nav.ws.navigate('/slow/2');
     check('unsent navigation restores old content', !nav.skeleton() && nav.old.style.display === '' &&
       !nav.content.getAttribute('aria-busy'));
-    check('unsent call returns 0', nav.ws.call('x', {}) === 0);
+    check('unsent call is queued', nav.ws.call('x', {}) > 0);
   },
 
   async loadingEndListenerCanStartNavigation() {
