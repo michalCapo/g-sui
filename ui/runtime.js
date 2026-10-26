@@ -131,7 +131,7 @@
     // load is the only way. While connecting, the call waits for the socket.
     if (url.origin !== location.origin || !__ws.beginNavigation || (!__ws.connected() && __ws.state() === 'offline')) { location.assign(url.href); return; }
     // A full queue refuses the navigation before the page changes anything.
-    if (!__ws.accepts(true)) { window.__gsuiReport('Connection lost before sending. Please try again.'); return; }
+    if (!__ws.accepts(true)) { window.__gsuiReport((window.__gsuiText || {}).lostNotSent || 'Connection lost before sending. Please try again.'); return; }
     if (options.history !== 'none') rememberScroll();
     if (!options.patch) window.__gsuiVersion++;
     __ws.beginNavigation(!!options.patch);

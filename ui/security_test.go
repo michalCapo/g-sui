@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -203,4 +204,24 @@ func assertNoRawScriptBreakout(t *testing.T, got, rawPayload string) {
 	if rawPayload != "" && strings.Contains(got, rawPayload) {
 		t.Fatalf("output contains raw payload %q: %s", rawPayload, truncate(got, 500))
 	}
+}
+
+func TestAppShellLanguageAndTexts(t *testing.T) {
+	app := NewApp()
+	app.Lang = "sk"
+	app.Texts = Texts{Offline: "Ste offline", LostNotSent: "<b>x</b>", ActionFailed: "Nepodarilo sa"}
+	app.Page("/", func(_ *Context) *Node { return Div().Text("ready") })
+
+	rr := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/", nil))
+	body := rr.Body.String()
+
+	expect(t, body, `<html lang="sk" class="gsui-booting">`)
+	expect(t, body, `"offline":"Ste offline"`)
+	expect(t, body, `"connecting":"Connecting…"`)
+	expect(t, body, `\u003cb\u003ex\u003c/b\u003e`)
+	notExpect(t, body, `<b>x</b>`)
+	expect(t, wsClientJS, `var __gsuiText=window.__gsuiText||{"connecting":"Connecting…"`)
+	expect(t, actionError(&Context{app: app}, errors.New("x")), "Nepodarilo sa")
+	expect(t, actionError(&Context{}, errors.New("x")), "Unable to complete the request")
 }

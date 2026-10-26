@@ -583,7 +583,7 @@ func actionError(ctx *Context, err error) string {
 		return fmt.Sprintf("__gsuiFormErrors('%s',%s);", escJS(form), b)
 	}
 	log.Printf("gsui: action failed: %v", err)
-	return Notify("error", "Unable to complete the request").script()
+	return Notify("error", ctx.texts().ActionFailed).script()
 }
 
 // TypedForm uses native form submission and input constraints. Supply ordinary

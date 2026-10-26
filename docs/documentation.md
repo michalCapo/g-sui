@@ -1682,7 +1682,14 @@ Use `App.Subscription` and `Node.Subscribe` for background updates.
 app := ui.NewApp()
 app.OfflineGraceMs = 5000          // tolerate 5s blips silently
 app.ReconnectReloadAfterMs = -1    // never reload after reconnect
+app.Lang = "sk"                    // <html lang>, default "en"
+app.Texts = ui.Texts{              // the client's own words; empty fields stay English
+    Connecting: "Pripája sa…",
+    Offline:    "Offline",
+}
 ```
+
+`ui.Texts` covers the connection badges (`Connecting`, `Offline`, `Reconnecting`), the loading badge (`Loading`, `PleaseWait`), the connection errors (`LostMaybeDone`, `LostNotSent`, `OfflineNotSent`) the close label of notifications (`Dismiss`), the reload button (`Reload`) and the error toasts of failed actions (`ActionFailed`, `ServerError`, `Denied`).
 
 Set these before serving traffic. They are plain exported fields, so assigning them while requests are in flight is a data race; the values are read once per page render.
 

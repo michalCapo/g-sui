@@ -93,6 +93,14 @@ type App struct {
 	// When set, a <link rel="icon"> tag is emitted in the HTML shell.
 	Favicon string
 
+	// Lang sets the page language, <html lang>. Default "en".
+	Lang string
+
+	// Texts replaces the English texts the client shows by itself:
+	// connection badges, connection errors and the loading badge. Empty
+	// fields keep English.
+	Texts Texts
+
 	// Title sets the <title> element in the HTML shell.
 	// Improves accessibility (screen readers) and SEO.
 	Title string
@@ -602,7 +610,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 	}
 
 	_, _ = fmt.Fprintf(writer, `<!DOCTYPE html>
-<html lang="en" class="gsui-booting">
+<html lang="%s" class="gsui-booting">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -625,7 +633,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 %s
 </script>
 </body>
-</html>`, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS(), localJS, app.widgetJS(), app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
+</html>`, html.EscapeString(cmp.Or(app.Lang, "en")), faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS()+app.Texts.js(), localJS, app.widgetJS(), app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -751,7 +759,7 @@ func (app *App) Skeleton(prefix string, node *Node) {
 		root := *node
 		root.attrs = maps.Clone(node.attrs)
 		root.Attr("role", cmp.Or(root.attrs["role"], "status"))
-		root.Attr("aria-label", cmp.Or(root.attrs["aria-label"], "Loading"))
+		root.Attr("aria-label", cmp.Or(root.attrs["aria-label"], app.Texts.Loading, "Loading"))
 		root.Attr("data-gsui-skeleton", "")
 		var b strings.Builder
 		b.WriteString("function(){")
@@ -855,7 +863,8 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif}`
 // It connects to the WS endpoint, sends action calls, executes
 // whatever JS string the server sends back, and shows a non-blocking
 // offline badge when the WebSocket stays down past the grace window.
-var wsClientJS = runtimeClientJS + `var __wsPre=window.__ws;
+var wsClientJS = runtimeClientJS + `var __gsuiText=window.__gsuiText||` + Texts{}.json() + `;
+var __wsPre=window.__ws;
 var __gsuiCfg=window.__gsuiCfg||{};
 function __gsuiOpt(k,d){var v=__gsuiCfg[k];return typeof v==='number'?v:d}
 var __offline=(function(){
@@ -886,9 +895,9 @@ var __offline=(function(){
     b.className='flex items-center gap-2 rounded-full px-3 py-1 text-white shadow-lg ring-1 ring-white/30';
     b.style.background=off?'linear-gradient(135deg,#ef4444,#ec4899)':'rgba(63,63,70,0.88)';
     var dot=document.createElement('span');dot.className='inline-block h-2.5 w-2.5 rounded-full bg-white/95 animate-pulse';
-    var lbl=document.createElement('span');lbl.className=off?'font-semibold tracking-wide':'text-xs tracking-wide';lbl.style.color='#fff';lbl.textContent=off?'Offline':'Connecting…';
+    var lbl=document.createElement('span');lbl.className=off?'font-semibold tracking-wide':'text-xs tracking-wide';lbl.style.color='#fff';lbl.textContent=off?__gsuiText.offline:__gsuiText.connecting;
     b.appendChild(dot);b.appendChild(lbl);
-    if(off){var sub=document.createElement('span');sub.className='ml-1 text-xs';sub.style.color='rgba(255,255,255,0.9)';sub.textContent='Trying to reconnect…';b.appendChild(sub)}
+    if(off){var sub=document.createElement('span');sub.className='ml-1 text-xs';sub.style.color='rgba(255,255,255,0.9)';sub.textContent=__gsuiText.reconnecting;b.appendChild(sub)}
     o.appendChild(b);
     document.body.appendChild(o);
     requestAnimationFrame(function(){o.style.opacity='1';});
@@ -1003,8 +1012,8 @@ var __ws=(function(){
       b.className='absolute top-3 left-3 flex items-center gap-2 rounded-full px-3 py-1 text-white shadow-lg ring-1 ring-white/30';
       b.style.background='linear-gradient(135deg,#6366f1,#22d3ee)';
       var dot=document.createElement('span');dot.className='inline-block h-2.5 w-2.5 rounded-full bg-white/95 animate-pulse';
-      var lbl=document.createElement('span');lbl.className='font-semibold tracking-wide';lbl.textContent='Loading\u2026';
-      var sub=document.createElement('span');sub.className='ml-1 text-white/85 text-xs';sub.style.color='rgba(255,255,255,0.9)';sub.textContent='Please wait';
+      var lbl=document.createElement('span');lbl.className='font-semibold tracking-wide';lbl.textContent=__gsuiText.loading;
+      var sub=document.createElement('span');sub.className='ml-1 text-white/85 text-xs';sub.style.color='rgba(255,255,255,0.9)';sub.textContent=__gsuiText.pleaseWait;
       b.appendChild(dot);b.appendChild(lbl);b.appendChild(sub);o.appendChild(b);
       document.body.appendChild(o);
       requestAnimationFrame(function(){o.style.opacity='1';});
@@ -1086,7 +1095,7 @@ var __ws=(function(){
       if(c.act==='__nav'){c.sent=false;c.at=now;return}
       delete calls[id];release(id);n++;
     });
-    if(n&&report)window.__gsuiReport('Connection lost. Your last action may have completed. Check before retrying.');
+    if(n&&report)window.__gsuiReport(__gsuiText.lostMaybeDone);
     expireLater();
   }
   // A queued call waits at most queueTimeout for a connection.
@@ -1105,7 +1114,7 @@ var __ws=(function(){
       if(c.act!=='__nav')n++;
     });
     if(!loud())hideLoader();
-    if(n)window.__gsuiReport('Connection lost before sending. Please try again.');
+    if(n)window.__gsuiReport(__gsuiText.lostNotSent);
     expireLater();
     reloadIfDone();
   }
@@ -1359,9 +1368,9 @@ var __ws=(function(){
     call:function(act,data,collect,source,opts){
       // Only a connection reported offline refuses calls. While it is
       // connecting or being verified, calls wait in the queue.
-      if(!api.connected()&&__offline.state()==='offline'){window.__gsuiReport('You are offline. Reconnect before trying again.');return 0}
+      if(!api.connected()&&__offline.state()==='offline'){window.__gsuiReport(__gsuiText.offlineNotSent);return 0}
       // The queue is bounded, below the server's inbound buffer of 16.
-      if(!accepts(act==='__nav')){window.__gsuiReport('Connection lost before sending. Please try again.');return 0}
+      if(!accepts(act==='__nav')){window.__gsuiReport(__gsuiText.lostNotSent);return 0}
       var d=Object.assign({},data||{});
       if(collect&&collect.length){
         collect.forEach(function(id){collectValue(id,d)});
@@ -1608,7 +1617,7 @@ func (app *App) handleWS(ws *socket) {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("gsui: panic in action %q: %v\n%s", msg.Act, r, debug.Stack())
-					resp = Notify("error", "Server error").script()
+					resp = Notify("error", ctx.texts().ServerError).script()
 				}
 			}()
 			if err := app.prepareAction(ctx, msg); err != nil {
@@ -1619,7 +1628,7 @@ func (app *App) handleWS(ws *socket) {
 					}
 					return js
 				}
-				return Notify("error", "Request denied or page expired").script()
+				return Notify("error", ctx.texts().Denied).script()
 			}
 			return handler(ctx)
 		}()

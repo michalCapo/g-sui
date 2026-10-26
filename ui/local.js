@@ -153,13 +153,13 @@
       var dot = document.createElement('span');
       dot.style.cssText = 'width:10px;height:10px;border-radius:9999px;flex-shrink:0;background:' + accent;
       var t = document.createElement('span'); t.style.flex = '1'; t.textContent = message;
-      var close = document.createElement('button'); close.textContent = '×'; close.setAttribute('aria-label', 'Dismiss notification');
+      var close = document.createElement('button'); close.textContent = '×'; close.setAttribute('aria-label', (window.__gsuiText || {}).dismiss || 'Dismiss notification');
       close.style.cssText = 'border:0;background:transparent;color:inherit;font-size:20px;line-height:1;cursor:pointer;border-radius:6px';
       close.className = 'focus:outline-none focus-visible:ring-2 focus-visible:ring-current';
       close.onclick = function () { n.remove(); };
       n.appendChild(dot); n.appendChild(t); n.appendChild(close);
       if (v === 'error-reload') {
-        var btn = document.createElement('button'); btn.textContent = 'Reload';
+        var btn = document.createElement('button'); btn.textContent = (window.__gsuiText || {}).reload || 'Reload';
         btn.style.cssText = 'background:#991b1b;color:#fff;border:none;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px';
         btn.onclick = function () { location.reload(); }; n.appendChild(btn);
       }
