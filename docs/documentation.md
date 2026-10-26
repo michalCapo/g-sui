@@ -926,7 +926,7 @@ ui.SkeletonBlock("flex items-center gap-3",  // pulsing container
 ui.Markdown("prose dark:prose-invert", markdownContent)
 ```
 
-Renders markdown to HTML using goldmark. Sets innerHTML after mount. Goldmark's default safe renderer omits raw HTML and unsafe links such as `javascript:` URLs; do not enable unsafe markdown rendering for untrusted input.
+Renders GitHub Flavored Markdown (tables, strikethrough, task lists, bare links) to HTML using goldmark. Sets innerHTML after mount. Goldmark's default safe renderer omits raw HTML and unsafe links such as `javascript:` URLs; do not enable unsafe markdown rendering for untrusted input.
 
 ### Icon
 

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -180,6 +181,16 @@ func TestMarkdownOmitsRawHTMLAndEscapesScriptBreakout(t *testing.T) {
 			notExpect(t, strings.ToLower(js), "javascript:alert")
 			notExpect(t, strings.ToLower(js), "onerror=alert")
 		})
+	}
+}
+
+func TestMarkdownReadsGFM(t *testing.T) {
+	var buf bytes.Buffer
+	if err := markdown.Convert([]byte("Prices:\n\n| Land | €/l |\n|---|---:|\n| Česko | 1,531 |\n\n~~old~~\n\n- [x] done\n\nhttps://example.com"), &buf); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"<table>", "<th>Land</th>", "1,531</td>", "<del>old</del>", `type="checkbox"`, `<a href="https://example.com">`} {
+		expect(t, buf.String(), want)
 	}
 }
 

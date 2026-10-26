@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 )
 
 // ---------------------------------------------------------------------------
@@ -247,15 +248,18 @@ func (s SkeletonStyle) Form() *Node {
 // 2. Markdown Rendering
 // ---------------------------------------------------------------------------
 
+var markdown = goldmark.New(goldmark.WithExtensions(extension.GFM))
+
 // Markdown converts a markdown string to HTML and renders it inside a Div.
 // Since the framework produces only document.createElement JS (no innerHTML
 // setter on nodes), this uses .UnsafeJS() to set innerHTML after the node mounts.
-// Goldmark's default safe renderer omits raw HTML and unsafe links such as
-// javascript: URLs; do not enable unsafe markdown rendering for untrusted input.
-// The class parameter is applied to the container div.
+// It reads GitHub Flavored Markdown: tables, strikethrough, task lists and
+// bare links. Goldmark's default safe renderer omits raw HTML and unsafe
+// links such as javascript: URLs; do not enable unsafe markdown rendering
+// for untrusted input. The class parameter is applied to the container div.
 func Markdown(class, content string) *Node {
 	var buf bytes.Buffer
-	if err := goldmark.Convert([]byte(content), &buf); err != nil {
+	if err := markdown.Convert([]byte(content), &buf); err != nil {
 		return Div(class).Text(content)
 	}
 
