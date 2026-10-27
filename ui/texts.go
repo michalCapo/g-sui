@@ -3,6 +3,7 @@ package ui
 import (
 	"cmp"
 	"encoding/json"
+	"net/http"
 )
 
 // Texts are the words the client shows by itself. Set App.Texts to show
@@ -42,11 +43,44 @@ func (t Texts) withDefaults() Texts {
 }
 
 // texts are the app's texts for server messages, English without an app.
+// With App.Locale they are the request's texts.
 func (ctx *Context) texts() Texts {
 	if ctx == nil || ctx.app == nil {
 		return Texts{}.withDefaults()
 	}
-	return ctx.app.Texts.withDefaults()
+	_, texts := ctx.app.locale(ctx.Request)
+	return texts
+}
+
+// locale is the language and the texts of r: App.Locale's answer over Lang
+// and Texts, with English for what is still empty.
+func (app *App) locale(r *http.Request) (string, Texts) {
+	lang, texts := app.Lang, app.Texts
+	if app.Locale != nil && r != nil {
+		l, t := app.Locale(r)
+		lang = cmp.Or(l, lang)
+		texts = t.or(texts)
+	}
+	return cmp.Or(lang, "en"), texts.withDefaults()
+}
+
+// or fills t's empty fields from other.
+func (t Texts) or(other Texts) Texts {
+	return Texts{
+		Connecting:     cmp.Or(t.Connecting, other.Connecting),
+		Offline:        cmp.Or(t.Offline, other.Offline),
+		Reconnecting:   cmp.Or(t.Reconnecting, other.Reconnecting),
+		Loading:        cmp.Or(t.Loading, other.Loading),
+		PleaseWait:     cmp.Or(t.PleaseWait, other.PleaseWait),
+		LostMaybeDone:  cmp.Or(t.LostMaybeDone, other.LostMaybeDone),
+		LostNotSent:    cmp.Or(t.LostNotSent, other.LostNotSent),
+		OfflineNotSent: cmp.Or(t.OfflineNotSent, other.OfflineNotSent),
+		Dismiss:        cmp.Or(t.Dismiss, other.Dismiss),
+		Reload:         cmp.Or(t.Reload, other.Reload),
+		ActionFailed:   cmp.Or(t.ActionFailed, other.ActionFailed),
+		ServerError:    cmp.Or(t.ServerError, other.ServerError),
+		Denied:         cmp.Or(t.Denied, other.Denied),
+	}
 }
 
 // json is the texts with defaults as a JS object literal. json.Marshal

@@ -1691,6 +1691,17 @@ app.Texts = ui.Texts{              // the client's own words; empty fields stay 
 
 `ui.Texts` covers the connection badges (`Connecting`, `Offline`, `Reconnecting`), the loading badge (`Loading`, `PleaseWait`), the connection errors (`LostMaybeDone`, `LostNotSent`, `OfflineNotSent`) the close label of notifications (`Dismiss`), the reload button (`Reload`) and the error toasts of failed actions (`ActionFailed`, `ServerError`, `Denied`).
 
+For apps whose users read different languages, `App.Locale` picks the language and the texts per request. It runs for every page render and for the error toasts of actions; empty answers fall back to `Lang` and `Texts`, then English.
+
+```go
+app.Locale = func(r *http.Request) (string, ui.Texts) {
+    if c, err := r.Cookie("lang"); err == nil && c.Value == "de" {
+        return "de", ui.Texts{Connecting: "Verbinde…", Offline: "Offline"}
+    }
+    return "", ui.Texts{} // Lang and Texts
+}
+```
+
 Set these before serving traffic. They are plain exported fields, so assigning them while requests are in flight is a data race; the values are read once per page render.
 
 Wrap in-page work that must not be interrupted:

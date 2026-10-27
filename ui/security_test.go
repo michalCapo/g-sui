@@ -225,3 +225,36 @@ func TestAppShellLanguageAndTexts(t *testing.T) {
 	expect(t, actionError(&Context{app: app}, errors.New("x")), "Nepodarilo sa")
 	expect(t, actionError(&Context{}, errors.New("x")), "Unable to complete the request")
 }
+
+func TestAppLocalePerRequest(t *testing.T) {
+	app := NewApp()
+	app.Lang = "sk"
+	app.Texts = Texts{Offline: "Ste offline", ActionFailed: "Nepodarilo sa"}
+	app.Locale = func(r *http.Request) (string, Texts) {
+		if r.Header.Get("Accept-Language") == "cs" {
+			return "cs", Texts{ActionFailed: "Nepodařilo se"}
+		}
+		return "", Texts{}
+	}
+	app.Page("/", func(_ *Context) *Node { return Div().Text("ready") })
+	handler := app.Handler()
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept-Language", "cs")
+	handler.ServeHTTP(rr, req)
+	body := rr.Body.String()
+	expect(t, body, `<html lang="cs" class="gsui-booting">`)
+	expect(t, body, `"actionFailed":"Nepodařilo se"`)
+	expect(t, body, `"offline":"Ste offline"`) // kept from App.Texts
+	expect(t, body, `"connecting":"Connecting…"`)
+	expect(t, actionError(&Context{app: app, Request: req}, errors.New("x")), "Nepodařilo se")
+
+	// A request Locale says nothing about keeps the app's language.
+	rr = httptest.NewRecorder()
+	plain := httptest.NewRequest("GET", "/", nil)
+	handler.ServeHTTP(rr, plain)
+	expect(t, rr.Body.String(), `<html lang="sk" class="gsui-booting">`)
+	expect(t, actionError(&Context{app: app, Request: plain}, errors.New("x")), "Nepodarilo sa")
+	expect(t, actionError(&Context{app: app}, errors.New("x")), "Nepodarilo sa")
+}

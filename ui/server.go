@@ -101,6 +101,12 @@ type App struct {
 	// fields keep English.
 	Texts Texts
 
+	// Locale picks the language and the texts of one request, for apps
+	// whose users read different languages: <html lang>, the client's
+	// texts and the server's error toasts. An empty lang or text keeps
+	// Lang and Texts. Nil uses Lang and Texts for everyone.
+	Locale func(r *http.Request) (lang string, texts Texts)
+
 	// Title sets the <title> element in the HTML shell.
 	// Improves accessibility (screen readers) and SEO.
 	Title string
@@ -599,6 +605,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	lang, texts := app.locale(r)
 
 	// Use gzip compression if the client supports it
 	var writer io.Writer = w
@@ -633,7 +640,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 %s
 </script>
 </body>
-</html>`, html.EscapeString(cmp.Or(app.Lang, "en")), faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS()+app.Texts.js(), localJS, app.widgetJS(), app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
+</html>`, html.EscapeString(lang), faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS()+texts.js(), localJS, app.widgetJS(), app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
 }
 
 // ---------------------------------------------------------------------------
