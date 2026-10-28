@@ -1211,16 +1211,18 @@ func (d *DropdownBuilder) Build() *Node {
 
 	wrapper.Render(menu)
 
+	// The listeners remove themselves once a redraw has taken the dropdown
+	// out of the page, so live updates do not pile them up.
 	wrapper.UnsafeJS(fmt.Sprintf(
 		`(function(){`+
 			`var w=document.getElementById('%s');`+
 			`var m=document.getElementById('%s');`+
-			`document.addEventListener('click',function(e){`+
-			`if(!w.contains(e.target)){m.classList.add('hidden')}`+
-			`},true);`+
-			`document.addEventListener('keydown',function(e){`+
-			`if(e.key==='Escape'){m.classList.add('hidden')}`+
-			`});`+
+			`function gone(){if(w.isConnected)return false;`+
+			`document.removeEventListener('click',click,true);document.removeEventListener('keydown',key);return true}`+
+			`function click(e){if(gone())return;if(!w.contains(e.target)){m.classList.add('hidden')}}`+
+			`function key(e){if(gone())return;if(e.key==='Escape'){m.classList.add('hidden')}}`+
+			`document.addEventListener('click',click,true);`+
+			`document.addEventListener('keydown',key);`+
 			`})();`,
 		escJS(wrapperID), escJS(menuID),
 	))
