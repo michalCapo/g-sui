@@ -74,6 +74,7 @@ RegisterAction → Result       ←→  WebSocket (__ws)
 - Local UI actions without JavaScript: `Show`, `Hide`, `Toggle`, `ToggleClass`, `SetAttr`, `SetValue`, `Focus`, `OpenDialog`, `CopyText`, `Navigate`, `Seq`, `Confirm`, `Delay` and more
 - Node behaviors: `OnKey`, `Shortcut`, `OnOutsideClick`, `DragToScroll`, `ActiveClass`
 - `App.Widget` for third-party JS libraries with mount and cleanup
+- Installable PWA with `app.PWA(ui.PWA{...})`: manifest, service worker with an offline page (private pages never cached), theme color and Apple tags, `InstallApp` and `ShowIfInstallable` for an install button, `PWA.Worker` for push
 
 ## Writing UI with an LLM
 

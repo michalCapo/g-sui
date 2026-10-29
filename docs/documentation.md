@@ -27,11 +27,12 @@
 15. [Theme & Dark Mode](#theme--dark-mode)
 16. [Localization](#localization)
 17. [Page Loading Screen](#page-loading-screen)
-18. [Security](#security)
-19. [Examples](#examples)
-20. [Release](#release)
-21. [API Reference](#api-reference)
-22. [Server-driven Applications](#server-driven-applications)
+18. [PWA](#pwa)
+19. [Security](#security)
+20. [Examples](#examples)
+21. [Release](#release)
+22. [API Reference](#api-reference)
+23. [Server-driven Applications](#server-driven-applications)
 
 ---
 
@@ -541,6 +542,7 @@ ui.Div().Shortcut("mod+k", ui.Focus("q"))
 | `TogglePassword(id)` | Show or hide a password |
 | `ToggleTheme()` / `SetTheme(mode)` | Change the theme (`light`, `dark`, `system`) |
 | `SetTitle(title)` | Set the document title |
+| `InstallApp(helpDialogID)` | Show the browser's install prompt, else open the dialog with install steps. Needs [`App.PWA`](#pwa) |
 
 Compose actions:
 
@@ -569,6 +571,7 @@ still navigates.
 | `DragToScroll()` | Drag with the mouse to scroll horizontally |
 | `ActiveClass(active, inactive...)` | Classes for a link to the current page; sets `aria-current="page"` |
 | `ActivePrefix()` | Also mark the link active on nested paths |
+| `ShowIfInstallable()` | Hide the node unless the app can be installed. Needs [`App.PWA`](#pwa) |
 
 ```go
 ui.NavLink("/users", "px-3 py-1 rounded").
@@ -1614,6 +1617,122 @@ ui.NewStepProgress(2, 5).
 
 ---
 
+## PWA
+
+`app.PWA` makes the app installable: home screen icon, its own window, theme color, and an offline page when a page load finds no network. The app gives names, icons, colors and texts; g-sui owns the mechanics.
+
+```go
+app.PWA(ui.PWA{
+    Name:           "Mail",
+    Description:    "Multi-account email",
+    ThemeColor:     "#fafafa",
+    DarkThemeColor: "#09090b",
+    Icons: []ui.PWAIcon{
+        {Src: "/assets/icon.svg", Sizes: "any", Type: "image/svg+xml"},
+        {Src: "/assets/icon-192.png", Sizes: "192x192", Type: "image/png"},
+        {Src: "/assets/icon-512.png", Sizes: "512x512", Type: "image/png"},
+        {Src: "/assets/icon-maskable-512.png", Sizes: "512x512", Type: "image/png", Purpose: "maskable"},
+    },
+    AppleTouchIcon: "/assets/apple-touch-icon.png",
+    Shortcuts:      []ui.PWAShortcut{{Name: "Compose", URL: "/compose"}},
+    SafeAreas:      true,
+})
+```
+
+Configure it before serving, like the other App settings.
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `Name` / `ShortName` | `App.Title`, else `"App"` / `Name` | App name; `ShortName` shows under the icon |
+| `Description` | | Manifest description |
+| `Scope` / `StartURL` / `ID` | `"/"` / `Scope` / `StartURL` | Paths of the app, the page it opens, its stable identity |
+| `ThemeColor` | `"#ffffff"` | Browser UI and title bar color |
+| `DarkThemeColor` | `ThemeColor` | Theme color in system dark mode; dark background of the offline page |
+| `BackgroundColor` | `ThemeColor` | Splash screen and offline page background |
+| `Icons` | | Manifest icons. Chrome wants a 192x192 and a 512x512 PNG; add a separate maskable one |
+| `AppleTouchIcon` | | URL of a 180x180 PNG for iPhone and iPad |
+| `Shortcuts` / `Categories` | | Manifest shortcuts (icon menu) and categories |
+| `SafeAreas` | `false` | Adds `viewport-fit=cover`; pad the layout with `env(safe-area-inset-*)` |
+| `OfflineText` | English | Text of the offline page |
+| `Worker` | | Trusted JavaScript appended to the service worker (push, `notificationclick`) |
+
+What g-sui does:
+
+| Part | Detail |
+| --- | --- |
+| `/manifest.webmanifest` | Generated from `PWA`, `display: standalone`, `lang` from `App.Lang`. `application/manifest+json`, `Cache-Control: no-cache` with an ETag |
+| `/sw.js` | The service worker plus `PWA.Worker`. `Cache-Control: no-cache`, `Service-Worker-Allowed: /` |
+| Offline page | A static page under `/__gsui/asset/`: app name, `OfflineText`, a reload button labeled `Texts.Reload`, `<html lang>` from `App.Lang`. No g-sui runtime, nothing loaded from elsewhere. It reloads itself when the network is back |
+| Page head | Manifest link, `theme-color` (a dark one when `DarkThemeColor` differs), `application-name`, `mobile-web-app-capable`, the Apple tags and `apple-touch-icon`. Every value is escaped. Without `App.PWA` the page shell is unchanged |
+| Registration | `/sw.js` registers after page load with `PWA.Scope` and `updateViaCache: 'none'`, only in a secure context (HTTPS or localhost) |
+
+The `theme-color` media query follows the system theme, not the in-app `ThemeSwitcher` choice.
+
+### Offline policy
+
+The service worker caches one thing: the offline page, in a cache named after the page's content hash (`gsui-offline-<hash>`; older ones are deleted on activate). It handles only page loads (`GET` requests with `mode: 'navigate'`): network first, and the offline page only when the network fails. Assets, actions, the WebSocket and APIs never pass through it. **Private pages are never cached**, so a shared or lost phone shows no data offline and a logged-out user never sees a stale page.
+
+A new worker takes over at once (`skipWaiting`, `clients.claim`) and does not reload open pages.
+
+### Install button
+
+```go
+ui.Button("btn").Text("Install app").
+    ShowIfInstallable().
+    OnClick(ui.InstallApp("install-help"))
+
+// Steps for browsers without an install prompt.
+ui.El("dialog", "rounded-lg p-6 max-w-sm").ID("install-help").Render(
+    ui.P().Text("Tap Share, then Add to Home Screen."),
+    ui.P().Text("In Safari on a Mac: File, then Add to Dock."),
+    ui.Button("btn").Text("Close").OnClick(ui.CloseDialog("install-help")),
+)
+```
+
+- `InstallApp(helpDialogID)` shows the browser's install prompt (Chrome, Edge, Android) when there is one, else opens the dialog with the app's own, localized steps. Pass `""` for no dialog.
+- `node.ShowIfInstallable()` hides the node unless the app can be installed. A CSS rule in the page head does it, so nodes added by morphs or navigation need no script.
+- `<html data-gsui-install>` is `"prompt"` when the browser offered its prompt, `"manual"` on iPhone, iPad (also iPadOS with a Mac user agent) and macOS Safari 17+, and absent in the installed app (`display-mode: standalone`, `navigator.standalone`), after `appinstalled`, or where the app cannot be installed. After a dismissed prompt the button shows again when the browser offers the prompt again.
+- A `gsui:install` event with `detail.state` (`"prompt"`, `"manual"` or `""`) fires when the state changes.
+
+Both need `App.PWA`: without it `InstallApp` does nothing and `ShowIfInstallable` nodes always show.
+
+### Push notifications
+
+Web Push stays app code: the VAPID keys, the subscription endpoint and sending. The handlers that run in the service worker go in `PWA.Worker`:
+
+```go
+const pushWorker = `self.addEventListener('push', function (event) {
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) {}
+  event.waitUntil(self.registration.showNotification(data.title || 'Mail', {
+    body: data.body || '', tag: data.tag, data: {url: data.url || '/'}, icon: '/assets/icon-192.png'
+  }));
+});
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  var url = new URL(event.notification.data && event.notification.data.url || '/', self.location.origin);
+  if (url.origin !== self.location.origin) url = new URL('/', self.location.origin);
+  event.waitUntil(clients.matchAll({type: 'window', includeUncontrolled: true}).then(function (list) {
+    for (var i = 0; i < list.length; i++) {
+      if ('focus' in list[i]) return list[i].focus().then(function (c) { return c.navigate ? c.navigate(url.href) : c; });
+    }
+    return clients.openWindow(url.href);
+  }));
+});`
+
+app.PWA(ui.PWA{Name: "Mail", Icons: icons, Worker: pushWorker})
+```
+
+In the page, ask for permission only from a button click (on iPhone and iPad only in the installed app), subscribe with `registration.pushManager.subscribe` and the VAPID public key, and save the subscription with an HTTP POST that checks CSRF. Use `registration.showNotification`, not `new Notification()`, which fails on phones.
+
+### Updates
+
+g-sui already reloads open pages when the server instance changes (a deploy or restart) and waits while `__ws.hold()` is active; see [Connection resilience](#connection-resilience). The service worker adds no reloads. Apps no longer need their own `/version.json` polling or `controllerchange` reloads, unless they set `ReconnectReloadAfterMs = -1`.
+
+### Moving an app to `App.PWA`
+
+Remove the app's own manifest and `/sw.js` routes (registering them again panics), its PWA tags in `HTMLHead`, the registration and install script, and version polling. If middleware in front of `app.Handler()` requires login, let `/manifest.webmanifest`, `/sw.js` and `/__gsui/` through.
+
 ---
 
 ## Security
@@ -1813,6 +1932,7 @@ go get github.com/michalCapo/g-sui@v1.1.0
 | `App` | Application container (routes, actions, WS clients) |
 | `LoaderMode` | Loading overlay mode for `App.Loader` |
 | `SkeletonStyle` | Look of the skeleton loaders |
+| `PWA` / `PWAIcon` / `PWAShortcut` | Installable app settings for `App.PWA` |
 | `LayoutHandler` | `func(ctx *Context) *Node` |
 | `PageHandler` | `func(ctx *Context) *Node` |
 | `Context` | Request data for pages and WS actions |
@@ -1889,6 +2009,7 @@ go get github.com/michalCapo/g-sui@v1.1.0
 | `Widget` | `(name, mount string)` | Register a client widget mount function |
 | `Skeleton` | `(prefix string, node *Node)` | Show `node` while a navigation under `prefix` loads |
 | `Subscription` | `(name string, run func(*Context) error)` | Register cancellable background work started by `node.Subscribe` |
+| `PWA` | `(p PWA)` | Make the app installable: manifest, service worker, offline page, head tags. See [PWA](#pwa) |
 
 #### Context Methods
 
@@ -1916,6 +2037,7 @@ go get github.com/michalCapo/g-sui@v1.1.0
 | `Seq`, `Confirm`, `Delay` | `*Action` | Compose actions; see [Local Actions](#local-actions) |
 | `Show`, `Hide`, `Toggle`, `Remove`, `SetText`, ... | `*Action` | Local UI actions; see [Local Actions](#local-actions) |
 | `Widget(name, props, class...)` | `*Node` | Mount a widget registered with `App.Widget` |
+| `InstallApp(helpDialogID)` | `*Action` | Show the install prompt, else open the install steps dialog. See [PWA](#pwa) |
 | `NewForm(id)` | `*FormBuilder` | Form builder |
 | `NewDataTable[T](id)` | `*DataTable[T]` | Generic table |
 | `FilterPopup(col, label, type, opts, val)` | `*Node` | Standalone filter popup |

@@ -53,6 +53,14 @@ func main() {
 	app.Favicon = "/assets/favicon.svg"
 	app.Title = "g-sui Component Showcase"
 	app.Description = "A server-rendered Go UI framework with live WebSocket updates, Tailwind CSS, and interactive components."
+	// Installable app with an offline page; the Install button is in the layout.
+	app.PWA(r.PWA{
+		Name:           "g-sui Component Showcase",
+		ShortName:      "g-sui",
+		ThemeColor:     "#f9fafb",
+		DarkThemeColor: "#030712",
+		Icons:          []r.PWAIcon{{Src: "/assets/favicon.svg", Sizes: "any", Type: "image/svg+xml"}},
+	})
 
 	log.Fatal(app.Listen(":1424"))
 }
@@ -78,8 +86,15 @@ func layout(_ *r.Context) *r.Node {
 					navLink("Collate", "/collate"),
 					navLink("Actions", "/actions"),
 				),
+				r.Button("px-3 py-1.5 rounded text-sm bg-blue-600 text-white").Text("Install").
+					ShowIfInstallable().OnClick(r.InstallApp("install-help")),
 				r.ThemeSwitcher(),
 			),
+		),
+		// Steps for browsers without an install prompt (iPhone, iPad, Safari).
+		r.El("dialog", "m-auto max-w-sm rounded-lg p-6 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 backdrop:bg-black/40").ID("install-help").Render(
+			r.P().Text("Tap Share, then Add to Home Screen. In Safari on a Mac, choose File, then Add to Dock."),
+			r.Button("mt-4 px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-800").Text("Close").OnClick(r.CloseDialog("install-help")),
 		),
 		r.Main("max-w-5xl mx-auto px-4 py-8").ID(contentID),
 	)

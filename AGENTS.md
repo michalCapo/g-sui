@@ -82,6 +82,8 @@ local actions.
 | Live updates from the server | `ctx.Push`, `app.Broadcast`, `Subscribe`, `app.Live` |
 | Re-auth socket after cookie refresh | `await window.__ws.restart()` |
 | Chart, map, editor | `app.Widget(name, mountJS)` and `ui.Widget(name, props)` |
+| Installable app (PWA), offline page | `app.PWA(ui.PWA{Name, Icons, ThemeColor, ...})`; push handlers in `PWA.Worker` |
+| Install app button | `btn.ShowIfInstallable().OnClick(ui.InstallApp("install-help"))` with a `<dialog>` of install steps |
 
 ## Example: dropdown menu without JavaScript
 

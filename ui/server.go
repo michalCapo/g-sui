@@ -200,6 +200,9 @@ type App struct {
 
 	skeletons []skeletonRoute
 
+	pwa      *PWA
+	pwaFiles *pwaFiles
+
 	assets      map[string]*assetFile
 	tailwindURL string
 	iconFontURL string
@@ -430,6 +433,9 @@ func (app *App) setupRoutes() {
 	// WebSocket endpoint
 	app.mux.HandleFunc("/__ws", app.acceptWS)
 
+	// Manifest, service worker and offline page of App.PWA
+	app.setupPWA()
+
 	// Page routes (catch-all). The nested mux provides ServeMux pattern
 	// matching and populates Request.PathValue for Page handlers.
 	app.mux.Handle("/", app.pageHandler)
@@ -594,6 +600,12 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 	if app.Description != "" {
 		descTag = fmt.Sprintf(`<meta name="description" content="%s">`, html.EscapeString(app.Description))
 	}
+	// App.PWA adds head tags and its client script; without it the shell
+	// stays the same.
+	viewport, pwaScript := "", ""
+	if files := app.pwaFiles; files != nil {
+		viewport, descTag, pwaScript = files.viewport, descTag+files.head, files.script
+	}
 
 	// Build custom head HTML (app-wide + per-page)
 	customHead := strings.Join(app.HTMLHead, "\n")
@@ -620,7 +632,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 <html lang="%s" class="gsui-booting">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1%s">
 %s
 %s
 %s
@@ -640,7 +652,7 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 %s
 </script>
 </body>
-</html>`, html.EscapeString(lang), faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS()+texts.js(), localJS, app.widgetJS(), app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
+</html>`, html.EscapeString(lang), viewport, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS()+texts.js(), localJS, app.widgetJS()+pwaScript, app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
 }
 
 // ---------------------------------------------------------------------------
