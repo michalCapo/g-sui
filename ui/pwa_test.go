@@ -147,7 +147,7 @@ func TestPWAShellHead(t *testing.T) {
 	}
 	app := NewApp()
 	app.PWA(PWA{Name: "Mail Client", ShortName: "Mail", ThemeColor: "#fafafa", DarkThemeColor: "#09090b", AppleTouchIcon: "/icons/apple.png", Scope: "/app/"})
-	body := shellBody(t, app)
+	body := shellBodyAt(t, app, "/app/")
 	for _, want := range []string{
 		`<meta name="viewport" content="width=device-width,initial-scale=1">`,
 		`<link rel="manifest" href="/manifest.webmanifest">`,
@@ -179,13 +179,22 @@ func TestPWAShellHead(t *testing.T) {
 	}
 }
 
+// shellBodyAt is the page shell of path.
+func shellBodyAt(t *testing.T, app *App, path string) string {
+	t.Helper()
+	app.Page("/{rest...}", func(_ *Context) *Node { return Div() })
+	rr := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rr, httptest.NewRequest("GET", path, nil))
+	return rr.Body.String()
+}
+
 // Every configured value is escaped where it lands.
 func TestPWAEscapesValues(t *testing.T) {
 	evil := `"><script>alert(1)</script>`
 	app := NewApp()
 	app.PWA(PWA{Name: evil, ShortName: evil, ThemeColor: `red}</style><script>alert(1)</script>`, AppleTouchIcon: evil,
-		Scope: `"</script><script>alert(1)//`, OfflineText: evil})
-	body := shellBody(t, app)
+		Scope: `/"</script><script>alert(1)`, OfflineText: evil})
+	body := shellBodyAt(t, app, `/%22%3C/script%3E%3Cscript%3Ealert(1)`)
 	sw := pwaGet(t, app, "/sw.js").Body.String()
 	page := pwaGet(t, app, regexp.MustCompile(`/__gsui/asset/[0-9a-f]{12}/offline\.html`).FindString(sw)).Body.String()
 	for name, text := range map[string]string{"shell": body, "offline page": page} {
@@ -196,7 +205,7 @@ func TestPWAEscapesValues(t *testing.T) {
 	if !strings.Contains(page, "background:#ffffff") {
 		t.Error("an invalid color must fall back")
 	}
-	if !strings.Contains(body, `)("\"\u003c/script\u003e\u003cscript\u003ealert(1)//");`) {
+	if !strings.Contains(body, `)("/\"\u003c/script\u003e\u003cscript\u003ealert(1)");`) {
 		t.Error("scope is not JSON escaped")
 	}
 }
@@ -232,10 +241,8 @@ func TestPWAInstallState(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed")
 	}
-	app := NewApp()
-	app.PWA(PWA{Scope: "/app/"})
-	app.setup()
-	script, _ := json.Marshal(app.pwaFiles.script)
+	// Only the install script: notifications have their own test.
+	script, _ := json.Marshal("(" + pwaJS + `)("/app/");`)
 	const (
 		chrome    = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 		iphone    = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"

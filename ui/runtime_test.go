@@ -692,7 +692,7 @@ func TestFormValuesRoundTripThroughCall(t *testing.T) {
 	if err := json.Unmarshal(b, &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.Values.Encode() != in.Values.Encode() {
+	if out.Encode() != in.Encode() {
 		t.Fatalf("round trip = %v", out.Values)
 	}
 }

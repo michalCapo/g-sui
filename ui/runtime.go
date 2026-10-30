@@ -206,6 +206,11 @@ func (app *App) renderNavigation(ctx *Context, req navigationRequest) string {
 	if req.Patch && (previous == nil || previous.Pattern != matched.Pattern) {
 		return Redirect(req.URL).script()
 	}
+	// Only pages in PWA.Scope load the PWA scripts, so crossing the scope
+	// loads the page.
+	if previous != nil && app.pwaPage(previous.URL.Path) != app.pwaPage(matched.URL.Path) {
+		return Redirect(req.URL).script()
+	}
 	if !req.Patch {
 		app.cancelConn(ctx.wsConn)
 		app.mu.Lock()

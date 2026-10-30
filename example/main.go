@@ -53,7 +53,8 @@ func main() {
 	app.Favicon = "/assets/favicon.svg"
 	app.Title = "g-sui Component Showcase"
 	app.Description = "A server-rendered Go UI framework with live WebSocket updates, Tailwind CSS, and interactive components."
-	// Installable app with an offline page; the Install button is in the layout.
+	// Installable app with an offline page; the Install and notification
+	// buttons are in the layout.
 	app.PWA(r.PWA{
 		Name:           "g-sui Component Showcase",
 		ShortName:      "g-sui",
@@ -88,6 +89,12 @@ func layout(_ *r.Context) *r.Node {
 				),
 				r.Button("px-3 py-1.5 rounded text-sm bg-blue-600 text-white").Text("Install").
 					ShowIfInstallable().OnClick(r.InstallApp("install-help")),
+				// Notifications: ask once, then a test notification.
+				r.Button("px-3 py-1.5 rounded text-sm bg-gray-100 dark:bg-gray-800").Text("Notify me").
+					ShowIfNotifications(r.NotificationsOff).OnClick(r.EnableNotifications()),
+				r.Button("px-3 py-1.5 rounded text-sm bg-gray-100 dark:bg-gray-800").Text("Test notification").
+					ShowIfNotifications(r.NotificationsOn).
+					OnClick(r.ShowNotification(r.Notification{Title: "g-sui", Body: "Notifications work.", URL: "/actions", Tag: "test"})),
 				r.ThemeSwitcher(),
 			),
 		),

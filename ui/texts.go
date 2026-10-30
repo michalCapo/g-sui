@@ -22,23 +22,26 @@ type Texts struct {
 	ActionFailed   string `json:"actionFailed"`   // an action returned an error
 	ServerError    string `json:"serverError"`    // an action panicked
 	Denied         string `json:"denied"`         // an action was refused or its page is gone
+	// NotificationsFailed: notifications could not be turned on or off.
+	NotificationsFailed string `json:"notificationsFailed"`
 }
 
 func (t Texts) withDefaults() Texts {
 	return Texts{
-		Connecting:     cmp.Or(t.Connecting, "Connecting…"),
-		Offline:        cmp.Or(t.Offline, "Offline"),
-		Reconnecting:   cmp.Or(t.Reconnecting, "Trying to reconnect…"),
-		Loading:        cmp.Or(t.Loading, "Loading…"),
-		PleaseWait:     cmp.Or(t.PleaseWait, "Please wait"),
-		LostMaybeDone:  cmp.Or(t.LostMaybeDone, "Connection lost. Your last action may have completed. Check before retrying."),
-		LostNotSent:    cmp.Or(t.LostNotSent, "Connection lost before sending. Please try again."),
-		OfflineNotSent: cmp.Or(t.OfflineNotSent, "You are offline. Reconnect before trying again."),
-		Dismiss:        cmp.Or(t.Dismiss, "Dismiss notification"),
-		Reload:         cmp.Or(t.Reload, "Reload"),
-		ActionFailed:   cmp.Or(t.ActionFailed, "Unable to complete the request"),
-		ServerError:    cmp.Or(t.ServerError, "Server error"),
-		Denied:         cmp.Or(t.Denied, "Request denied or page expired"),
+		Connecting:          cmp.Or(t.Connecting, "Connecting…"),
+		Offline:             cmp.Or(t.Offline, "Offline"),
+		Reconnecting:        cmp.Or(t.Reconnecting, "Trying to reconnect…"),
+		Loading:             cmp.Or(t.Loading, "Loading…"),
+		PleaseWait:          cmp.Or(t.PleaseWait, "Please wait"),
+		LostMaybeDone:       cmp.Or(t.LostMaybeDone, "Connection lost. Your last action may have completed. Check before retrying."),
+		LostNotSent:         cmp.Or(t.LostNotSent, "Connection lost before sending. Please try again."),
+		OfflineNotSent:      cmp.Or(t.OfflineNotSent, "You are offline. Reconnect before trying again."),
+		Dismiss:             cmp.Or(t.Dismiss, "Dismiss notification"),
+		Reload:              cmp.Or(t.Reload, "Reload"),
+		ActionFailed:        cmp.Or(t.ActionFailed, "Unable to complete the request"),
+		ServerError:         cmp.Or(t.ServerError, "Server error"),
+		Denied:              cmp.Or(t.Denied, "Request denied or page expired"),
+		NotificationsFailed: cmp.Or(t.NotificationsFailed, "Notifications could not be changed. Try again."),
 	}
 }
 
@@ -67,19 +70,20 @@ func (app *App) locale(r *http.Request) (string, Texts) {
 // or fills t's empty fields from other.
 func (t Texts) or(other Texts) Texts {
 	return Texts{
-		Connecting:     cmp.Or(t.Connecting, other.Connecting),
-		Offline:        cmp.Or(t.Offline, other.Offline),
-		Reconnecting:   cmp.Or(t.Reconnecting, other.Reconnecting),
-		Loading:        cmp.Or(t.Loading, other.Loading),
-		PleaseWait:     cmp.Or(t.PleaseWait, other.PleaseWait),
-		LostMaybeDone:  cmp.Or(t.LostMaybeDone, other.LostMaybeDone),
-		LostNotSent:    cmp.Or(t.LostNotSent, other.LostNotSent),
-		OfflineNotSent: cmp.Or(t.OfflineNotSent, other.OfflineNotSent),
-		Dismiss:        cmp.Or(t.Dismiss, other.Dismiss),
-		Reload:         cmp.Or(t.Reload, other.Reload),
-		ActionFailed:   cmp.Or(t.ActionFailed, other.ActionFailed),
-		ServerError:    cmp.Or(t.ServerError, other.ServerError),
-		Denied:         cmp.Or(t.Denied, other.Denied),
+		Connecting:          cmp.Or(t.Connecting, other.Connecting),
+		Offline:             cmp.Or(t.Offline, other.Offline),
+		Reconnecting:        cmp.Or(t.Reconnecting, other.Reconnecting),
+		Loading:             cmp.Or(t.Loading, other.Loading),
+		PleaseWait:          cmp.Or(t.PleaseWait, other.PleaseWait),
+		LostMaybeDone:       cmp.Or(t.LostMaybeDone, other.LostMaybeDone),
+		LostNotSent:         cmp.Or(t.LostNotSent, other.LostNotSent),
+		OfflineNotSent:      cmp.Or(t.OfflineNotSent, other.OfflineNotSent),
+		Dismiss:             cmp.Or(t.Dismiss, other.Dismiss),
+		Reload:              cmp.Or(t.Reload, other.Reload),
+		ActionFailed:        cmp.Or(t.ActionFailed, other.ActionFailed),
+		ServerError:         cmp.Or(t.ServerError, other.ServerError),
+		Denied:              cmp.Or(t.Denied, other.Denied),
+		NotificationsFailed: cmp.Or(t.NotificationsFailed, other.NotificationsFailed),
 	}
 }
 

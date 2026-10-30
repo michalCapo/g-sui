@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -57,8 +58,18 @@ type PWA struct {
 	// no network. Default English.
 	OfflineText string
 
-	// Worker is JavaScript appended to the service worker, e.g. push and
-	// notificationclick handlers.
+	// NotificationIcon is the image in notifications. Default the first
+	// 192x192 icon that is not maskable.
+	NotificationIcon string
+	// NotificationBadge is the small one-color image Android shows in the
+	// status bar. Default none: Android shows a generic one.
+	NotificationBadge string
+	// Push turns on Web Push. Without it notifications show only while a
+	// page of the app is open (ShowNotification).
+	Push *PWAPush
+
+	// Worker is JavaScript appended to the service worker. g-sui already
+	// shows pushes and handles notification clicks.
 	//
 	// This is a trusted raw API: never pass untrusted/user-controlled input to it.
 	Worker string
@@ -111,6 +122,7 @@ func (n *Node) ShowIfInstallable() *Node { return n.Attr("data-gsui-installable"
 
 // pwaFiles are App.PWA's parts of the page shell, built once at setup.
 type pwaFiles struct {
+	scope    string // pages under it get the files
 	head     string // tags after the description in <head>
 	script   string // runs after local.js
 	viewport string // added to the viewport meta content
@@ -134,6 +146,7 @@ func (app *App) setupPWA() {
 	p.DarkThemeColor = cmp.Or(p.DarkThemeColor, p.ThemeColor)
 	p.BackgroundColor = cmp.Or(p.BackgroundColor, p.ThemeColor)
 	p.OfflineText = cmp.Or(p.OfflineText, "You are offline. Check your connection and try again.")
+	p.NotificationIcon = cmp.Or(p.NotificationIcon, pwaNotificationIcon(p.Icons))
 
 	lang, texts := app.locale(nil)
 	offline := app.Asset("offline.html", pwaOfflinePage(p, lang, texts.Reload))
@@ -155,7 +168,7 @@ func (app *App) setupPWA() {
 		p.ThemeColor, p.BackgroundColor, p.Icons, p.Shortcuts, p.Categories})
 	// The cache name holds the offline page's content hash, so a changed
 	// page replaces the old cache.
-	worker := pwaWorker(offline, "gsui-offline-"+path.Base(path.Dir(offline)))
+	worker := pwaWorker(offline, "gsui-offline-"+path.Base(path.Dir(offline))) + notifyWorker(p)
 	if p.Worker != "" {
 		worker += "\n" + p.Worker + "\n"
 	}
@@ -182,13 +195,38 @@ func (app *App) setupPWA() {
 	if p.AppleTouchIcon != "" {
 		fmt.Fprintf(&head, "\n"+`<link rel="apple-touch-icon" sizes="180x180" href="%s">`, esc(p.AppleTouchIcon))
 	}
-	head.WriteString("\n<style>html:not([data-gsui-install]) [data-gsui-installable]{display:none!important}</style>")
+	head.WriteString("\n<style>html:not([data-gsui-install]) [data-gsui-installable]{display:none!important}" + notifyStyle + "</style>")
 	scope, _ := json.Marshal(p.Scope)
-	files := &pwaFiles{head: head.String(), script: "\n(" + pwaJS + ")(" + string(scope) + ");"}
+	files := &pwaFiles{scope: p.Scope, head: head.String(), script: "\n(" + pwaJS + ")(" + string(scope) + ");" + notifyScript(p)}
+	if p.Push != nil && p.Push.Save != nil {
+		app.mux.HandleFunc("POST /__gsui/push", app.pushHandler(p.Push.Save))
+	}
 	if p.SafeAreas {
 		files.viewport = ",viewport-fit=cover"
 	}
 	app.pwaFiles = files
+}
+
+// pwaPage reports whether the page at path gets App.PWA's files: it is in
+// PWA.Scope.
+func (app *App) pwaPage(path string) bool {
+	return app.pwaFiles != nil && strings.HasPrefix(path, app.pwaFiles.scope)
+}
+
+// pwaNotificationIcon is the first 192x192 icon that is not maskable, else
+// the first one that is not maskable.
+func pwaNotificationIcon(icons []PWAIcon) string {
+	first := ""
+	for _, icon := range icons {
+		if strings.Contains(icon.Purpose, "maskable") {
+			continue
+		}
+		if slices.Contains(strings.Fields(icon.Sizes), "192x192") {
+			return icon.Src
+		}
+		first = cmp.Or(first, icon.Src)
+	}
+	return first
 }
 
 // pwaServe serves a generated file that browsers revalidate on every use.

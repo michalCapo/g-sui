@@ -600,10 +600,10 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 	if app.Description != "" {
 		descTag = fmt.Sprintf(`<meta name="description" content="%s">`, html.EscapeString(app.Description))
 	}
-	// App.PWA adds head tags and its client script; without it the shell
-	// stays the same.
+	// App.PWA adds head tags and its client script to the pages in its
+	// scope; without it the shell stays the same.
 	viewport, pwaScript := "", ""
-	if files := app.pwaFiles; files != nil {
+	if files := app.pwaFiles; app.pwaPage(r.URL.Path) {
 		viewport, descTag, pwaScript = files.viewport, descTag+files.head, files.script
 	}
 

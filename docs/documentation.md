@@ -543,6 +543,8 @@ ui.Div().Shortcut("mod+k", ui.Focus("q"))
 | `ToggleTheme()` / `SetTheme(mode)` | Change the theme (`light`, `dark`, `system`) |
 | `SetTitle(title)` | Set the document title |
 | `InstallApp(helpDialogID)` | Show the browser's install prompt, else open the dialog with install steps. Needs [`App.PWA`](#pwa) |
+| `EnableNotifications()` | Ask to allow notifications; with `PWA.Push` subscribe this device. See [Notifications](#notifications) |
+| `ShowNotification(n)` | Show a system notification now, if allowed. See [Notifications](#notifications) |
 
 Compose actions:
 
@@ -572,6 +574,9 @@ still navigates.
 | `ActiveClass(active, inactive...)` | Classes for a link to the current page; sets `aria-current="page"` |
 | `ActivePrefix()` | Also mark the link active on nested paths |
 | `ShowIfInstallable()` | Hide the node unless the app can be installed. Needs [`App.PWA`](#pwa) |
+| `ShowIfNotifications(states...)` | Show the node only in these notification states. See [Notifications](#notifications) |
+| `NotificationSwitch()` | On/off switch for notifications on this device. See [Notifications](#notifications) |
+| `AppBadge(count)` | Number on the app icon while the node is on the page. See [Notifications](#notifications) |
 
 ```go
 ui.NavLink("/users", "px-3 py-1 rounded").
@@ -1645,7 +1650,7 @@ Configure it before serving, like the other App settings.
 | --- | --- | --- |
 | `Name` / `ShortName` | `App.Title`, else `"App"` / `Name` | App name; `ShortName` shows under the icon |
 | `Description` | | Manifest description |
-| `Scope` / `StartURL` / `ID` | `"/"` / `Scope` / `StartURL` | Paths of the app, the page it opens, its stable identity |
+| `Scope` / `StartURL` / `ID` | `"/"` / `Scope` / `StartURL` | Paths of the app, the page it opens, its stable identity. Only pages whose path starts with `Scope` get the PWA head tags and scripts; live navigation into or out of `Scope` loads the page |
 | `ThemeColor` | `"#ffffff"` | Browser UI and title bar color |
 | `DarkThemeColor` | `ThemeColor` | Theme color in system dark mode; dark background of the offline page |
 | `BackgroundColor` | `ThemeColor` | Splash screen and offline page background |
@@ -1654,16 +1659,19 @@ Configure it before serving, like the other App settings.
 | `Shortcuts` / `Categories` | | Manifest shortcuts (icon menu) and categories |
 | `SafeAreas` | `false` | Adds `viewport-fit=cover`; pad the layout with `env(safe-area-inset-*)` |
 | `OfflineText` | English | Text of the offline page |
-| `Worker` | | Trusted JavaScript appended to the service worker (push, `notificationclick`) |
+| `NotificationIcon` | first 192x192 icon that is not maskable | Image in notifications. See [Notifications](#notifications) |
+| `NotificationBadge` | | Small one-color image in the Android status bar |
+| `Push` | | Web Push: `PublicKey` (VAPID) and `Save` for subscriptions. See [Web Push](#web-push) |
+| `Worker` | | Trusted JavaScript appended to the service worker. g-sui already shows pushes (with `Push`) and handles clicks on its notifications |
 
 What g-sui does:
 
 | Part | Detail |
 | --- | --- |
 | `/manifest.webmanifest` | Generated from `PWA`, `display: standalone`, `lang` from `App.Lang`. `application/manifest+json`, `Cache-Control: no-cache` with an ETag |
-| `/sw.js` | The service worker plus `PWA.Worker`. `Cache-Control: no-cache`, `Service-Worker-Allowed: /` |
+| `/sw.js` | The service worker (offline page, notification clicks, pushes with `Push`) plus `PWA.Worker`. `Cache-Control: no-cache`, `Service-Worker-Allowed: /` |
 | Offline page | A static page under `/__gsui/asset/`: app name, `OfflineText`, a reload button labeled `Texts.Reload`, `<html lang>` from `App.Lang`. No g-sui runtime, nothing loaded from elsewhere. It reloads itself when the network is back |
-| Page head | Manifest link, `theme-color` (a dark one when `DarkThemeColor` differs), `application-name`, `mobile-web-app-capable`, the Apple tags and `apple-touch-icon`. Every value is escaped. Without `App.PWA` the page shell is unchanged |
+| Page head | Manifest link, `theme-color` (a dark one when `DarkThemeColor` differs), `application-name`, `mobile-web-app-capable`, the Apple tags and `apple-touch-icon`. Every value is escaped. Only on pages inside `Scope`; other pages, and all pages without `App.PWA`, keep the plain shell |
 | Registration | `/sw.js` registers after page load with `PWA.Scope` and `updateViaCache: 'none'`, only in a secure context (HTTPS or localhost) |
 
 The `theme-color` media query follows the system theme, not the in-app `ThemeSwitcher` choice.
@@ -1696,34 +1704,92 @@ ui.El("dialog", "rounded-lg p-6 max-w-sm").ID("install-help").Render(
 
 Both need `App.PWA`: without it `InstallApp` does nothing and `ShowIfInstallable` nodes always show.
 
-### Push notifications
+### Notifications
 
-Web Push stays app code: the VAPID keys, the subscription endpoint and sending. The handlers that run in the service worker go in `PWA.Worker`:
+System notifications (the status bar on phones, the notification center on computers), the number on the app icon, and Web Push for notifications while the app is closed. They need `App.PWA`.
 
 ```go
-const pushWorker = `self.addEventListener('push', function (event) {
-  var data = {};
-  try { data = event.data ? event.data.json() : {}; } catch (_) {}
-  event.waitUntil(self.registration.showNotification(data.title || 'Mail', {
-    body: data.body || '', tag: data.tag, data: {url: data.url || '/'}, icon: '/assets/icon-192.png'
-  }));
-});
-self.addEventListener('notificationclick', function (event) {
-  event.notification.close();
-  var url = new URL(event.notification.data && event.notification.data.url || '/', self.location.origin);
-  if (url.origin !== self.location.origin) url = new URL('/', self.location.origin);
-  event.waitUntil(clients.matchAll({type: 'window', includeUncontrolled: true}).then(function (list) {
-    for (var i = 0; i < list.length; i++) {
-      if ('focus' in list[i]) return list[i].focus().then(function (c) { return c.navigate ? c.navigate(url.href) : c; });
-    }
-    return clients.openWindow(url.href);
-  }));
-});`
+// Ask from a click; browsers ignore the request otherwise.
+ui.Button("btn").Text("Enable notifications").
+    ShowIfNotifications(ui.NotificationsOff).
+    OnClick(ui.EnableNotifications())
+ui.P("text-sm").Text("Notifications are blocked in the browser settings.").
+    ShowIfNotifications(ui.NotificationsBlocked)
 
-app.PWA(ui.PWA{Name: "Mail", Icons: icons, Worker: pushWorker})
+// Show one now, from any server reply or ctx.Push.
+r := ui.Result{}.Run(ui.ShowNotification(ui.Notification{
+    Title: "New mail", Body: "You have 2 new emails.", Tag: "mail-new", URL: "/inbox",
+}))
+
+// The app icon shows the unread count while this node is on the page.
+ui.Span("sr-only").AppBadge(unread)
 ```
 
-In the page, ask for permission only from a button click (on iPhone and iPad only in the installed app), subscribe with `registration.pushManager.subscribe` and the VAPID public key, and save the subscription with an HTTP POST that checks CSRF. Use `registration.showNotification`, not `new Notification()`, which fails on phones.
+| API | Description |
+| --- | --- |
+| `EnableNotifications()` | Ask for permission; with `PWA.Push` also subscribe this device and save it |
+| `ShowNotification(n)` | Show a notification now, if allowed. Through the service worker (phones need it); `new Notification` only where no worker gets ready within 10 seconds. A click opens `n.URL` in the app |
+| `node.ShowIfNotifications(states...)` | Show the node only in these states: `NotificationsOff`, `NotificationsOn`, `NotificationsBlocked`, `NotificationsInstall` (iPhone and iPad allow notifications only in the installed app). Hidden where the browser has none. A CSS rule does it, so morphed nodes need no script |
+| `node.NotificationSwitch()` | An on/off switch (`role="switch"`): a click turns notifications on, or off with `PWA.Push`. g-sui keeps `aria-checked` and `disabled` in step, also after morphs |
+| `node.AppBadge(count)` | The app icon shows `count` while the node is on the page; `0` clears it. Each page load, live navigation and change of the count sets it again. A page without one leaves the icon as it is |
+
+`ui.Notification` fields: `Title` (default `PWA.Name`), `Body`, `URL` (a local page; default `PWA.StartURL`), `Tag` (a newer notification with the same tag replaces the older), `Icon` (default `PWA.NotificationIcon`), `Count` (`*int`, the number on the app icon; `0` clears it, `nil` leaves it).
+
+`PWA.NotificationIcon` defaults to the first 192x192 icon that is not maskable. `PWA.NotificationBadge` is the small one-color image Android shows in the status bar.
+
+`<html data-gsui-notify>` holds the state (`off`, `on`, `blocked`, `install`, or absent), and a `gsui:notifications` event with `detail.state` fires when it changes. When turning notifications on or off fails, a toast shows `Texts.NotificationsFailed`.
+
+The service worker shows the notification's page on a click: a window of the app already on that page, else another window in the app's scope moved to `URL`, else a new window. Other origins and broken URLs open `StartURL`. It handles only g-sui's notifications (`ShowNotification` and pushes with `PWA.Push`), so notifications that the app's own `PWA.Worker` code shows keep their own `notificationclick` handler.
+
+#### Web Push
+
+Without `PWA.Push`, notifications show only while a page of the app is open. With it, they also arrive while the app is closed. g-sui subscribes the device and shows the pushes; the app keeps the VAPID keys, stores the subscriptions and sends.
+
+```go
+app.PWA(ui.PWA{
+    Name:  "Mail",
+    Icons: icons,
+    Push: &ui.PWAPush{
+        PublicKey: vapidPublic, // base64url
+        // The page POSTs to /__gsui/push; App.Identity and App.Authorize run first.
+        Save: func(ctx *ui.Context, sub ui.PushSubscription, remove bool) error {
+            user := currentUser(ctx)
+            if user == nil {
+                return errors.New("signed out")
+            }
+            if remove {
+                return db.DeletePushSub(user.ID, sub.Endpoint)
+            }
+            return db.SavePushSub(user.ID, sub.Endpoint, sub.Keys.P256dh, sub.Keys.Auth)
+        },
+    },
+})
+
+// Settings: one switch per device.
+ui.Button("switch").NotificationSwitch()
+```
+
+Send with a Web Push library, e.g. `github.com/SherClockHolmes/webpush-go`, and an HTTP client that does not follow redirects. The payload is a `ui.Notification` as JSON, at most 3993 bytes (the 4 KiB record less encryption overhead):
+
+```go
+payload, _ := json.Marshal(ui.Notification{Title: "New mail", Body: subject, URL: "/inbox", Tag: "mail", Count: &unread})
+resp, err := webpush.SendNotification(payload, &webpush.Subscription{Endpoint: endpoint, Keys: webpush.Keys{P256dh: p256dh, Auth: auth}},
+    &webpush.Options{HTTPClient: noRedirects, Subscriber: "mailto:admin@example.com", VAPIDPublicKey: vapidPublic, VAPIDPrivateKey: vapidPrivate, TTL: 3600})
+// 404 or 410: the subscription expired; delete it.
+```
+
+- The page saves with `POST /__gsui/push`: JSON from the same origin only (or `App.AllowedOrigins`), then `App.Identity` and `App.Authorize` with the action `"__push"`, then `Save` with the request's cookies in `ctx.Request`. A `Save` error answers 403. Login middleware in front of `app.Handler()` must let `/__gsui/` through.
+- g-sui accepts only HTTPS endpoints of the browsers' push services (Google, Apple, Mozilla, Microsoft) and RFC 8291 keys (a P-256 public key and a 16-byte secret).
+- While notifications are on, every page load saves the subscription again, so a device follows the user who signed in last. That save fails quietly, e.g. on a sign-in page, and is tried again after the next live navigation. Live navigation and coming back to the page also read the state again (another tab or the browser settings may have changed it) and save a subscription the browser renewed.
+- The push handler in the service worker is there only with `PWA.Push`. Remove an own `push` handler from `PWA.Worker` when moving to it.
+- A subscription with the same key made by an earlier `/sw.js` of the app at another scope still counts, so moving an app with its own push to `PWA.Push` keeps its devices subscribed. Other service workers of the origin are never touched.
+- g-sui uses only its own registration of `/sw.js` at `Scope`, once `/sw.js` is its active worker, never another service worker that covers the page.
+- Saves run one after another, each after the request before it ended (a request open for a minute is aborted), so a slow save on page load cannot undo turning off. A save whose caller gave up after 20 seconds is not sent if it has not started. Turning on or off runs one at a time; a run that never ends lets the next one start after a minute. The browser's subscription is what counts: after a failed step, and when a slow step ends after its run, g-sui reads it again and saves it if there is one, so the server follows it. Saves on page load are never repeated by themselves. A `PublicKey` that is not base64url turns push off with a console warning.
+- The push handler shows only text fields of the payload; others get the defaults, so every push shows a notification (browsers may revoke push for silent pushes).
+- Turning off removes the subscription on the server first, then in the browser. If `Save` fails when turning on, the new subscription is dropped again, so the switch never shows on without the server knowing the device.
+- Turning on or off ends within a minute: a step that never answers (a service worker that never gets ready, a stalled push service) ends with the `NotificationsFailed` toast, and the state is read again.
+- A subscription made with another VAPID key counts as off; turning on replaces it.
+- Delete a device's subscriptions on logout in the app.
 
 ### Updates
 
@@ -1808,7 +1874,7 @@ app.Texts = ui.Texts{              // the client's own words; empty fields stay 
 }
 ```
 
-`ui.Texts` covers the connection badges (`Connecting`, `Offline`, `Reconnecting`), the loading badge (`Loading`, `PleaseWait`), the connection errors (`LostMaybeDone`, `LostNotSent`, `OfflineNotSent`) the close label of notifications (`Dismiss`), the reload button (`Reload`) and the error toasts of failed actions (`ActionFailed`, `ServerError`, `Denied`).
+`ui.Texts` covers the connection badges (`Connecting`, `Offline`, `Reconnecting`), the loading badge (`Loading`, `PleaseWait`), the connection errors (`LostMaybeDone`, `LostNotSent`, `OfflineNotSent`) the close label of notifications (`Dismiss`), the reload button (`Reload`) and the error toasts of failed actions (`ActionFailed`, `ServerError`, `Denied`) and of notifications that could not be turned on or off (`NotificationsFailed`).
 
 For apps whose users read different languages, `App.Locale` picks the language and the texts per request. It runs for every page render and for the error toasts of actions; empty answers fall back to `Lang` and `Texts`, then English.
 
@@ -1933,6 +1999,8 @@ go get github.com/michalCapo/g-sui@v1.1.0
 | `LoaderMode` | Loading overlay mode for `App.Loader` |
 | `SkeletonStyle` | Look of the skeleton loaders |
 | `PWA` / `PWAIcon` / `PWAShortcut` | Installable app settings for `App.PWA` |
+| `PWAPush` / `PushSubscription` / `PushKeys` | Web Push settings and a device's subscription |
+| `Notification` | A system notification, also the Web Push payload |
 | `LayoutHandler` | `func(ctx *Context) *Node` |
 | `PageHandler` | `func(ctx *Context) *Node` |
 | `Context` | Request data for pages and WS actions |
@@ -1991,6 +2059,8 @@ go get github.com/michalCapo/g-sui@v1.1.0
 **Collate Filter Types:** `CollateBool`, `CollateDateRange`, `CollateSelect`, `CollateMultiCheck`
 
 **Loader Modes:** `LoaderOverlay`, `LoaderNone`
+
+**Notification States:** `NotificationsOff`, `NotificationsOn`, `NotificationsBlocked`, `NotificationsInstall`
 
 #### App Methods
 
