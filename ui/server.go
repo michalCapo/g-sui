@@ -1438,20 +1438,32 @@ type socket struct {
 }
 
 // acceptWS opens a WebSocket. Replies are large, repetitive JS, so they are
-// compressed (permessage-deflate) when the browser supports it.
+// compressed (permessage-deflate) when the browser supports it well.
 func (app *App) acceptWS(w http.ResponseWriter, r *http.Request) {
 	if err := app.wsHandshake(r); err != nil {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
+	mode := websocket.CompressionNoContextTakeover
+	if webKitOnly(r.UserAgent()) {
+		mode = websocket.CompressionDisabled
+	}
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // wsHandshake checked the origin
-		CompressionMode:    websocket.CompressionNoContextTakeover,
+		CompressionMode:    mode,
 	})
 	if err != nil {
 		return
 	}
 	app.handleWS(&socket{Conn: c, req: r})
+}
+
+// webKitOnly reports Safari's engine without Chrome's: Safari on a Mac and
+// every browser on iPhone and iPad. Safari drops compressed sockets (seen
+// with Safari 17.6): actions get lost, live updates loop through reconnects
+// and the page lags, so those sockets are not compressed.
+func webKitOnly(userAgent string) bool {
+	return strings.Contains(userAgent, "AppleWebKit") && !strings.Contains(userAgent, "Chrome/") && !strings.Contains(userAgent, "Chromium/")
 }
 
 // wsHandshake accepts same-origin browser requests, configured origins, and
