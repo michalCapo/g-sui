@@ -171,6 +171,35 @@ const tests = {
     check('no connection report', !env.report());
   },
 
+  async lateHeartbeatTimerAsksAgain() {
+    // A page that was asleep or busy past the heartbeat timeout has not seen
+    // the reply yet: it asks again instead of dropping the socket.
+    const env = makeEnv();
+    const ws = env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1', hbTimeout: 50});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    const id = ws.call('save', {}, null, null);
+    const end = Date.now() + 2100; while (Date.now() < end) {}
+    await sleep(20);
+    const beats = a.sent.filter(m => JSON.parse(m).act === '__hb').length;
+    check('late timer keeps the socket', env.latest() === a);
+    check('late timer sends a new heartbeat', beats === 2);
+    a.deliver(JSON.stringify({__hb: 2}));
+    a.deliver(JSON.stringify({__r: 1, id, version: 1, js: ''}));
+    check('no false connection report after a late timer', !env.report());
+  },
+
+  async staleProbeIsReplacedOnResume() {
+    const env = makeEnv();
+    env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1', hbTimeout: 100000, resumeTimeout: 2000});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    env.fire('offline'); // probe with a long timer, left armed
+    env.fire('visibilitychange');
+    const beats = a.sent.filter(m => JSON.parse(m).act === '__hb').length;
+    check('resume sends a fresh heartbeat', beats === 2);
+  },
+
   async deadResumedSocketSendsCallOnNewSocket() {
     const env = makeEnv();
     const ws = env.run({grace: 1000, reloadAfter: -1, keepAlive: -1, inst: 'srv-1', resumeTimeout: 30});

@@ -1050,9 +1050,16 @@ var __ws=(function(){
   // instead of waiting for TCP to notice. Any frame from the server counts.
   function probe(timeout){
     if(!ready||!ws||ws.readyState!==1||hbTimer)return;
-    var sock=ws,id=++hbSeq;
+    var sock=ws,id=++hbSeq,at=Date.now();
     if(!rawSend('{"act":"__hb","hb":'+id+'}')){replaceDead(sock);return}
-    hbTimer=setTimeout(function(){hbTimer=0;if(ws===sock)replaceDead(sock)},timeout);
+    // A timer that fires late means the page was asleep (a background tab,
+    // App Nap) or busy, not that the server is silent: its reply may still
+    // wait in the queue. Ask again instead of dropping a working socket.
+    hbTimer=setTimeout(function(){
+      hbTimer=0;if(ws!==sock)return;
+      if(Date.now()-at>timeout+2000){probe(timeout);return}
+      replaceDead(sock);
+    },timeout);
   }
   function clearHB(){if(hbTimer){clearTimeout(hbTimer);hbTimer=0}}
   // alive runs for every frame from the server. A verified socket sends the
@@ -1297,7 +1304,8 @@ var __ws=(function(){
   function resume(){
     if(document.hidden)return;
     __offline.resume();
-    if(ws&&ws.readyState===1&&ready){verifying=true;probe(__gsuiOpt('resumeTimeout',4000));return}
+    // A probe left from before the page was hidden is stale: start afresh.
+    if(ws&&ws.readyState===1&&ready){verifying=true;clearHB();probe(__gsuiOpt('resumeTimeout',4000));return}
     if(!api.connected()&&hadClose)__offline.down();
     reconnectNow();
   }
