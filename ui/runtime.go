@@ -42,13 +42,21 @@ func (ctx *Context) Context() context.Context {
 // action payload. Identity should resolve and validate a server-side session.
 func (ctx *Context) User() any { return ctx.user }
 
-func (app *App) authorize(ctx *Context, action string) error {
+// identify runs App.Identity and keeps the user in ctx.
+func (app *App) identify(ctx *Context) error {
 	if app.Identity != nil {
 		user, err := app.Identity(ctx.Request)
 		if err != nil {
 			return err
 		}
 		ctx.user = user
+	}
+	return nil
+}
+
+func (app *App) authorize(ctx *Context, action string) error {
+	if err := app.identify(ctx); err != nil {
+		return err
 	}
 	if app.Authorize != nil {
 		return app.Authorize(ctx, action)
@@ -130,8 +138,19 @@ func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
 		}
 		ctx.setRequest(matched)
 	}
-	if err := app.authorize(ctx, msg.Act); err != nil {
-		return err
+	// App.Authorize never sees g-sui's own action names.
+	switch msg.Act {
+	case "__unsubscribe", "__notfound":
+		// They only end subscriptions of this connection.
+	case "__live":
+		// A Live view event belongs to its page.
+		if err := app.authorize(ctx, ""); err != nil {
+			return err
+		}
+	default:
+		if err := app.authorize(ctx, msg.Act); err != nil {
+			return err
+		}
 	}
 	app.mu.Lock()
 	defer app.mu.Unlock()

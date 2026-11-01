@@ -69,12 +69,18 @@ type App struct {
 	widgets             map[string]string
 	pageHandler         http.Handler
 	// Authorize runs for initial pages, live navigation and every user action.
-	// An empty action name denotes a page render. Check object permissions in
-	// action handlers as well. Configure before serving requests.
+	// The action is "" for a page render (HTTP, live navigation, region
+	// refresh) and for an event of an App.Live view, which belongs to its
+	// page. Otherwise it is the name the app registered for the action or
+	// subscription. g-sui's own messages (keep-alive, ending the caller's own
+	// subscriptions) and the Web Push save never reach it, so a deny-by-default
+	// Authorize needs no internal names. Check object permissions in action
+	// handlers as well. Configure before serving requests.
 	// Return Deny(result) to send custom effects when rejecting a WS action.
 	Authorize func(*Context, string) error
-	// Identity resolves the current user on every request/action. Cookies on an
-	// existing socket are the handshake cookies; validate expiry in this hook.
+	// Identity resolves the current user before every Authorize call and for
+	// the Web Push save (PWAPush.Save). Cookies on an existing socket are the
+	// handshake cookies; validate expiry in this hook.
 	Identity func(*http.Request) (any, error)
 
 	// MaxSubscriptions limits subscription IDs retained per connection.

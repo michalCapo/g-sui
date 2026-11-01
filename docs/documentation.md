@@ -619,9 +619,12 @@ rendering a page. It is for inspection only; the output format may change.
 ## DOM Swaps
 
 Server actions update the page with `Result` effects. Each node compiles to a
-self-executing JavaScript function. If the target element is not found, a
-warning is logged and `__ws.notfound` is called (which cancels any active Push
-goroutines for that connection).
+self-executing JavaScript function. If the target of `Replace`, `Append`,
+`Prepend` or an inner swap is not found, a warning is logged and
+`__ws.notfound` ends the push subscription that sent the update, so its
+`ctx.Push` calls fail and its goroutine can stop. A local step on a missing
+element (`ScrollTo`, `Focus`, `Show`, `Hide`, `SetText`, ...) only logs a
+warning and never ends a subscription.
 
 ### SVG Namespace
 
@@ -1751,7 +1754,7 @@ app.PWA(ui.PWA{
     Icons: icons,
     Push: &ui.PWAPush{
         PublicKey: vapidPublic, // base64url
-        // The page POSTs to /__gsui/push; App.Identity and App.Authorize run first.
+        // The page POSTs to /__gsui/push; App.Identity runs first, Save decides.
         Save: func(ctx *ui.Context, sub ui.PushSubscription, remove bool) error {
             user := currentUser(ctx)
             if user == nil {
@@ -1778,7 +1781,7 @@ resp, err := webpush.SendNotification(payload, &webpush.Subscription{Endpoint: e
 // 404 or 410: the subscription expired; delete it.
 ```
 
-- The page saves with `POST /__gsui/push`: JSON from the same origin only (or `App.AllowedOrigins`), then `App.Identity` and `App.Authorize` with the action `"__push"`, then `Save` with the request's cookies in `ctx.Request`. A `Save` error answers 403. Login middleware in front of `app.Handler()` must let `/__gsui/` through.
+- The page saves with `POST /__gsui/push`: JSON from the same origin only (or `App.AllowedOrigins`), then `App.Identity`, then `Save` with the request's cookies in `ctx.Request`. `App.Authorize` does not run: `Save` decides who may get notifications, so refuse users who may not (e.g. not signed in). An `Identity` or `Save` error answers 403. Login middleware in front of `app.Handler()` must let `/__gsui/` through.
 - g-sui accepts only HTTPS endpoints of the browsers' push services (Google, Apple, Mozilla, Microsoft) and RFC 8291 keys (a P-256 public key and a 16-byte secret).
 - While notifications are on, every page load saves the subscription again, so a device follows the user who signed in last. That save fails quietly, e.g. on a sign-in page, and is tried again after the next live navigation. Live navigation and coming back to the page also read the state again (another tab or the browser settings may have changed it) and save a subscription the browser renewed.
 - The push handler in the service worker is there only with `PWA.Push`. Remove an own `push` handler from `PWA.Worker` when moving to it.
@@ -2186,7 +2189,10 @@ fall back to HTTP so the address, status and visible page agree.
 
 `Node.Title("Projects")` updates the document title. `App.Title` remains the
 initial HTML title. Back/Forward rerenders the destination and restores its saved
-scroll position. Normal navigation focuses a heading (or the content container).
+scroll position. A plain `#section` link, and Back/Forward between entries of
+the page shown that differ only in the fragment, stay with the browser: no
+rerender, and the browser scrolls. Normal navigation focuses a heading (or the
+content container).
 
 ### Loading feedback
 
@@ -2245,11 +2251,23 @@ app.Authorize = func(ctx *ui.Context, action string) error {
 
 `Use` applies to initial pages and resolves the destination for live navigation,
 region refresh and page actions. Middleware-added request context values survive
-route resolution. `Authorize` runs with an empty action for page rendering and
-the action name for user events. `Identity` is resolved again for every action:
+route resolution. `Authorize` receives:
+
+- `""` for a page render: initial HTTP page, live navigation (also Back/Forward)
+  and region refresh;
+- `""` for an event of an `App.Live` view (`ctx.Event`): the event belongs to
+  its page, like the render that follows it;
+- the registered name for every other action and subscription.
+
+It never receives g-sui's own names, so a deny-by-default `Authorize` needs no
+internal entries. The keep-alive ping and the messages that end the caller's
+own subscriptions (an unsubscribe when a subscribed element goes away, or a
+push whose patch target is missing) skip `Identity` and `Authorize`: they only
+affect that connection. A running subscription is not checked again for each
+push; it was authorized under its own name when it started. The Web Push save
+runs `Identity` only (see PWA). `Identity` is resolved again for every action:
 validate expiry/revocation in your session store, not only at WebSocket upgrade.
-The internal keep-alive ping skips page checks and `Authorize`, so public pages
-without a session do not get periodic denial toasts.
+Public pages without a session get no periodic denial toasts.
 
 For rejected WebSocket actions, return `ui.Deny(result)` from `Authorize` to
 send that `Result` instead of the default error toast:

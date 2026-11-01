@@ -136,21 +136,26 @@ func pushKeys(t *testing.T) (string, string) {
 }
 
 // /__gsui/push takes JSON from the same origin, checks the subscription and
-// App.Authorize, then calls Save.
+// App.Identity, then calls Save. App.Authorize never sees it: Save decides.
 func TestPushEndpoint(t *testing.T) {
 	type saved struct {
 		sub    PushSubscription
 		remove bool
 		cookie string
+		user   any
 	}
 	var got []saved
 	var fail, refuse error
 	var actions []string
 	app := NewApp()
-	app.Authorize = func(_ *Context, action string) error { actions = append(actions, action); return refuse }
+	app.Identity = func(*http.Request) (any, error) { return "ann", refuse }
+	app.Authorize = func(_ *Context, action string) error {
+		actions = append(actions, action)
+		return errors.New("deny by default")
+	}
 	app.PWA(PWA{Push: &PWAPush{PublicKey: "AQID", Save: func(ctx *Context, sub PushSubscription, remove bool) error {
 		c, _ := ctx.Request.Cookie("session")
-		got = append(got, saved{sub, remove, c.Value})
+		got = append(got, saved{sub, remove, c.Value, ctx.User()})
 		return fail
 	}}})
 	h := app.Handler()
@@ -195,16 +200,16 @@ func TestPushEndpoint(t *testing.T) {
 			t.Errorf("%s: status %d, want %d", tc.name, code, tc.want)
 		}
 	}
-	if len(got) != 2 || got[0].remove || got[0].sub.Keys.P256dh != p256dh || got[0].cookie != "s1" ||
+	if len(got) != 2 || got[0].remove || got[0].sub.Keys.P256dh != p256dh || got[0].cookie != "s1" || got[0].user != "ann" ||
 		!got[1].remove || got[1].sub.Endpoint != "https://web.push.apple.com/x" {
 		t.Fatalf("saved %+v", got)
 	}
-	if len(actions) != 2 || actions[0] != "__push" {
+	if len(actions) != 0 {
 		t.Fatalf("Authorize saw %v", actions)
 	}
 	refuse = errors.New("signed out")
 	if code := post(sub(fcm, p256dh, auth), origin, jsonType); code != 403 || len(got) != 2 {
-		t.Fatalf("refused by Authorize: %d, saved %d", code, len(got))
+		t.Fatalf("refused by Identity: %d, saved %d", code, len(got))
 	}
 	refuse, fail = nil, errors.New("demo")
 	if code := post(sub(fcm, p256dh, auth), origin, jsonType); code != 403 {

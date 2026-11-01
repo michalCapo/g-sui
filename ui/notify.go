@@ -40,11 +40,12 @@ type PWAPush struct {
 	PublicKey string
 	// Save stores this device's subscription for the user of ctx, or removes
 	// it when remove is true. The page posts it to /__gsui/push: same origin
-	// only, after App.Identity and App.Authorize (action "__push"), with the
-	// request's cookies in ctx.Request. A page saves again on every load
-	// while notifications are on, so Save also moves a device to the user
-	// who signed in last. g-sui checks the endpoint and keys before calling
-	// it.
+	// only, after App.Identity, with the request's cookies in ctx.Request.
+	// App.Authorize does not run, so Save decides: refuse a user who may not
+	// get notifications, e.g. one not signed in. A page saves again on every
+	// load while notifications are on, so Save also moves a device to the
+	// user who signed in last. g-sui checks the endpoint and keys before
+	// calling it.
 	Save func(ctx *Context, sub PushSubscription, remove bool) error
 }
 
@@ -226,7 +227,8 @@ func (app *App) pushHandler(save func(*Context, PushSubscription, bool) error) h
 		}
 		ctx := &Context{Request: r, Session: map[string]any{}, app: app}
 		ctx.setRequest(r)
-		if err := app.authorize(ctx, "__push"); err != nil {
+		// No App.Authorize: Save is what decides for the user of ctx.
+		if err := app.identify(ctx); err != nil {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}

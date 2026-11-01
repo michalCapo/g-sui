@@ -1127,6 +1127,43 @@ const tests = {
     nav.reply(nav.lastNav());
   },
 
+  // A plain <a href="#faq"> (or /?lang=sk#download on /?lang=sk) changes only
+  // the fragment: the browser scrolls and fires popstate. That is no page
+  // navigation; Back from another page later restores the fragment's scroll.
+  async fragmentPopStaysWithBrowser() {
+    const nav = navEnv({});
+    const w = nav.env.sandbox, loc = w.location, hist = nav.env.history;
+    const navs = () => nav.socket.sent.map(m => JSON.parse(m)).filter(m => m.act === '__nav');
+    loc.hash = '#faq'; w.scrollY = 700;
+    w.__gsuiPop({state: null});
+    check('fragment link is not a navigation', navs().length === 0);
+    const fragment = hist.state;
+    check('fragment entry gets a scroll key', !!(fragment && fragment.__gsuiKey));
+    loc.hash = '';
+    w.__gsuiPop({state: null});
+    check('back to the same page is not a navigation', navs().length === 0);
+    loc.hash = '#faq'; w.scrollY = 700;
+    nav.ws.navigate('/other');
+    nav.reply(nav.lastNav());
+    loc.hash = ''; w.scrollY = 0;
+    check('other page shown', loc.pathname === '/other' && w.__gsuiPage === '/other');
+    loc.pathname = '/'; loc.hash = '#faq';
+    w.__gsuiPop({state: fragment});
+    const back = navs().pop();
+    check('back from another page renders the fragment entry', back && back.data.url === '/#faq' && back.data.history === 'none');
+    check('back restores the fragment scroll', back && back.data.y === 700, back && JSON.stringify(back.data));
+
+    const query = navEnv({});
+    query.env.sandbox.__gsuiPage = '/?lang=sk';
+    query.env.sandbox.location.search = '?lang=sk';
+    query.env.sandbox.location.hash = '#download';
+    query.env.sandbox.__gsuiPop({state: null});
+    check('fragment link with a query is not a navigation', !query.lastNav());
+    query.env.sandbox.location.search = '?lang=en';
+    query.env.sandbox.__gsuiPop({state: null});
+    check('another query is a navigation', !!query.lastNav() && query.lastNav().data.url === '/?lang=en#download');
+  },
+
   async failedSendDoesNotLeaveSkeleton() {
     const nav = navEnv({skelDelay: -1});
     nav.ws.navigate('/slow/1');
@@ -1270,6 +1307,7 @@ function navEnv(cfg) {
       socket.deliver(JSON.stringify({__r: 1, id: req.id, version: req.version, js:
         "var c=document.getElementById('__content__');c.children.slice().forEach(function(x){c.removeChild(x)});" +
         "c.appendChild(document.createElement('section'));" +
+        'window.__gsuiPage=' + JSON.stringify(req.data.url.split('#')[0]) + ';' +
         '__gsuiNavigationDone(' + JSON.stringify({url: req.data.url, history: req.data.history, patch: req.data.patch, x: 0, y: 0}) + ');'}));
     },
   };

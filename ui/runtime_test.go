@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -309,6 +310,84 @@ func TestRuntimeViewsAreIsolatedAndPatchPreservesState(t *testing.T) {
 	js = runtimeCall(t, a, "__nav", "/counter?tab=other", 2, map[string]any{"url": "/counter"})
 	if !strings.Contains(js, "count:0") {
 		t.Fatal("navigation did not reset", js)
+	}
+}
+
+// App.Authorize never sees g-sui's own action names, so a deny-by-default
+// Authorize keeps live views and subscription housekeeping working: ending
+// the caller's own subscriptions needs no authorization, and a Live view
+// event is authorized as its page.
+func TestAuthorizeSeesOnlyAppNames(t *testing.T) {
+	app := NewApp()
+	app.Page("/", func(*Context) *Node { return Div() })
+	app.Live("/counter", func() View { return &runtimeCounter{} })
+	ended := make(chan string, 2)
+	app.Subscription("feed", func(ctx *Context) error {
+		<-ctx.Context().Done()
+		ended <- ctx.subscription
+		return nil
+	})
+	var mu sync.Mutex
+	var seen []string
+	identities := 0
+	app.Identity = func(*http.Request) (any, error) {
+		mu.Lock()
+		identities++
+		mu.Unlock()
+		return "ann", nil
+	}
+	app.Authorize = func(ctx *Context, action string) error {
+		mu.Lock()
+		seen = append(seen, action+" "+ctx.Request.URL.Path)
+		mu.Unlock()
+		if action == "" || action == "feed" {
+			return nil
+		}
+		return Deny(Result{}.Navigate("/"))
+	}
+	ws := runtimeSocket(t, app)
+	for _, id := range []string{"a", "b"} {
+		if js := subscriptionFrame(t, ws, wsMessage{Act: "feed", ID: 1, Page: "/", Version: 1, Sub: id}); js != "" {
+			t.Fatalf("subscription %s refused: %s", id, js)
+		}
+	}
+	mu.Lock()
+	before := identities
+	mu.Unlock()
+	for _, msg := range []wsMessage{
+		{Act: "__notfound", ID: 2, Page: "/", Version: 1, Data: map[string]any{"id": "gone", "subscription": "a"}},
+		{Act: "__unsubscribe", ID: 3, Page: "/", Version: 1, Data: map[string]any{"name": "feed", "key": "b"}},
+		{Act: "__ping", ID: 4},
+	} {
+		if js := subscriptionFrame(t, ws, msg); js != "" {
+			t.Fatalf("%s answered %s", msg.Act, js)
+		}
+	}
+	got := map[string]bool{}
+	for range 2 {
+		select {
+		case id := <-ended:
+			got[id] = true
+		case <-time.After(5 * time.Second):
+			t.Fatalf("housekeeping did not end the subscriptions, ended %v", got)
+		}
+	}
+	live := runtimeSocket(t, app)
+	if js := runtimeCall(t, live, "__live", "/counter", 1, map[string]any{"event": "inc"}); !strings.Contains(js, "count:1") {
+		t.Fatalf("live event refused: %s", js)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if identities != before+1 {
+		t.Fatalf("Identity ran %d times for housekeeping and one live event", identities-before)
+	}
+	for _, name := range seen {
+		if strings.HasPrefix(name, "__") {
+			t.Fatalf("Authorize saw an internal name: %v", seen)
+		}
+	}
+	if seen[len(seen)-1] != " /counter" {
+		t.Fatalf("live event not authorized as its page: %v", seen)
 	}
 }
 

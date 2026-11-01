@@ -236,7 +236,16 @@
     window.__gsuiPage=location.pathname+location.search;
     window.dispatchEvent(new CustomEvent('gsui:navigated',{detail:{url:path,patch:true}}));
   };
+  // A popstate that keeps the shown page changed only the fragment: a plain
+  // #anchor link, or Back/Forward between entries of this page. The browser
+  // scrolls by itself. The entry gets a key, so Back from another page later
+  // restores its scroll.
+  function samePage() {
+    try { var page = new URL(window.__gsuiPage, location.href); } catch (_) { return false; }
+    return page.pathname === location.pathname && page.search === location.search;
+  }
   window.__gsuiPop = function (event) {
+    if (samePage()) { rememberScroll(); return; }
     var pos = scrolls.get(event && event.state && event.state.__gsuiKey) || {x:0,y:0};
     __gsuiNavigate(location.pathname + location.search + location.hash, {history:'none',x:pos.x,y:pos.y});
   };

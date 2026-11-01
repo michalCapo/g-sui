@@ -72,3 +72,40 @@ func TestInsertPlacesNodeAfterAnchor(t *testing.T) {
 		})
 	}
 }
+
+// A local step on a missing element only warns. Only a missing patch target
+// tells the server that the push subscription is stale (__ws.notfound), so a
+// push that morphs a page and then scrolls to an element the new page lacks
+// keeps its live updates.
+func TestMissingTargetEndsSubscriptionOnlyForPatches(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	shim := `var window=globalThis,found=[];console.warn=function(){};
+window.addEventListener=function(){};
+var document={getElementById:function(){return null},querySelectorAll:function(){return []}};
+var __ws={notfound:function(id){found.push(id)}};`
+	for _, tc := range []struct {
+		name   string
+		result Result
+		want   string
+	}{
+		{"local steps", Result{}.Run(ScrollTo("chat-end"), Focus("input"), Show("panel"), Hide("panel"),
+			Toggle("panel"), SetText("label", "x"), AddClass("box", "on"), SetAttr("box", "k", "v"), Remove("old")), ""},
+		{"replace", Result{}.Replace("gone", Div()), "gone"},
+		{"append", Result{}.Append("list", Div()), "list"},
+	} {
+		js, err := tc.result.build(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.Command(node, "-e", shim+localJS+";"+js+";console.log(found.join(','))").CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s: node: %v\n%s", tc.name, err, out)
+		}
+		if got := strings.TrimSpace(string(out)); got != tc.want {
+			t.Errorf("%s: notfound %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

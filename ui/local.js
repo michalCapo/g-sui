@@ -2,9 +2,12 @@
 // before /__ws.js loads. Every step receives the element that handled the event.
 (function () {
   if (window.__gsui) return;
+  // A missing target of a local step only warns. It is no sign of a stale
+  // push subscription: only a missing patch target (Replace, Append, ...)
+  // calls __ws.notfound, which ends the subscription.
   function $(id) {
     var e = document.getElementById(id);
-    if (!e) { console.warn('[g-sui] element #' + id + ' not found'); if (window.__ws) __ws.notfound(id); }
+    if (!e) console.warn('[g-sui] element #' + id + ' not found');
     return e;
   }
   function cleanup(el, fn) { (el.__gsuiCleanup || (el.__gsuiCleanup = [])).push(fn); }
