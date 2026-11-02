@@ -62,6 +62,7 @@ type App struct {
 	clients             map[*socket]bool
 	connStates          map[*socket]*connState
 	mux                 *http.ServeMux
+	handler             http.Handler
 	pageMux             *http.ServeMux
 	layout              LayoutHandler
 	setupOnce           sync.Once
@@ -203,6 +204,16 @@ type App struct {
 	// Origin header are allowed for non-browser clients. Use "*" to disable
 	// origin validation entirely.
 	AllowedOrigins []string
+
+	// FrameOptions sets the X-Frame-Options header of every response.
+	// Default "SAMEORIGIN": only this site may show its pages in a frame,
+	// which blocks clickjacking and keeps the app's own previews working.
+	// Use "DENY" to block all framing, or "-" to send none (for pages meant
+	// to be embedded on other sites; for an allow-list send CSP
+	// frame-ancestors yourself, as browsers ignore ALLOW-FROM). A value
+	// already set by a wrapper around Handler is kept. Set it before Handler
+	// or Listen.
+	FrameOptions string
 
 	skeletons []skeletonRoute
 
@@ -372,14 +383,14 @@ func (app *App) Layout(handler LayoutHandler) {
 //	srv.ListenAndServe()
 func (app *App) Handler() http.Handler {
 	app.setup()
-	return app.mux
+	return app.handler
 }
 
 // Listen sets up HTTP handlers and starts the server.
 func (app *App) Listen(addr string) error {
 	app.setup()
 	log.Printf("gsui: listening on %s", addr)
-	return http.ListenAndServe(addr, app.mux)
+	return http.ListenAndServe(addr, app.handler)
 }
 
 // ---------------------------------------------------------------------------
@@ -445,6 +456,35 @@ func (app *App) setupRoutes() {
 	// Page routes (catch-all). The nested mux provides ServeMux pattern
 	// matching and populates Request.PathValue for Page handlers.
 	app.mux.Handle("/", app.pageHandler)
+
+	app.handler = app.securityHeaders(app.mux)
+}
+
+// securityHeaders sets safe default headers before any route runs. A header
+// already present (even empty) is kept, so a stricter value from code in
+// front of Handler wins, and middleware and handlers can still change or
+// delete the defaults.
+func (app *App) securityHeaders(next http.Handler) http.Handler {
+	defaults := [][2]string{
+		{"X-Content-Type-Options", "nosniff"},
+		{"Referrer-Policy", "strict-origin-when-cross-origin"},
+	}
+	switch app.FrameOptions {
+	case "":
+		defaults = append(defaults, [2]string{"X-Frame-Options", "SAMEORIGIN"})
+	case "-":
+	default:
+		defaults = append(defaults, [2]string{"X-Frame-Options", app.FrameOptions})
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		for _, d := range defaults {
+			if _, ok := h[d[0]]; !ok {
+				h[d[0]] = []string{d[1]}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ---------------------------------------------------------------------------

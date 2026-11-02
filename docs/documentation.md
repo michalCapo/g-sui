@@ -117,6 +117,8 @@ app := ui.NewApp()
 
 Creates the application instance. Holds page routes, action handlers, WebSocket clients, and an HTTP mux.
 
+Every response served by `app.Handler()` (or `Listen`) gets safe default headers: `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and `X-Frame-Options` from `App.FrameOptions` (default `"SAMEORIGIN"`, so other sites cannot show the app in a frame; `"DENY"` blocks all framing, `"-"` sends none). A header already set by a wrapper around `app.Handler()` is kept, even when empty; `App.Use` middleware and handlers can still change or delete the defaults. Routes on an outer mux do not get them. To embed the app on another origin (for example a dev tool's iframe), set `FrameOptions = "-"` and send your own CSP `frame-ancestors` allow-list.
+
 `App.AllowedOrigins` permits additional exact WebSocket origins. Same-origin and non-browser requests without `Origin` are allowed by default; use `"*"` only when intentionally disabling origin validation. Client calls use an internal reply envelope, so the loader clears even for empty action responses; Push and Broadcast messages do not affect it.
 
 #### App Fields

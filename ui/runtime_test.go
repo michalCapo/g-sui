@@ -709,8 +709,10 @@ func TestRuntimeMessageLimit(t *testing.T) {
 	}
 	ws = runtimeSocket(t, newApp(0))
 	b, _ := json.Marshal(wsMessage{Act: "save", Data: map[string]any{"name": large}, ID: 1, Page: "/", Version: 1})
+	// The server may close while the message is still being sent; that is
+	// a rejection too.
 	if err := websocket.Message.Send(ws, string(b)); err != nil {
-		t.Fatal(err)
+		return
 	}
 	var raw string
 	if err := websocket.Message.Receive(ws, &raw); err == nil {
