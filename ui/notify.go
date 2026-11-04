@@ -129,6 +129,8 @@ func notifyWorker(p PWA) string {
 	worker := `var NOTIFY = ` + string(b) + `;
 // A click shows the notification's page, same origin only, in a window of
 // the app: one already there, else any in the worker's scope, else a new one.
+// A window that cannot move there, such as one this worker does not control
+// yet, also gets a new one, so a click always reaches the page.
 self.addEventListener('notificationclick', function (event) {
   var data = event.notification.data;
   if (!data || !data.gsui) return;
@@ -141,8 +143,8 @@ self.addEventListener('notificationclick', function (event) {
     list = list.filter(function (c) { return c.url.indexOf(scope) === 0 && 'focus' in c; });
     var same = list.filter(function (c) { return c.url === url.href; })[0];
     if (same) return same.focus();
-    if (list[0]) return list[0].focus().then(function (w) { return w && w.navigate ? w.navigate(url.href) : w; });
-    return self.clients.openWindow(url.href);
+    if (!list[0]) return self.clients.openWindow(url.href);
+    return list[0].focus().then(function (w) { return w.navigate(url.href); }).catch(function () { return self.clients.openWindow(url.href); });
   }));
 });
 `

@@ -428,11 +428,11 @@ console.log(before+' '+shown.join('|'));process.exit(0)})()`
 // notifyWorkerShim runs the service worker's notification handlers in the
 // scope https://app.test/app/.
 const notifyWorkerShim = `
-var handlers={},shown=[],badges=[],opened=[],focused=[],navigated=[],windows=WINDOWS;
+var handlers={},shown=[],badges=[],opened=[],focused=[],navigated=[],windows=WINDOWS,stuck=typeof STUCK==='undefined'?'':STUCK;
 var self={addEventListener:function(t,f){handlers[t]=f},location:{origin:'https://app.test'},
  navigator:{setAppBadge:function(n){badges.push(n);return Promise.resolve()},clearAppBadge:function(){badges.push(0);return Promise.resolve()}},
  registration:{scope:'https://app.test/app/',showNotification:function(t,o){shown.push([t,o.body,o.data.url,o.data.gsui,o.icon,o.badge,o.tag].join(','));return Promise.resolve()}},
- clients:{matchAll:function(){return Promise.resolve(windows.map(function(u){return{url:u,focus:function(){focused.push(u);var c=this;return Promise.resolve(c)},navigate:function(x){navigated.push(x);return Promise.resolve()}}}))},
+ clients:{matchAll:function(){return Promise.resolve(windows.map(function(u){return{url:u,focus:function(){if(stuck==='focus')return Promise.reject(new Error('no focus'));focused.push(u);var c=this;if(stuck==='gone')c=null;if(stuck==='old')delete c.navigate;return Promise.resolve(c)},navigate:function(x){if(stuck==='navigate')return Promise.reject(new TypeError('not controlled'));navigated.push(x);return Promise.resolve()}}}))},
   openWindow:function(u){opened.push(u);return Promise.resolve()}}};
 async function fire(type,e){var p,closed=false;e.waitUntil=function(x){p=x};if(e.notification)e.notification.close=function(){closed=true};handlers[type](e);await p;return closed}
 function push(data){return fire('push',{data:data===undefined?null:{json:function(){if(data==='bad')throw new Error('bad');return data}}})}
@@ -455,6 +455,14 @@ func TestNotificationWorker(t *testing.T) {
 			"opened https://app.test/app/m/1,https://app.test/app/inbox,https://app.test/app/inbox,https://app.test/app/inbox"},
 		{"click uses a window of the app", "['https://app.test/other/unsaved','https://other.test/app/','https://app.test/app/inbox']", "await click('/app/m/1')",
 			"focused https://app.test/app/inbox navigated https://app.test/app/m/1"},
+		{"click opens a new window when the window cannot move", "['https://app.test/app/inbox'];var STUCK='navigate'", "await click('/app/m/1')",
+			"opened https://app.test/app/m/1 focused https://app.test/app/inbox"},
+		{"click opens a new window when the window refuses focus", "['https://app.test/app/inbox'];var STUCK='focus'", "await click('/app/m/1')",
+			"opened https://app.test/app/m/1"},
+		{"click opens a new window when focus returns none", "['https://app.test/app/inbox'];var STUCK='gone'", "await click('/app/m/1')",
+			"opened https://app.test/app/m/1 focused https://app.test/app/inbox"},
+		{"click opens a new window without navigate", "['https://app.test/app/inbox'];var STUCK='old'", "await click('/app/m/1')",
+			"opened https://app.test/app/m/1 focused https://app.test/app/inbox"},
 		{"click prefers the same page", "['https://app.test/app/inbox','https://app.test/app/m/1']", "await click('/app/m/1')",
 			"focused https://app.test/app/m/1"},
 		{"the app's own notifications are its own", "[]", "if(await click('/app/m/1',false))throw new Error('closed')", ""},

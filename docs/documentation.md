@@ -1744,7 +1744,7 @@ ui.Span("sr-only").AppBadge(unread)
 
 `<html data-gsui-notify>` holds the state (`off`, `on`, `blocked`, `install`, or absent), and a `gsui:notifications` event with `detail.state` fires when it changes. When turning notifications on or off fails, a toast shows `Texts.NotificationsFailed`.
 
-The service worker shows the notification's page on a click: a window of the app already on that page, else another window in the app's scope moved to `URL`, else a new window. Other origins and broken URLs open `StartURL`. It handles only g-sui's notifications (`ShowNotification` and pushes with `PWA.Push`), so notifications that the app's own `PWA.Worker` code shows keep their own `notificationclick` handler.
+The service worker shows the notification's page on a click: a window of the app already on that page, else another window in the app's scope moved to `URL`, else a new window. A window that cannot move, such as one the worker does not control yet, also gets a new window, so a click always reaches `URL`. Other origins and broken URLs open `StartURL`. It handles only g-sui's notifications (`ShowNotification` and pushes with `PWA.Push`), so notifications that the app's own `PWA.Worker` code shows keep their own `notificationclick` handler.
 
 #### Web Push
 
