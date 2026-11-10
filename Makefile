@@ -5,7 +5,16 @@ SHELL := /bin/bash
 # Use the shell variable in compound recipes so make -n never runs a release.
 export MAKE
 
-.PHONY: help run example check build test test-race test-browser tidy release
+# Go module folders, relative to this file. Example: . app tools
+GO_MODULES := .
+# Target systems for vet, lint, dead code and build. Example: linux windows
+# Tests run only when this machine's system is in the list.
+GO_OSES := $(shell go env GOOS)
+# app: dead code fails check. lib: dead code is a warning, exported API can look unused.
+GO_KIND := lib
+LINT_CONFIG := $(CURDIR)/.golangci.yml
+
+.PHONY: help run example check check-extra check-security tools build test test-race test-browser tidy release
 
 # Each invocation owns only this directory. Keep caches and dependencies intact.
 define temporary_directory
@@ -24,7 +33,10 @@ help:
 	  '  help          Show this help (default)' \
 	  '  run           Run the example with Air live reload' \
 	  '  example       Run the example once without live reload' \
-	  '  check         Run all non-mutating Go checks, build, and tests' \
+	  '  check         Run all checks without changing files' \
+	  '  check-extra   Project-only checks, run by make check' \
+	  '  check-security  Find known security problems in dependencies (needs internet)' \
+	  '  tools         Install the check tools' \
 	  '  build         Build all Go packages' \
 	  '  test          Run Go tests (Node enables client runtime tests)' \
 	  '  test-race     Run Go tests with the race detector' \
@@ -35,7 +47,7 @@ help:
 	  'Environment: TMPDIR, Go toolchain variables, NODE_PATH,' \
 	  '             GSUI_URL (default http://127.0.0.1:1424), GSUI_BROWSER.' \
 	  'Tools: Go; Air for run; Node + Playwright for test-browser.' \
-	  'check requires staticcheck and deadcode; gopls and golangci-lint are optional.'
+	  'check requires staticcheck, deadcode and golangci-lint (make tools); gopls is optional.'
 
 run:
 	@$(temporary_directory)
@@ -75,109 +87,125 @@ tidy:
 	@$(temporary_directory)
 	go mod tidy
 
-check:
-	@$(temporary_directory)
-	# Collect diagnostics from every check, even when an earlier check fails.
-	set +e
+check: ## Run all checks without changing files
+	@set +e
 	status=0
-	GO_FILES=()
-	while IFS= read -r -d '' file; do
-	  GO_FILES+=("$$file")
-	done < <(find . -name '*.go' -not -path './third_party/*' -print0)
-
 	run() {
 	  echo "==> $$*"
-	  "$$@"
-	  local code=$$?
-	  if [[ $$code -ne 0 ]]; then
+	  if ! "$$@"; then
 	    status=1
 	    echo "!! failed: $$*" >&2
 	  fi
 	  echo
 	}
 
-	# Keep checks non-mutating and fail when go fix would change sources.
-	run go fix -diff ./...
+	for tool in go gofmt staticcheck deadcode golangci-lint; do
+	  if ! command -v "$$tool" >/dev/null 2>&1; then
+	    status=1
+	    echo "!! missing tool: $$tool (run make tools)" >&2
+	  fi
+	done
+	[[ $$status -eq 0 ]] || exit 1
 
-	echo "==> gofmt"
-	unformatted="$$(gofmt -l "$${GO_FILES[@]}")" || status=1
-	if [[ -n "$$unformatted" ]]; then
+	echo "==> gofmt -l"
+	go_files=()
+	while IFS= read -r -d '' file; do
+	  go_files+=("$$file")
+	done < <(find . -name '*.go' -not -path '*/vendor/*' -not -path '*/third_party/*' -not -path '*/node_modules/*' -not -path '*/testdata/*' -print0)
+	if ! unformatted=$$(gofmt -l "$${go_files[@]}"); then
 	  status=1
-	  echo "The following Go files are not formatted:" >&2
-	  echo "$$unformatted" >&2
+	  echo "!! failed: gofmt" >&2
+	fi
+	if [[ -n $$unformatted ]]; then
+	  status=1
+	  printf 'Not formatted:\n%s\n' "$$unformatted" >&2
 	fi
 	echo
 
-	run go vet ./...
-	run staticcheck ./...
-
-	echo "==> gopls check"
-	if command -v gopls >/dev/null 2>&1; then
-	  gopls check -severity=hint "$${GO_FILES[@]}"
-	  code=$$?
-	  if [[ $$code -ne 0 ]]; then
-	    status=1
-	    echo "!! failed: gopls check" >&2
-	  fi
-	else
-	  echo "gopls not found; skipping"
-	fi
-	echo
-
-	echo "==> golangci-lint"
-	if command -v golangci-lint >/dev/null 2>&1; then
-	  golangci-lint run --max-issues-per-linter=0 --max-same-issues=0 ./...
-	  code=$$?
-	  if [[ $$code -ne 0 ]]; then
-	    status=1
-	    echo "!! failed: golangci-lint run" >&2
-	  fi
+	for mod in $(GO_MODULES); do
+	  pushd "$$mod" >/dev/null
+	  echo "### module $$mod"
 	  echo
+	  run go mod tidy -diff
+	  run go fix -diff ./...
 
-	  echo "==> golangci-lint revive lsp-style diagnostics"
-	  revive_config="$$workdir/revive.yml"
-	  printf '%s\n' \
-	    'version: "2"' \
-	    'linters:' \
-	    '  default: none' \
-	    '  enable:' \
-	    '    - revive' \
-	    '  settings:' \
-	    '    revive:' \
-	    '      rules:' \
-	    '        - name: unused-parameter' \
-	    '        - name: package-comments' > "$$revive_config"
-	  golangci-lint run --config "$$revive_config" --max-issues-per-linter=0 --max-same-issues=0 ./...
-	  code=$$?
-	  rm -f "$$revive_config"
-	  if [[ $$code -ne 0 ]]; then
-	    status=1
-	    echo "!! failed: golangci-lint revive lsp-style diagnostics" >&2
+	  # Code is dead only when no target system uses it.
+	  dead=""
+	  first=1
+	  for os in $(GO_OSES); do
+	    run env GOOS="$$os" go vet ./...
+	    run env GOOS="$$os" staticcheck ./...
+	    run env GOOS="$$os" golangci-lint run --config "$(LINT_CONFIG)" ./...
+	    run env GOOS="$$os" go build -o /dev/null ./...
+
+	    echo "==> GOOS=$$os deadcode -test ./..."
+	    if ! found=$$(GOOS="$$os" deadcode -test ./...); then
+	      status=1
+	      echo "!! failed: deadcode" >&2
+	    fi
+	    echo
+	    if [[ $$first -eq 1 ]]; then
+	      dead=$$found
+	      first=0
+	    else
+	      dead=$$(comm -12 <(sort <<<"$$dead") <(sort <<<"$$found"))
+	    fi
+	  done
+	  if [[ -n $$dead ]]; then
+	    if [[ "$(GO_KIND)" == lib ]]; then
+	      printf 'Warning, unused code (check before removing public API):\n%s\n\n' "$$dead"
+	    else
+	      status=1
+	      printf 'Dead code:\n%s\n\n' "$$dead" >&2
+	    fi
 	  fi
-	else
-	  echo "golangci-lint not found; skipping"
-	fi
-	echo
 
-	# Exported API is the library surface, so report only dead unexported code.
-	echo "==> deadcode -test ./..."
-	dead="$$(deadcode -test ./...)" || status=1
-	dead="$$(grep -Ev 'unreachable func: ([A-Za-z0-9_]+\.)?[A-Z]' <<<"$$dead")"
-	if [[ -n "$$dead" ]]; then
-	  status=1
-	  echo "$$dead" >&2
-	fi
-	echo
+	  if [[ " $(GO_OSES) " == *" $$(go env GOOS) "* ]]; then
+	    run go test ./...
+	  else
+	    printf '==> go test skipped: %s is not in GO_OSES\n\n' "$$(go env GOOS)"
+	  fi
+	  popd >/dev/null
+	done
 
-	run "$$MAKE" --no-print-directory build
-	run "$$MAKE" --no-print-directory test
+	run "$(MAKE)" --no-print-directory check-extra
 
 	if [[ $$status -eq 0 ]]; then
 	  echo "All checks passed."
 	else
-	  echo "Checks finished with errors/warnings." >&2
+	  echo "Checks finished with errors." >&2
 	fi
 	exit "$$status"
+
+check-extra: ## Project-only checks, run by make check
+	@echo "==> gopls check"
+	if ! command -v gopls >/dev/null 2>&1; then
+	  echo "gopls not found; skipping"
+	  exit 0
+	fi
+	go_files=()
+	while IFS= read -r -d '' file; do
+	  go_files+=("$$file")
+	done < <(find . -name '*.go' -not -path './third_party/*' -print0)
+	gopls check -severity=hint "$${go_files[@]}"
+
+check-security: ## Find known security problems in dependencies (needs internet)
+	@set +e
+	status=0
+	for mod in $(GO_MODULES); do
+	  for os in $(GO_OSES); do
+	    echo "==> $$mod GOOS=$$os govulncheck ./..."
+	    (cd "$$mod" && GOOS="$$os" govulncheck ./...) || status=1
+	    echo
+	  done
+	done
+	exit "$$status"
+
+tools: ## Install the check tools
+	go install honnef.co/go/tools/cmd/staticcheck@latest
+	go install golang.org/x/tools/cmd/deadcode@latest
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
 
 release:
 	@$(temporary_directory)
