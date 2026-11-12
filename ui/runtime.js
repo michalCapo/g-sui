@@ -38,6 +38,10 @@
       if (old.nodeValue !== fresh.nodeValue) old.nodeValue = fresh.nodeValue;
       return old;
     }
+    // A morphed node does not mount again, so its title and description
+    // (Node.Title, Node.Description) are set here.
+    if (fresh.hasAttribute('data-gsui-title')) document.title = fresh.getAttribute('data-gsui-title');
+    if (fresh.hasAttribute('data-gsui-description')) __gsui.description(null, fresh.getAttribute('data-gsui-description'));
     if (old.hasAttribute('data-gsui-preserve')) {
       (function skip(node){node.__gsuiMounted=true;Array.from(node.children||[]).forEach(skip);})(fresh);
       return old;

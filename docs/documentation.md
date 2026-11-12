@@ -2191,15 +2191,16 @@ fall back to HTTP so the address, status and visible page agree.
 
 `Node.Title("Projects")` sets the document title: in the HTML of a full load
 and after live navigation. `Node.Description(text)` does the same for
-`<meta name="description">`; after navigation to a page without one the last
-description stays. `App.Title` and `App.Description` are the defaults for pages
+`<meta name="description">`, also when `Result.Morph` redraws the node; after
+navigation to a page without one the last description stays. `App.Title` and `App.Description` are the defaults for pages
 without their own.
 
 A page is built by JavaScript, so its HTML has no text. For public pages that
 search engines and link previews should read, call `ctx.StaticHTML()` in the
 page handler: a full load then also carries the page as plain HTML (elements,
-text and attributes, without scripts or event handlers). The client drops that
-copy before it builds the live page, and readers without JavaScript see it. The
+text and attributes, without scripts, styles or event handlers, and with form
+fields disabled, as they need the client). The client drops that copy before it
+builds the live page, and readers without JavaScript see it. The
 page then goes out twice, so keep it for public pages. Back/Forward rerenders the destination and restores its saved
 scroll position. A plain `#section` link, and Back/Forward between entries of
 the page shown that differ only in the fragment, stay with the browser: no

@@ -48,6 +48,8 @@ func TestStaticHTMLCopy(t *testing.T) {
 			El("script").Text("alert(2)"),
 			Img().Attr("src", "/a.png").Style("maxWidth", "10px"),
 			El("bad tag").Text("hidden"),
+			SVG().Render(El("style").Text("</svg><script>alert(3)</script>")),
+			Form().Render(Input().Attr("name", "email")),
 		)
 	})
 	body := renderShell(t, app, "/")
@@ -56,7 +58,7 @@ func TestStaticHTMLCopy(t *testing.T) {
 		t.Fatalf("no HTML copy: %s", truncate(body, 800))
 	}
 	copyHTML := body[start : strings.Index(body[start:], "\n")+start]
-	want := `<div id="__gsui_static"><div id="page" class="p-4"><h1>Hello &lt;world&gt; &amp; you</h1><button aria-label="a&#34;b">Go</button><img src="/a.png" style="max-width:10px;"></div></div>`
+	want := `<div id="__gsui_static"><div id="page" class="p-4"><h1>Hello &lt;world&gt; &amp; you</h1><button aria-label="a&#34;b" disabled="">Go</button><img src="/a.png" style="max-width:10px;"><svg></svg><form><input name="email" disabled=""></form></div></div>`
 	if copyHTML != want {
 		t.Fatalf("HTML copy\n got %s\nwant %s", copyHTML, want)
 	}

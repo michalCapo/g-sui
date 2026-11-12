@@ -52,8 +52,11 @@ const staticRevealCSS = `<noscript><style>html.gsui-booting body{visibility:visi
 const staticID = "__gsui_static"
 
 // staticHTML is the node as HTML: the same elements, text and attributes as
-// the live page, without its behavior. Scripts, event attributes and names
-// that are not plain element or attribute names are left out.
+// the live page, without its behavior. Scripts, styles (the head has the
+// page's styles; inside SVG a style's text would be read as markup), event
+// attributes and names that are not plain element or attribute names are
+// left out. Form fields are disabled: without the client a form would send
+// its fields to the page's address.
 func (n *Node) staticHTML() string {
 	var b strings.Builder
 	n.writeHTML(&b)
@@ -62,10 +65,7 @@ func (n *Node) staticHTML() string {
 
 func (n *Node) writeHTML(b *strings.Builder) {
 	tag := strings.ToLower(n.tag)
-	if tag == "script" || !plainName(n.tag) {
-		return
-	}
-	if tag == "style" && strings.Contains(strings.ToLower(n.text), "</style") {
+	if tag == "script" || tag == "style" || !plainName(n.tag) {
 		return
 	}
 	b.WriteByte('<')
@@ -91,15 +91,14 @@ func (n *Node) writeHTML(b *strings.Builder) {
 		}
 		writeAttr(b, "style", style.String())
 	}
+	if _, ok := n.attrs["disabled"]; !ok && formField[tag] {
+		writeAttr(b, "disabled", "")
+	}
 	b.WriteByte('>')
 	if n.void {
 		return
 	}
-	if tag == "style" {
-		b.WriteString(n.text) // raw text: escaping would change the rules
-	} else {
-		b.WriteString(html.EscapeString(n.text))
-	}
+	b.WriteString(html.EscapeString(n.text))
 	for _, child := range n.children {
 		child.writeHTML(b)
 	}
@@ -107,6 +106,9 @@ func (n *Node) writeHTML(b *strings.Builder) {
 	b.WriteString(n.tag)
 	b.WriteByte('>')
 }
+
+// formField are the elements that send or start sending a form.
+var formField = map[string]bool{"input": true, "textarea": true, "select": true, "button": true}
 
 func writeAttr(b *strings.Builder, name, value string) {
 	b.WriteByte(' ')
