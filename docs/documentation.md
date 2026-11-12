@@ -126,8 +126,8 @@ Every response served by `app.Handler()` (or `Listen`) gets safe default headers
 | Field | Type | Description |
 |-------|------|-------------|
 | `Favicon` | `string` | Path to favicon (adds `<link rel="icon">`) |
-| `Title` | `string` | Default document title |
-| `Description` | `string` | Meta description tag |
+| `Title` | `string` | Default document title; a page's `Node.Title` comes first |
+| `Description` | `string` | Default meta description; a page's `Node.Description` comes first |
 | `HTMLHead` | `[]string` | Additional raw HTML injected into `<head>`; trusted raw API, never pass untrusted input |
 | `Loader` | `LoaderMode` | Loading overlay for actions: `LoaderOverlay` (default) or `LoaderNone`. See [loading feedback](#loading-feedback) |
 | `SkeletonDelayMs` | `int` | Delay before a navigation skeleton appears. Default 100, `-1` shows it at once |
@@ -2189,8 +2189,18 @@ On `NavLink`, `Attr("data-gsui-patch", "")` selects PatchURL behavior and
 route falls back to HTTP. Unknown, denied and redirecting live destinations also
 fall back to HTTP so the address, status and visible page agree.
 
-`Node.Title("Projects")` updates the document title. `App.Title` remains the
-initial HTML title. Back/Forward rerenders the destination and restores its saved
+`Node.Title("Projects")` sets the document title: in the HTML of a full load
+and after live navigation. `Node.Description(text)` does the same for
+`<meta name="description">`; after navigation to a page without one the last
+description stays. `App.Title` and `App.Description` are the defaults for pages
+without their own.
+
+A page is built by JavaScript, so its HTML has no text. For public pages that
+search engines and link previews should read, call `ctx.StaticHTML()` in the
+page handler: a full load then also carries the page as plain HTML (elements,
+text and attributes, without scripts or event handlers). The client drops that
+copy before it builds the live page, and readers without JavaScript see it. The
+page then goes out twice, so keep it for public pages. Back/Forward rerenders the destination and restores its saved
 scroll position. A plain `#section` link, and Back/Forward between entries of
 the page shown that differ only in the fragment, stay with the browser: no
 rerender, and the browser scrolls. Normal navigation focuses a heading (or the

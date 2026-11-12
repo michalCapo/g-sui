@@ -72,6 +72,11 @@
     },
     theme: function (el, mode) { if (mode) setTheme(mode); else toggleTheme(); },
     title: function (el, t) { document.title = t; },
+    description: function (el, d) {
+      var m = document.querySelector('meta[name="description"]');
+      if (!m) { m = document.createElement('meta'); m.name = 'description'; document.head.appendChild(m); }
+      m.content = d;
+    },
     download: function (el, name, mime, data) {
       var a = document.createElement('a'); a.href = 'data:' + mime + ';base64,' + data; a.download = name;
       document.body.appendChild(a); a.click(); a.remove();

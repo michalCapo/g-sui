@@ -74,7 +74,8 @@ local actions.
 | Active nav link | `ui.NavLink(path).ActiveClass("active classes", "inactive classes")` |
 | Change query, keep the view | `ui.PatchURL(path, replace)` |
 | Full redirect, reload, back, print | `ui.Redirect(url)`, `ui.Reload()`, `ui.Back()`, `ui.Print()` |
-| Page title | `ui.SetTitle(title)` |
+| Page title | `node.Title(title)` on the page, `ui.SetTitle(title)` in actions |
+| Search engines: description, text in HTML | `node.Description(text)`, `ctx.StaticHTML()` in the handler of a public page |
 | Dark mode | `ui.ThemeSwitcher()`, `ui.ToggleTheme()`, `ui.SetTheme("dark")` |
 | Drag to scroll a wide table | `node.DragToScroll()` |
 | Forms with validation | `ui.FormFor[T]` or `ui.NewForm(id).Action(ref)` |

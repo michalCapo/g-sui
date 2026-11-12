@@ -216,6 +216,8 @@
     var root = document.getElementById('__content__') || document.querySelector('main') || document.body;
     var title = root.querySelector('[data-gsui-title]');
     if (title) document.title = title.getAttribute('data-gsui-title');
+    var desc = root.querySelector('[data-gsui-description]');
+    if (desc) __gsui.description(null, desc.getAttribute('data-gsui-description'));
     if (request.history === 'none') window.scrollTo(request.x, request.y);
     else if (!request.patch) {
       var hash = new URL(request.url, location.href).hash;

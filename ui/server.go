@@ -638,13 +638,18 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 	if app.Favicon != "" {
 		faviconTag = fmt.Sprintf(`<link rel="icon" href="%s">`, html.EscapeString(app.Favicon))
 	}
-	titleTag := "<title>App</title>"
-	if app.Title != "" {
-		titleTag = fmt.Sprintf(`<title>%s</title>`, html.EscapeString(app.Title))
-	}
+	// The page's own title and description (Node.Title, Node.Description)
+	// come before the app's, so each page has its own in search results.
+	title := cmp.Or(firstAttr(root, "data-gsui-title"), app.Title, "App")
+	titleTag := fmt.Sprintf(`<title>%s</title>`, html.EscapeString(title))
 	descTag := ""
-	if app.Description != "" {
-		descTag = fmt.Sprintf(`<meta name="description" content="%s">`, html.EscapeString(app.Description))
+	if desc := cmp.Or(firstAttr(root, "data-gsui-description"), app.Description); desc != "" {
+		descTag = fmt.Sprintf(`<meta name="description" content="%s">`, html.EscapeString(desc))
+	}
+	staticBody := ""
+	if ctx.staticHTML {
+		staticBody = `<div id="` + staticID + `">` + root.staticHTML() + "</div>\n"
+		jsBody = "(function(){var s=document.getElementById('" + staticID + "');if(s)s.remove();})();" + jsBody
 	}
 	// App.PWA adds head tags and its client script to the pages in its
 	// scope; without it the shell stays the same.
@@ -660,6 +665,9 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 	}
 	if pageJS := ctx.jsHeadHTML(); pageJS != "" {
 		customHead += "\n" + pageJS
+	}
+	if ctx.staticHTML {
+		customHead += "\n" + staticRevealCSS
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -694,11 +702,11 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 <script>%s</script>
 </head>
 <body>
-<script>
+%s<script>
 %s
 </script>
 </body>
-</html>`, html.EscapeString(lang), viewport, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS()+texts.js(), localJS, app.widgetJS()+pwaScript, app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, jsBody)
+</html>`, html.EscapeString(lang), viewport, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS()+texts.js(), localJS, app.widgetJS()+pwaScript, app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, staticBody, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -1784,6 +1792,7 @@ type Context struct {
 	after        []func()
 	headCSS      []string // per-page <style>/<link> tags collected via ctx.HeadCSS()
 	headJS       []string // per-page <script> blocks collected via ctx.UnsafeHeadJS()
+	staticHTML   bool     // the page also goes out as HTML, see StaticHTML
 }
 
 // HeadCSS registers external stylesheets and/or inline CSS rules for the
