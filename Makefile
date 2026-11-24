@@ -274,9 +274,13 @@ release:
 	echo "Pushing tag $$NEW_VERSION to origin..."
 	git push origin "$$NEW_VERSION"
 
-	# Also ensure the current branch is pushed
-	echo "Ensuring current branch is pushed..."
-	git push origin "$$CURRENT_BRANCH" --follow-tags || true
+	# Also ensure the current branch is pushed, to the branch it tracks on
+	# origin (local master tracks origin/main), not a new same-named branch
+	UPSTREAM=$$(git rev-parse --abbrev-ref "$$CURRENT_BRANCH@{upstream}" 2>/dev/null || true)
+	TARGET_BRANCH="$$CURRENT_BRANCH"
+	case "$$UPSTREAM" in origin/*) TARGET_BRANCH="$${UPSTREAM#origin/}" ;; esac
+	echo "Ensuring $$CURRENT_BRANCH is pushed to origin/$$TARGET_BRANCH..."
+	git push origin "$$CURRENT_BRANCH:$$TARGET_BRANCH" --follow-tags || true
 
 	# Register version with Go module proxy so @latest resolves
 	echo "Registering version with Go module proxy..."
