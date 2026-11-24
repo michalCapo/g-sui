@@ -78,12 +78,17 @@ func (n *Node) writeHTML(b *strings.Builder) {
 	}
 	for _, k := range slices.Sorted(maps.Keys(n.attrs)) {
 		if plainName(k) && !strings.HasPrefix(strings.ToLower(k), "on") {
-			writeAttr(b, k, n.attrs[k])
+			writeAttr(b, k, attrValue(n.tag, k, n.attrs[k]))
 		}
 	}
 	if len(n.styles) > 0 {
 		var style strings.Builder
 		for _, k := range slices.Sorted(maps.Keys(n.styles)) {
+			// The live page sets one property per style, so a value cannot
+			// add declarations there. Here a ; or brace in it could.
+			if !plainName(strings.TrimPrefix(k, "--")) || strings.ContainsAny(n.styles[k], ";{}") {
+				continue
+			}
 			style.WriteString(cssName(k))
 			style.WriteByte(':')
 			style.WriteString(n.styles[k])

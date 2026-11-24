@@ -16,6 +16,14 @@ Rules for agents that write applications with this library. Full API:
 5. Register a server action once, keep its `ActionRef` in a package variable,
    and call it from render code. Register actions before the pages that use them.
 6. Style with Tailwind classes and `dark:` variants.
+7. Treat every action input as attacker input: `Call` arguments, collected
+   values, hidden fields and form fields can be changed in the browser. In the
+   handler, check that the user may act on each ID, keep privileged fields
+   (role, owner, price) out of the input struct, and run `form.Validate`.
+   `Collate` request values go through `Clean` first.
+8. `app.Broadcast` reaches every signed-in user (`app.BroadcastAll` also
+   visitors who are not signed in). Send data for one user with `ctx.Push` or
+   subscriptions.
 
 ## Server action pattern
 

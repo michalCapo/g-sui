@@ -1,7 +1,13 @@
 package pages
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/csv"
 	"errors"
+	"strings"
+	"unicode/utf8"
+
 	r "github.com/michalCapo/g-sui/ui"
 )
 
@@ -91,4 +97,35 @@ func RegisterShared(app *r.App) {
 	sharedSubmit = r.RegisterAction(app, "shared.submit", HandleSharedSubmit)
 	sharedReset = r.RegisterAction(app, "shared.reset", HandleSharedReset)
 	app.Page("/shared", Shared)
+}
+
+// csvDownload returns rows as a CSV file download. encoding/csv quotes the
+// cells, and csvCell stops spreadsheets from running a cell as a formula.
+func csvDownload(filename string, rows [][]string) (r.Result, error) {
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	for _, row := range rows {
+		for i, cell := range row {
+			row[i] = csvCell(cell)
+		}
+		if err := w.Write(row); err != nil {
+			return r.Result{}, err
+		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return r.Result{}, err
+	}
+	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+	return r.Result{}.Download(filename, "text/csv", b64), nil
+}
+
+// csvCell prefixes a cell that starts with = + - @ tab or CR with a single
+// quote, so a spreadsheet shows it as text instead of running a formula.
+func csvCell(cell string) string {
+	// Spreadsheets also read full-width signs and leading line breaks.
+	if first, _ := utf8.DecodeRuneInString(cell); strings.ContainsRune("=+-@\t\r\n＝＋－＠", first) {
+		return "'" + cell
+	}
+	return cell
 }

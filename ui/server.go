@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,6 +18,9 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"path"
+	"reflect"
+	"regexp"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -81,7 +86,10 @@ type App struct {
 	Authorize func(*Context, string) error
 	// Identity resolves the current user before every Authorize call and for
 	// the Web Push save (PWAPush.Save). Cookies on an existing socket are the
-	// handshake cookies; validate expiry in this hook.
+	// handshake cookies; validate expiry in this hook. With Identity set,
+	// Broadcast reaches only sockets for which it returns a user when the
+	// broadcast is sent (a nil user or an error means not signed in);
+	// BroadcastAll reaches every one.
 	Identity func(*http.Request) (any, error)
 
 	// MaxSubscriptions limits subscription IDs retained per connection.
@@ -130,6 +138,13 @@ type App struct {
 	// This is a trusted raw API: never pass untrusted/user-controlled input to it.
 	HTMLHead []string
 
+	// CSP sends a strict Content-Security-Policy with every page: only
+	// scripts that carry the page's nonce run, so injected <script> tags,
+	// javascript: URLs and on* attributes do not. g-sui adds the nonce to its
+	// own scripts, to <script> tags in HTMLHead and to UnsafeHeadJS. Inline
+	// event attributes in HTMLHead stop working. Default off.
+	CSP bool
+
 	// OfflineGraceMs is how long reconnecting may keep failing before the
 	// "Offline" indicator appears. It shows at once when the browser reports
 	// no network. Short blips (tab wake-ups, proxy hiccups, congested links
@@ -171,7 +186,9 @@ type App struct {
 	// KeepAliveMs is the interval of the client-side ping that keeps idle
 	// WebSockets alive through proxies and load balancers that close silent
 	// connections (the common cause of "offline" during long uploads).
-	// Default 25000. Use -1 to disable.
+	// The server closes a socket silent for three intervals, at least 3
+	// minutes; the client then reconnects. Default 25000. Use -1 to disable
+	// both.
 	KeepAliveMs int
 
 	// InstanceID identifies the process rendering pages. Element ids
@@ -350,7 +367,19 @@ func (app *App) Assets(fsys fs.FS, dir, prefix string) {
 		// Embedded files have no modification time, so the browser cannot
 		// revalidate them. A content ETag lets it get 304 instead of the file.
 		name := strings.TrimPrefix(r.URL.Path, "/")
-		if info, err := fs.Stat(sub, name); err == nil && !info.IsDir() && info.ModTime().IsZero() {
+		// No directory listings and no dotfiles such as .env or .git left in
+		// the folder. A directory is served only by its index.html.
+		info, err := fs.Stat(sub, cmp.Or(strings.TrimSuffix(name, "/"), "."))
+		if err == nil && info.IsDir() {
+			if index, e := fs.Stat(sub, path.Join(name, "index.html")); e != nil || index.IsDir() {
+				err = fs.ErrNotExist
+			}
+		}
+		if err != nil || strings.HasPrefix(name, ".") || strings.Contains(name, "/.") {
+			http.NotFound(w, r)
+			return
+		}
+		if !info.IsDir() && info.ModTime().IsZero() {
 			tag, ok := tags.Load(name)
 			if !ok {
 				if b, err := fs.ReadFile(sub, name); err == nil {
@@ -390,7 +419,10 @@ func (app *App) Handler() http.Handler {
 func (app *App) Listen(addr string) error {
 	app.setup()
 	log.Printf("gsui: listening on %s", addr)
-	return http.ListenAndServe(addr, app.handler)
+	// Timeouts stop clients that send headers slowly from holding
+	// connections. There is no write timeout: it would end WebSockets.
+	srv := &http.Server{Addr: addr, Handler: app.handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second}
+	return srv.ListenAndServe()
 }
 
 // ---------------------------------------------------------------------------
@@ -658,12 +690,20 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 		viewport, descTag, pwaScript = files.viewport, descTag+files.head, files.script
 	}
 
+	nonce, n := "", ""
+	if app.CSP {
+		nonce = newNonce()
+		n = ` nonce="` + nonce + `"`
+		// Add keeps a policy set by middleware: the browser enforces both.
+		w.Header().Add("Content-Security-Policy", cspHeader(nonce))
+	}
+
 	// Build custom head HTML (app-wide + per-page)
-	customHead := strings.Join(app.HTMLHead, "\n")
+	customHead := withNonce(strings.Join(app.HTMLHead, "\n"), nonce)
 	if pageCSS := ctx.cssHeadHTML(); pageCSS != "" {
 		customHead += "\n" + pageCSS
 	}
-	if pageJS := ctx.jsHeadHTML(); pageJS != "" {
+	if pageJS := ctx.jsHeadHTML(nonce); pageJS != "" {
 		customHead += "\n" + pageJS
 	}
 	if ctx.staticHTML {
@@ -690,23 +730,23 @@ func (app *App) renderPage(w http.ResponseWriter, r *http.Request, handler PageH
 %s
 %s
 %s
-<script>%s
+<script%s>%s
 %s
 %s
 %s
 %s</script>
 %s<style>%s</style>
 %s
-<script src="/__ws.js?v=%s" defer></script>
+<script%s src="/__ws.js?v=%s" defer></script>
 <style>%s</style>
-<script>%s</script>
+<script%s>%s</script>
 </head>
 <body>
-%s<script>
+%s<script%s>
 %s
 </script>
 </body>
-</html>`, html.EscapeString(lang), viewport, faviconTag, titleTag, descTag, themeInitJS, wsStubJS, app.wsConfigJS()+texts.js(), localJS, app.widgetJS()+pwaScript, app.styleHeadHTML(), darkOverrideCSS, customHead, wsClientVersion, loadingCSS, bootInitJS, staticBody, jsBody)
+</html>`, html.EscapeString(lang), viewport, faviconTag, titleTag, descTag, n, themeInitJS, wsStubJS, app.wsConfigJS()+texts.js(), localJS, app.widgetJS()+pwaScript, app.styleHeadHTML(nonce), darkOverrideCSS, customHead, n, wsClientVersion, loadingCSS, n, bootInitJS, staticBody, n, jsBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -1376,7 +1416,7 @@ var __ws=(function(){
     var tag=el.tagName.toLowerCase();
     var type=(el.getAttribute('type')||'').toLowerCase();
     if(type==='radio'){
-      var checked=document.querySelector('input[type=radio][name="'+name+'"]:checked');
+      var checked=document.querySelector('input[type=radio][name="'+CSS.escape(name)+'"]:checked');
       d[name]=checked?checked.value:'';
     }else if(type==='checkbox'){
       d[name]=el.checked;
@@ -1400,7 +1440,7 @@ var __ws=(function(){
     if(type==='checkbox'||type==='radio'||type==='file'||type==='range'||type==='color'||type==='hidden'||type==='submit'||type==='reset'||type==='button'||type==='image')return;
     var form=t.form||t.closest('form'),btn;
     if(form&&form.hasAttribute('data-gsui-form'))return;
-    if(form){btn=form.querySelector('button[type=submit]')||form.querySelector('button:not([type])')||form.querySelector('button');if(!btn&&form.id)btn=document.querySelector('button[form="'+form.id+'"]')}else{var p=t.parentElement;while(p&&p!==document.body){btn=p.querySelector('button');if(btn)break;p=p.parentElement}}
+    if(form){btn=form.querySelector('button[type=submit]')||form.querySelector('button:not([type])')||form.querySelector('button');if(!btn&&form.id)btn=document.querySelector('button[form="'+CSS.escape(form.id)+'"]')}else{var p=t.parentElement;while(p&&p!==document.body){btn=p.querySelector('button');if(btn)break;p=p.parentElement}}
     if(btn){e.preventDefault();btn.click()}
   });
   api={
@@ -1488,7 +1528,8 @@ type wsMessage struct {
 // socket is one WebSocket and the request that opened it.
 type socket struct {
 	*websocket.Conn
-	req *http.Request
+	req  *http.Request
+	seen atomic.Int64 // unix nanoseconds of the last frame from the client
 }
 
 // acceptWS opens a WebSocket. Replies are large, repetitive JS, so they are
@@ -1502,14 +1543,18 @@ func (app *App) acceptWS(w http.ResponseWriter, r *http.Request) {
 	if webKitOnly(r.UserAgent()) {
 		mode = websocket.CompressionDisabled
 	}
+	ws := &socket{req: r}
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // wsHandshake checked the origin
 		CompressionMode:    mode,
+		// Protocol pings of non-browser clients count as activity.
+		OnPingReceived: func(context.Context, []byte) bool { ws.seen.Store(time.Now().UnixNano()); return true },
 	})
 	if err != nil {
 		return
 	}
-	app.handleWS(&socket{Conn: c, req: r})
+	ws.Conn = c
+	app.handleWS(ws)
 }
 
 // webKitOnly reports Safari's engine without Chrome's: Safari on a Mac and
@@ -1536,7 +1581,11 @@ func (app *App) wsHandshake(r *http.Request) error {
 		}
 	}
 	u, err := url.Parse(origin)
-	if err == nil && u.Scheme != "" && strings.EqualFold(u.Host, r.Host) {
+	// Over TLS, or behind a proxy that ended TLS, a plain http page of the
+	// same host is another origin. A browser page cannot set the forwarded
+	// header, so it can only make this check stricter.
+	secure := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	if err == nil && u.Scheme != "" && (!secure || u.Scheme == "https") && strings.EqualFold(u.Host, r.Host) {
 		return nil
 	}
 	return fmt.Errorf("origin %q is not allowed", origin)
@@ -1603,6 +1652,31 @@ func (app *App) handleWS(ws *socket) {
 		limit = 1 << 20
 	}
 	ws.SetReadLimit(limit)
+	// The client sends a heartbeat every KeepAliveMs, a hidden tab at least
+	// once a minute. A socket silent much longer (no message and no ping) is
+	// dead or idle on purpose and is closed, so it does not hold memory.
+	app.mu.RLock()
+	keepAlive := app.KeepAliveMs
+	app.mu.RUnlock()
+	ws.seen.Store(time.Now().UnixNano())
+	if keepAlive >= 0 {
+		idle := max(3*time.Duration(cmp.Or(keepAlive, 25000))*time.Millisecond, 3*time.Minute)
+		go func() {
+			tick := time.NewTicker(idle / 3)
+			defer tick.Stop()
+			for {
+				select {
+				case <-connectionCtx.Done():
+					return
+				case <-tick.C:
+					if time.Since(time.Unix(0, ws.seen.Load())) > idle {
+						connectionCancel()
+						return
+					}
+				}
+			}
+		}()
+	}
 	app.mu.Lock()
 	app.clients[ws] = true
 	app.connStates[ws] = &connState{ctx: pushCtx, connectionCtx: connectionCtx, connectionCancel: connectionCancel, cancel: pushCancel, session: make(map[string]any), subscriptions: make(map[string]subscription)}
@@ -1641,6 +1715,7 @@ func (app *App) handleWS(ws *socket) {
 			if err != nil {
 				return
 			}
+			ws.seen.Store(time.Now().UnixNano())
 			raw := string(data)
 			if id, ok := heartbeatID(raw); ok {
 				// Answer here, not after queued actions, so a busy connection
@@ -1839,11 +1914,15 @@ func (ctx *Context) cssHeadHTML() string {
 }
 
 // jsHeadHTML returns the collected per-page JS as a <script> block for <head>.
-func (ctx *Context) jsHeadHTML() string {
+func (ctx *Context) jsHeadHTML(nonce string) string {
 	if len(ctx.headJS) == 0 {
 		return ""
 	}
-	return "<script>" + strings.Join(ctx.headJS, "\n") + "</script>"
+	open := "<script>"
+	if nonce != "" {
+		open = `<script nonce="` + nonce + `">`
+	}
+	return open + strings.Join(ctx.headJS, "\n") + "</script>"
 }
 
 // cssInjectJS returns JS code that injects the per-page CSS into <head>
@@ -1938,8 +2017,16 @@ func (ctx *Context) Push(result Result) error {
 	return ctx.app.send(ctx.wsConn, string(b))
 }
 
-// Broadcast sends effects to all connected clients. Effects must not depend on a page context.
-func (app *App) Broadcast(result Result) error {
+// Broadcast sends effects to the connected clients that are signed in: with
+// App.Identity set, those for which it returns a user now; without it, all.
+// Effects must not depend on a page context.
+func (app *App) Broadcast(result Result) error { return app.broadcast(result, false) }
+
+// BroadcastAll sends effects to every connected client, signed in or not,
+// such as a maintenance notice. Effects must not depend on a page context.
+func (app *App) BroadcastAll(result Result) error { return app.broadcast(result, true) }
+
+func (app *App) broadcast(result Result, all bool) error {
 	js, err := result.build(nil)
 	if err != nil {
 		return err
@@ -1950,12 +2037,62 @@ func (app *App) Broadcast(result Result) error {
 	for conn := range app.clients {
 		clients = append(clients, conn)
 	}
+	identity := app.Identity
 	app.mu.RUnlock()
-	var failures []error
-	for _, conn := range clients {
-		if err := app.send(conn, string(frame)); err != nil {
-			failures = append(failures, err)
-		}
+	// Each client gets its own send, so a client that does not read delays
+	// only itself, not the others. Identity runs now, with the cookies of the
+	// socket's handshake, so a session that expired or was revoked since
+	// then gets nothing.
+	failures := make([]error, len(clients))
+	var wg sync.WaitGroup
+	for i, conn := range clients {
+		wg.Go(func() {
+			if !all && identity != nil {
+				if user, err := identity(conn.req); err != nil || !present(user) {
+					return
+				}
+			}
+			failures[i] = app.send(conn, string(frame))
+		})
 	}
+	wg.Wait()
 	return errors.Join(failures...)
+}
+
+// present reports whether Identity returned a user: not nil, and not a nil
+// pointer, map or slice in an interface.
+func present(user any) bool {
+	if user == nil {
+		return false
+	}
+	switch v := reflect.ValueOf(user); v.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Interface, reflect.Func, reflect.Chan:
+		return !v.IsNil()
+	}
+	return true
+}
+
+// newNonce returns a random value for one page's Content-Security-Policy.
+func newNonce() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+// cspHeader is a strict policy: scripts run only with the nonce, and
+// external scripts these add ('strict-dynamic'). Replies run through new Function, so it needs 'unsafe-eval'.
+// 'unsafe-inline' and https: only serve browsers without nonce support.
+func cspHeader(nonce string) string {
+	return "script-src 'nonce-" + nonce + "' 'strict-dynamic' 'unsafe-eval' 'unsafe-inline' https:; object-src 'none'; base-uri 'self'"
+}
+
+// scriptTag matches the start of a <script> tag in any case.
+var scriptTag = regexp.MustCompile(`(?i)<script([\s>])`)
+
+// withNonce adds the nonce to every <script> tag in raw head HTML.
+func withNonce(head, nonce string) string {
+	if nonce == "" {
+		return head
+	}
+	return scriptTag.ReplaceAllString(head, `<script nonce="`+nonce+`"$1`)
 }

@@ -51,6 +51,8 @@ func main() {
 	// Serve embedded static assets (favicon, images, etc.)
 	app.Assets(assets, "assets", "/assets/")
 	app.Favicon = "/assets/favicon.svg"
+	// Strict Content-Security-Policy: only g-sui's own scripts run.
+	app.CSP = true
 	app.Title = "g-sui Component Showcase"
 	app.Description = "A server-rendered Go UI framework with live WebSocket updates, Tailwind CSS, and interactive components."
 	// Installable app with an offline page; the Install and notification

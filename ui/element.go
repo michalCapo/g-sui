@@ -513,7 +513,12 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 	// Attributes, styles and events go out in a fixed order, so the same
 	// node always compiles to the same code: it can be hashed and compared.
 	for _, k := range slices.Sorted(maps.Keys(n.attrs)) {
-		fmt.Fprintf(b, "%s.setAttribute('%s','%s');", varName, escJS(k), escJS(n.attrs[k]))
+		// Event attributes would run their value as script: behavior goes
+		// through actions (OnClick, ...) or UnsafeJS.
+		if strings.HasPrefix(strings.ToLower(k), "on") {
+			continue
+		}
+		fmt.Fprintf(b, "%s.setAttribute('%s','%s');", varName, escJS(k), escJS(attrValue(n.tag, k, n.attrs[k])))
 	}
 
 	// Inline styles
@@ -553,6 +558,50 @@ func (n *Node) compile(b *strings.Builder, counter *int, postJS *[]string, inSVG
 // ---------------------------------------------------------------------------
 // Internal
 // ---------------------------------------------------------------------------
+
+// urlAttrs are the attributes whose value the browser loads or follows as a URL.
+var urlAttrs = map[string]bool{"href": true, "src": true, "action": true, "formaction": true, "xlink:href": true, "poster": true, "cite": true, "data": true, "background": true}
+
+// blockedURL replaces a URL attribute that would run script.
+const blockedURL = "about:blank#blocked"
+
+// dataImageTags may load data:image URLs: they show the image and run no
+// script. The empty tag is SetAttr, which does not know the element.
+var dataImageTags = map[string]bool{"": true, "img": true, "source": true, "video": true, "input": true, "image": true}
+
+// attrValue is the value of attribute k of a tag element as it goes to the
+// browser. A URL attribute keeps relative URLs and the http, https, mailto
+// and tel schemes, and images also data:image URLs. Anything else, such as a
+// javascript: URL from user input, becomes about:blank#blocked. srcdoc,
+// a whole HTML document, is dropped.
+func attrValue(tag, k, v string) string {
+	k = strings.ToLower(k)
+	if k == "srcdoc" {
+		return ""
+	}
+	if !urlAttrs[k] {
+		return v
+	}
+	// Browsers drop tabs and line breaks anywhere in a URL, and leading
+	// spaces and control characters.
+	s := strings.TrimLeftFunc(strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, v), func(r rune) bool { return r <= ' ' })
+	i := strings.IndexAny(s, ":/?#")
+	if i <= 0 || s[i] != ':' {
+		return v
+	}
+	switch scheme := strings.ToLower(s[:i]); {
+	case scheme == "http" || scheme == "https" || scheme == "mailto" || scheme == "tel":
+		return v
+	case scheme == "data" && (k == "src" || k == "poster") && dataImageTags[strings.ToLower(tag)] && strings.HasPrefix(strings.ToLower(s), "data:image/"):
+		return v
+	}
+	return blockedURL
+}
 
 // escJS escapes a string for safe embedding inside JS single-quoted strings
 // that may themselves be embedded in an HTML <script> tag.

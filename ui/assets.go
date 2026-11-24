@@ -108,7 +108,8 @@ func (app *App) IconFont(woff2 []byte) {
 
 // styleHeadHTML returns the head tags that style pages: the Tailwind engine
 // and Google's icon font, or the app's own compiled stylesheet and font.
-func (app *App) styleHeadHTML() string {
+// With a CSP nonce the tags carry it and use no inline event attributes.
+func (app *App) styleHeadHTML(nonce string) string {
 	app.mu.RLock()
 	tailwindURL, iconURL := app.tailwindURL, app.iconFontURL
 	app.mu.RUnlock()
@@ -118,14 +119,24 @@ func (app *App) styleHeadHTML() string {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 `)
 	}
-	if tailwindURL == "" {
+	if tailwindURL == "" && nonce != "" {
+		fmt.Fprintf(&b, `<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script nonce="%s" src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" data-gsui-style-engine async></script>
+`, nonce)
+	} else if tailwindURL == "" {
 		b.WriteString(`<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" data-gsui-style-engine async onload="this.dataset.gsuiLoaded='true'" onerror="this.dataset.gsuiLoaded='error'"></script>
 `)
 	} else {
 		fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"%s\">\n", tailwindURL)
 	}
-	if iconURL == "" {
+	if iconURL == "" && nonce != "" {
+		// The policy blocks onload attributes, so a script with the nonce
+		// switches the stylesheet on; until then it does not block the page.
+		fmt.Fprintf(&b, `<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" media="print">
+<script nonce="%s">(function(l){function on(){l.media='all';l.dataset.gsuiLoaded='true'}if(l.sheet)on();else{l.addEventListener('load',on);l.addEventListener('error',function(){l.dataset.gsuiLoaded='error'})}})(document.currentScript.previousElementSibling)</script>
+`, nonce)
+	} else if iconURL == "" {
 		b.WriteString(`<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" media="print" onload="this.media='all';this.dataset.gsuiLoaded='true'" onerror="this.dataset.gsuiLoaded='error'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"></noscript>
 `)

@@ -303,9 +303,9 @@ button:focus-visible{outline:2px solid currentColor;outline-offset:3px}
 <main>
 <h1>%s</h1>
 <p>%s</p>
-<button type="button" onclick="location.reload()"><span>%s</span></button>
+<button type="button"><span>%s</span></button>
 </main>
-<script>addEventListener('online',function(){location.reload()})</script>
+<script>document.querySelector('button').addEventListener('click',function(){location.reload()});addEventListener('online',function(){location.reload()})</script>
 </body>
 </html>
 `, esc(lang), esc(p.ThemeColor), esc(p.Name),

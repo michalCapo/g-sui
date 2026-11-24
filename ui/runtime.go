@@ -66,7 +66,7 @@ func (app *App) authorize(ctx *Context, action string) error {
 
 func pageRequest(base *http.Request, path string) (*http.Request, error) {
 	u, err := url.Parse(path)
-	if err != nil || u.IsAbs() || u.Host != "" || !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") {
+	if err != nil || u.IsAbs() || u.Host != "" || !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") || strings.Contains(u.Path, "\\") {
 		return nil, errors.New("expected a local absolute path")
 	}
 	r := base.Clone(base.Context())
@@ -97,7 +97,11 @@ func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
 	}
 	app.mu.RLock()
 	st := app.connStates[ctx.wsConn]
-	previous, version := st.request, st.version
+	if st == nil {
+		app.mu.RUnlock()
+		return errors.New("connection closed")
+	}
+	previous, version, hasView := st.request, st.version, st.view != nil
 	isSubscription := app.subscriptionActions[msg.Act]
 	ctx.Session = st.session
 	app.mu.RUnlock()
@@ -124,7 +128,7 @@ func (app *App) prepareAction(ctx *Context, msg wsMessage) error {
 	if path == "" {
 		return errors.New("page required")
 	}
-	if previous != nil && st.view != nil && path != previous.URL.RequestURI() {
+	if previous != nil && hasView && path != previous.URL.RequestURI() {
 		return errors.New("view page changed")
 	}
 	if path != "" {
@@ -220,8 +224,15 @@ func (app *App) renderNavigation(ctx *Context, req navigationRequest) string {
 	}
 	app.mu.RLock()
 	st := app.connStates[ctx.wsConn]
-	previous := st.request
+	var previous *http.Request
+	if st != nil {
+		previous = st.request
+	}
 	app.mu.RUnlock()
+	if st == nil {
+		// The connection closed while the page was being authorized.
+		return ""
+	}
 	if req.Patch && (previous == nil || previous.Pattern != matched.Pattern) {
 		return Redirect(req.URL).script()
 	}
@@ -728,9 +739,14 @@ func (app *App) renderLive(ctx *Context, factory func() View) *Node {
 	if ctx.wsConn != nil {
 		app.mu.RLock()
 		st := app.connStates[ctx.wsConn]
-		view = st.view
-		pattern := st.viewPattern
+		var pattern string
+		if st != nil {
+			view, pattern = st.view, st.viewPattern
+		}
 		app.mu.RUnlock()
+		if st == nil {
+			return Div().Text("View unavailable")
+		}
 		if view != nil && pattern != ctx.Request.Pattern {
 			return Div().Text("Navigate to open this view")
 		}

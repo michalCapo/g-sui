@@ -2,7 +2,9 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -279,6 +281,62 @@ func (c *Collate[T]) Search(val string) *Collate[T] {
 func (c *Collate[T]) Order(order string) *Collate[T] {
 	c.order = order
 	return c
+}
+
+// Clean checks the values a Collate action received against this Collate's
+// sort and filter fields, as the browser can send anything. Call it before
+// the values reach a query. The order it returns is "" or a configured sort
+// field with " asc" or " desc"; limit is 1 to 100, or the Collate's limit
+// when unset; filters keep only the first value of each configured field of
+// its own type, with select and multi-check values among the options and
+// dates as YYYY-MM-DD.
+func (c *Collate[T]) Clean(order string, limit int, filters []CollateFilterValue) (string, int, []CollateFilterValue) {
+	field, dir, _ := strings.Cut(strings.TrimSpace(order), " ")
+	if dir != "desc" {
+		dir = "asc"
+	}
+	if !slices.ContainsFunc(c.sortFields, func(f CollateSortField) bool { return f.Field == field }) {
+		order = ""
+	} else {
+		order = field + " " + dir
+	}
+	if limit <= 0 {
+		limit = c.limit
+	}
+	limit = min(max(limit, 1), 100)
+	types := map[CollateFilterType]string{CollateBool: "bool", CollateDateRange: "date", CollateSelect: "select", CollateMultiCheck: "multicheck"}
+	var clean []CollateFilterValue
+	for _, v := range filters {
+		i := slices.IndexFunc(c.filterFields, func(f CollateFilterField) bool { return f.Field == v.Field })
+		if i < 0 || types[c.filterFields[i].Type] != v.Type || slices.ContainsFunc(clean, func(f CollateFilterValue) bool { return f.Field == v.Field }) {
+			continue
+		}
+		valid := func(value string) bool {
+			return slices.ContainsFunc(c.filterFields[i].Options, func(o CollateOption) bool { return o.Value == value })
+		}
+		switch v.Type {
+		case "date":
+			if !isDate(v.From) || !isDate(v.To) {
+				continue
+			}
+		case "select":
+			if v.Value != "" && !valid(v.Value) {
+				continue
+			}
+		case "multicheck":
+			if slices.ContainsFunc(strings.Split(v.Value, ","), func(s string) bool { return !valid(s) }) {
+				continue
+			}
+		}
+		clean = append(clean, v)
+	}
+	return order, limit, clean
+}
+
+// isDate reports an empty value or a date input value (2006-01-02).
+func isDate(s string) bool {
+	_, err := time.Parse(time.DateOnly, s)
+	return s == "" || err == nil
 }
 
 // HasMore indicates there are more rows to load.

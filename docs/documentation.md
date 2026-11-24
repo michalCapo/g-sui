@@ -129,6 +129,7 @@ Every response served by `app.Handler()` (or `Listen`) gets safe default headers
 | `Title` | `string` | Default document title; a page's `Node.Title` comes first |
 | `Description` | `string` | Default meta description; a page's `Node.Description` comes first |
 | `HTMLHead` | `[]string` | Additional raw HTML injected into `<head>`; trusted raw API, never pass untrusted input |
+| `CSP` | `bool` | Strict Content-Security-Policy with a per-page nonce; default off (see Security) |
 | `Loader` | `LoaderMode` | Loading overlay for actions: `LoaderOverlay` (default) or `LoaderNone`. See [loading feedback](#loading-feedback) |
 | `SkeletonDelayMs` | `int` | Delay before a navigation skeleton appears. Default 100, `-1` shows it at once |
 | `SkeletonTarget` | `string` | Element id that shows navigation skeletons. Default `__content__`, else `<main>`, else `<body>` |
@@ -202,7 +203,7 @@ Returns the `http.Handler` for custom server configurations (TLS, middleware wra
 err := app.Broadcast(ui.Result{}.Notify("info", "Server restarting in 5 minutes"))
 ```
 
-Sends typed effects to all connected clients and returns any errors. Broadcast effects must not depend on a page context.
+Sends typed effects to the connected clients that are signed in and returns any errors. With `App.Identity` set, a client is signed in when `Identity`, called at the time of the broadcast with the cookies of the client's WebSocket handshake, returns a user (not nil, no error); a session that expired or was revoked meanwhile gets nothing. Without `Identity`, every client counts. `app.BroadcastAll(result)` reaches every client, signed in or not, for public notices. Broadcast effects must not depend on a page context. A broadcast reaches every signed-in user, so data for one user or tenant goes through `ctx.Push` or a subscription that checks the user. Each client is written to separately, so a client that stops reading delays only itself.
 
 ### Static Assets
 
@@ -214,7 +215,7 @@ app.Assets(assets, "assets", "/assets/")
 app.Favicon = "/assets/favicon.svg"
 ```
 
-Serves static files from an embedded or on-disk filesystem. The `Favicon` field adds a `<link rel="icon">` tag to the HTML shell.
+Serves static files from an embedded or on-disk filesystem. Directory listings and names starting with a dot (`.env`, `.git/`) return 404; a directory is served only through its `index.html`. The `Favicon` field adds a `<link rel="icon">` tag to the HTML shell.
 
 ### CSS (App-Level)
 
@@ -334,7 +335,7 @@ Subscriptions stop on navigation, node removal or disconnect. Reconnect starts a
 err := app.Broadcast(ui.Result{}.Notify("info", "System maintenance in 5 minutes"))
 ```
 
-Sends a JS string to every connected WebSocket client.
+Sends the effects to every signed-in WebSocket client (see App-Level Broadcast); `BroadcastAll` also reaches clients that are not signed in. Send data for one user with `ctx.Push` or a subscription.
 
 ---
 
@@ -1363,6 +1364,12 @@ The WS action receives a JSON payload with these fields:
 | `order` | string | Sort order, e.g. `"name asc"` or `"salary desc"` |
 | `filters` | array | Array of `CollateFilterValue` objects |
 
+The browser can send any values in these fields. Pass them through `Clean` on the same Collate configuration before they reach a query: it keeps only a configured sort field with `asc` or `desc`, limits `limit` to 1–100, and drops filters for fields, types or options that are not configured. Map the cleaned field names to database columns; never put request values into SQL text.
+
+```go
+order, limit, filters := collate.Clean(req.Order, req.Limit, req.Filters)
+```
+
 ### Load More (Append Rows)
 
 ```go
@@ -1814,6 +1821,14 @@ Remove the app's own manifest and `/sw.js` routes (registering them again panics
 - **XSS Prevention**: `Text()` uses `textContent` (not `innerHTML`), preventing script injection
 - **Safe Table Methods**: `FieldText()` for auto-escaped text, `Field()` for controlled `*Node` content
 - **Panic Recovery**: Server panics in action handlers are recovered and surface as error toasts
+- **URL attributes**: `href`, `src`, `action`, `formaction`, `poster`, `cite`, `data` and `xlink:href` keep relative URLs and `http`, `https`, `mailto` and `tel` (images and videos also `data:image/`). Other schemes, such as `javascript:`, become `about:blank#blocked`. `srcdoc` is emptied. This applies to `Attr`, `NavLink` and `SetAttr`.
+- **Event attributes**: `Attr("onclick", ...)` and other `on*` attributes are not set; use actions (`OnClick`, ...) for behavior.
+- **Idle sockets**: the server closes a WebSocket that sends no message and no ping for three `KeepAliveMs` intervals (at least 3 minutes); the client reconnects. `KeepAliveMs = -1` turns this off.
+- **Origin check**: over TLS, or behind a proxy that sends `X-Forwarded-Proto: https`, a WebSocket from an `http` page of the same host is refused.
+- **Action input is untrusted**: values passed to `Call`, collected fields, hidden inputs and form fields come from the browser and can be changed. Check in every handler that the user may act on the IDs it receives, and use an input struct per action that has no fields the user must not set (role, owner, price). Run `form.Validate(input)` on the server; client checks are only for convenience.
+- **Broadcast**: with `App.Identity` set, `Broadcast` reaches only clients for which `Identity` returns a user when the broadcast is sent; `BroadcastAll` reaches all. Send data for one user with `ctx.Push` or subscriptions.
+- **Content-Security-Policy**: `app.CSP = true` sends a strict policy with every page the app renders. Only scripts with the page's nonce run, and external scripts those scripts add (`'strict-dynamic'`, used by widgets that load a library), so an injected `<script>`, a `javascript:` URL or an `on*` attribute does not. g-sui adds the nonce to its own scripts, to `<script>` tags in `HTMLHead` and to `UnsafeHeadJS`. Inline event attributes in `HTMLHead` stop working; move that code into a script. The policy allows `'unsafe-eval'`, because replies run as JavaScript. It is added next to a policy set by middleware; the browser enforces both. The PWA offline page has no inline handlers. Default off.
+- **HTTP timeouts**: `App.Listen` sets `ReadHeaderTimeout` and `IdleTimeout`. A custom `http.Server` around `app.Handler()` should set them too; do not set `WriteTimeout`, it ends WebSockets.
 
 ### Client-Side
 
@@ -2080,7 +2095,8 @@ go get github.com/michalCapo/g-sui@v1.1.0
 | `Assets` | `(fsys fs.FS, dir, prefix string)` | Serve static files |
 | `Handler` | `() http.Handler` | Returns mux for custom server setup |
 | `Listen` | `(addr string) error` | Start HTTP server |
-| `Broadcast` | `(result Result) error` | Send effects to all connected clients |
+| `Broadcast` | `(result Result) error` | Send effects to signed-in clients (all clients without `Identity`) |
+| `BroadcastAll` | `(result Result) error` | Send effects to every connected client |
 | `Widget` | `(name, mount string)` | Register a client widget mount function |
 | `Skeleton` | `(prefix string, node *Node)` | Show `node` while a navigation under `prefix` loads |
 | `Subscription` | `(name string, run func(*Context) error)` | Register cancellable background work started by `node.Subscribe` |
@@ -2180,9 +2196,9 @@ behavior. Ordinary `A().Attr("href", ...)` links still use HTTP navigation.
 
 | Operation | Behavior |
 | --- | --- |
-| `ui.Navigate(url)` / `Result.Navigate(url)` | Load a page, cancel its predecessor, then update history and focus. |
+| `ui.Navigate(url)` / `Result.Navigate(url)` | Load a page, cancel its predecessor, then update history and focus. Only pages of the same origin: the client refuses `javascript:` URLs and other sites. |
 | `ui.PatchURL(url, replace)` | Rerender the current route with new URL parameters, preserving its live view and scroll. |
-| `ui.Redirect(url)` | Full HTTP navigation, including cookies and HTTP middleware responses. |
+| `ui.Redirect(url)` | Full HTTP navigation, including cookies and HTTP middleware responses. Accepts only `http` and `https` URLs and may leave the site, so check a URL taken from user input (for example a `next` parameter) before passing it. |
 
 On `NavLink`, `Attr("data-gsui-patch", "")` selects PatchURL behavior and
 `Attr("data-gsui-replace", "")` replaces the history entry. A patch to another

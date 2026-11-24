@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -690,7 +691,7 @@ func (f *FormBuilder) buildValidateJS(actionValue string) string {
 	b.WriteString("function val(id){var e=document.getElementById(id);if(!e)return '';if(e.tagName.toLowerCase()==='textarea')return e.value.trim();return e.value.trim()}")
 	// radioVal uses the scoped name (formID-fieldName) to query only radios
 	// belonging to this form, preventing cross-form interference.
-	b.WriteString("function radioVal(name){var c=document.querySelector('input[type=radio][name=\"'+name+'\"]:checked');return c?c.value:''}")
+	b.WriteString("function radioVal(name){var c=document.querySelector('input[type=radio][name=\"'+CSS.escape(name)+'\"]:checked');return c?c.value:''}")
 	b.WriteString("function selVal(id){var e=document.getElementById(id);return e?e.value:''}")
 	b.WriteString("function checkVal(id){var e=document.getElementById(id);return e?e.checked:false}")
 
@@ -816,52 +817,79 @@ func (f *FormBuilder) showErrorsJS(errs FormErrors) string {
 }
 
 // Validate checks the action input against the form's field definitions.
-// input is the struct (or map) the action received; JSON names must match
-// field names. It returns a FormErrors map (empty if all valid).
+// input is the struct (or map) the action received; its JSON names match
+// field names without regard to case, as JSON decoding does. The browser
+// can send anything, so required text must hold more than spaces and a
+// select or radio value must be one of its options. It returns a FormErrors
+// map (empty if all valid).
 func (f *FormBuilder) Validate(input any) FormErrors {
 	errs := make(FormErrors)
 	var data map[string]any
 	if b, err := json.Marshal(input); err == nil {
 		_ = json.Unmarshal(b, &data)
 	}
+	// An exact key wins; otherwise one key that differs only in case. Two
+	// such keys are ambiguous and count as missing.
+	value := func(name string) any {
+		if v, ok := data[name]; ok {
+			return v
+		}
+		var found any
+		matches := 0
+		for k, v := range data {
+			if strings.EqualFold(k, name) {
+				found = v
+				matches++
+			}
+		}
+		if matches != 1 {
+			return nil
+		}
+		return found
+	}
 
 	for i := range f.fields {
 		fld := &f.fields[i]
+		raw := value(fld.Name)
+		text := ""
+		if raw != nil {
+			text = fmt.Sprintf("%v", raw)
+		}
 
 		if fld.Required {
 			switch fld.Type {
 			case FieldCheckbox:
-				v, _ := data[fld.Name].(bool)
-				if !v {
+				if v, _ := raw.(bool); !v {
 					errs[fld.Name] = f.errMsg(fld)
 				}
 			default:
-				v := fmt.Sprintf("%v", data[fld.Name])
-				if v == "" || v == "<nil>" {
+				if strings.TrimSpace(text) == "" {
 					errs[fld.Name] = f.errMsg(fld)
 				}
+			}
+		}
+
+		switch fld.Type {
+		case FieldSelect, FieldRadio, FieldRadioBtn, FieldRadioCard:
+			if text != "" && !slices.ContainsFunc(fld.Options, func(o FieldOption) bool { return o.Value == text }) {
+				errs[fld.Name] = f.invalidMsg(fld)
 			}
 		}
 
 		// Pattern validation (server-side) for string fields
-		if fld.Pattern != "" {
-			v := fmt.Sprintf("%v", data[fld.Name])
-			if v != "" && v != "<nil>" {
-				// Use Go regexp for server-side pattern check
-				// We import regexp lazily to avoid import cost when not used
-				matched := matchPattern(fld.Pattern, v)
-				if !matched {
-					msg := fld.ErrMsg
-					if msg == "" {
-						msg = fld.Label + " format is invalid"
-					}
-					errs[fld.Name] = msg
-				}
-			}
+		if fld.Pattern != "" && text != "" && !matchPattern(fld.Pattern, text) {
+			errs[fld.Name] = f.invalidMsg(fld)
 		}
 	}
 
 	return errs
+}
+
+func (f *FormBuilder) invalidMsg(fld *Field) string {
+	if fld.ErrMsg != "" {
+		return fld.ErrMsg
+	}
+	return fld.Label + " format is invalid"
 }
 
 func (f *FormBuilder) errMsg(fld *Field) string {

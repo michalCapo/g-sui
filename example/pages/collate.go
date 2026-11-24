@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/go-pdf/fpdf"
 	r "github.com/michalCapo/g-sui/ui"
@@ -48,12 +47,24 @@ var allEmployees = []*Employee{
 	{ID: 20, Name: "Adam Gregor", Department: "Engineering", Salary: 4000, HireDate: "2026-01-03", Active: true, Role: "Developer"},
 }
 
-// Global demo state is mutex-protected. Production applications must scope
-// filters to a user/session rather than sharing them across connections.
-var collateFilters = map[string]*r.CollateFilterValue{}
-var collateFiltersMu sync.Mutex
+// employeeFilters returns the filters of this connection. ctx.Session belongs
+// to one browser tab, so one visitor's filters never apply to another.
+// Session data resets on reconnect; keep durable state in your own storage.
+func employeeFilters(ctx *r.Context) map[string]*r.CollateFilterValue {
+	const key = employeesCollateID + ".filters"
+	filters, _ := ctx.Session[key].(map[string]*r.CollateFilterValue)
+	if filters == nil {
+		filters = map[string]*r.CollateFilterValue{}
+		if ctx.Session != nil {
+			ctx.Session[key] = filters
+		}
+	}
+	return filters
+}
 
-func CollatePage(_ *r.Context) *r.Node {
+func CollatePage(ctx *r.Context) *r.Node {
+	// The page renders without filters, so the actions start without them.
+	clear(employeeFilters(ctx))
 	limit := 8
 	data := allEmployees
 	if len(data) > limit {
@@ -215,24 +226,25 @@ type CollateDataRequest struct {
 	Filters   []r.CollateFilterValue `json:"filters"`
 }
 
-func handleCollateData(_ *r.Context, req CollateDataRequest) (r.Result, error) {
-	collateFiltersMu.Lock()
-	defer collateFiltersMu.Unlock()
-	limit := 8
-	if req.Limit > 0 {
-		limit = req.Limit
-	}
+func handleCollateData(ctx *r.Context, req CollateDataRequest) (r.Result, error) {
+	// Client values are untrusted: Clean keeps only the configured sort and
+	// filter fields and bounds the limit.
+	var limit int
+	req.Order, limit, req.Filters = newCollate().Clean(req.Order, req.Limit, req.Filters)
+	req.Page = min(max(req.Page, 1), 20)
+
+	collateFilters := employeeFilters(ctx)
 
 	// Handle filter/reset: update active filters
 	switch req.Operation {
 	case "filter":
-		collateFilters = map[string]*r.CollateFilterValue{}
+		clear(collateFilters)
 		for i := range req.Filters {
 			f := &req.Filters[i]
 			collateFilters[f.Field] = f
 		}
 	case "reset":
-		collateFilters = map[string]*r.CollateFilterValue{}
+		clear(collateFilters)
 		req.Search = ""
 		req.Order = ""
 	}
@@ -257,9 +269,6 @@ func handleCollateData(_ *r.Context, req CollateDataRequest) (r.Result, error) {
 
 	// Handle load more
 	if req.Operation == "loadmore" {
-		if req.Page < 1 {
-			req.Page = 1
-		}
 		start := (req.Page - 1) * limit
 		end := min(start+limit, totalItems)
 		if start >= totalItems {
@@ -268,7 +277,7 @@ func handleCollateData(_ *r.Context, req CollateDataRequest) (r.Result, error) {
 		pageData := filtered[start:end]
 		hasMore := end < totalItems
 
-		dt := newCollateWithState(req.Search, req.Order).
+		dt := newCollateWithState(req.Search, req.Order, collateFilters).
 			Page(req.Page).TotalItems(totalItems).HasMore(hasMore).
 			RowOffset(start)
 
@@ -282,21 +291,18 @@ func handleCollateData(_ *r.Context, req CollateDataRequest) (r.Result, error) {
 	}
 
 	// Default: full re-render (search, sort, filter)
-	if req.Page < 1 {
-		req.Page = 1
-	}
 	end := min(req.Page*limit, totalItems)
 	pageData := filtered[:end]
 	hasMore := end < totalItems
 
-	collateNode := newCollateWithState(req.Search, req.Order).
+	collateNode := newCollateWithState(req.Search, req.Order, collateFilters).
 		Page(req.Page).TotalItems(totalItems).HasMore(hasMore).
 		Render(pageData)
 
 	return r.Result{}.Replace(employeesCollateID, collateNode), nil
 }
 
-func newCollateWithState(search, order string) *r.Collate[Employee] {
+func newCollateWithState(search, order string, collateFilters map[string]*r.CollateFilterValue) *r.Collate[Employee] {
 	c := newCollate().Search(search).Order(order)
 
 	for field, val := range collateFilters {
@@ -449,20 +455,18 @@ func exportEmployeesPDF(employees []*Employee) (r.Result, error) {
 }
 
 func exportEmployeesCSV(employees []*Employee) (r.Result, error) {
-	var buf bytes.Buffer
-	buf.WriteString("ID,Name,Department,Salary,Hire Date,Status,Role\n")
+	rows := [][]string{{"ID", "Name", "Department", "Salary", "Hire Date", "Status", "Role"}}
 	for _, emp := range employees {
 		status := "Active"
 		if !emp.Active {
 			status = "Inactive"
 		}
-		name := strings.ReplaceAll(emp.Name, "\"", "\"\"")
-		role := strings.ReplaceAll(emp.Role, "\"", "\"\"")
-		fmt.Fprintf(&buf, "%d,\"%s\",%s,%.2f,%s,%s,\"%s\"\n",
-			emp.ID, name, emp.Department, emp.Salary, emp.HireDate, status, role)
+		rows = append(rows, []string{
+			fmt.Sprintf("%d", emp.ID), emp.Name, emp.Department, fmt.Sprintf("%.2f", emp.Salary),
+			emp.HireDate, status, emp.Role,
+		})
 	}
-	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	return r.Result{}.Download("employees.csv", "text/csv", b64), nil
+	return csvDownload("employees.csv", rows)
 }
 
 var collateData r.ActionRef[CollateDataRequest]

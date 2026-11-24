@@ -7,7 +7,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/go-pdf/fpdf"
 	r "github.com/michalCapo/g-sui/ui"
@@ -27,7 +26,9 @@ type Product struct {
 	ReleaseMonth string // MonthYear filter demo (format: "2026-03")
 }
 
-func TablePage(_ *r.Context) *r.Node {
+func TablePage(ctx *r.Context) *r.Node {
+	// The page renders without filters, so the actions start without them.
+	clear(productFilters(ctx))
 	// Section 1: Basic — SimpleTable with action buttons
 	viewBtn := r.NewButton("View").BtnColor(r.BtnBlue).BtnSize(r.BtnXS).Build()
 	editBtn := r.NewButton("Edit").BtnColor(r.BtnGreen).BtnSize(r.BtnXS).Build()
@@ -145,10 +146,58 @@ type activeFilter struct {
 	To   string
 }
 
-// Global demo state is mutex-protected. Production applications must scope
-// filters to a user/session rather than sharing them across connections.
-var activeFilters = map[int]*activeFilter{}
-var activeFiltersMu sync.Mutex
+var (
+	productCategories = []string{"Electronics", "Accessories", "Office"}
+	productStatuses   = []string{"Draft", "Sent", "Paid", "Overdue"}
+	// productFilterTypes lists the column filters NewData configures. The
+	// handler ignores other columns and types sent by the client.
+	productFilterTypes = map[int]string{0: "number", 1: "text", 2: "number", 3: "number", 4: "date", 5: "select", 6: "select", 7: "monthyear"}
+)
+
+// productFilters returns the filters of this connection. ctx.Session belongs
+// to one browser tab, so one visitor's filters never apply to another.
+// Session data resets on reconnect; keep durable state in your own storage.
+func productFilters(ctx *r.Context) map[int]*activeFilter {
+	const key = productsTableID + ".filters"
+	filters, _ := ctx.Session[key].(map[int]*activeFilter)
+	if filters == nil {
+		filters = map[int]*activeFilter{}
+		if ctx.Session != nil {
+			ctx.Session[key] = filters
+		}
+	}
+	return filters
+}
+
+// newProductFilter returns the filter from the request, or nil when the
+// filter is empty. Select filters keep only the configured options.
+func newProductFilter(req TableDataRequest) *activeFilter {
+	f := &activeFilter{Col: req.Col, Type: req.Type, Op: req.Op, Val: req.Val, From: req.From, To: req.To}
+	switch req.Type {
+	case "select":
+		options := productCategories
+		if req.Col == 6 {
+			options = productStatuses
+		}
+		for _, v := range req.Vals {
+			if slices.Contains(options, v) && !slices.Contains(f.Vals, v) {
+				f.Vals = append(f.Vals, v)
+			}
+		}
+		if len(f.Vals) == 0 {
+			return nil
+		}
+	case "text":
+		if f.Val == "" {
+			return nil
+		}
+	default: // date, monthyear, number
+		if f.From == "" && f.To == "" {
+			return nil
+		}
+	}
+	return f
+}
 
 func filterProducts(search string, filters map[int]*activeFilter) []*Product {
 	filtered := make([]*Product, 0, len(allProducts))
@@ -326,35 +375,34 @@ func sortProducts(data []*Product, col int, dir string) {
 	})
 }
 
-func handleTableData(_ *r.Context, req TableDataRequest) (r.Result, error) {
-	activeFiltersMu.Lock()
-	defer activeFiltersMu.Unlock()
+func handleTableData(ctx *r.Context, req TableDataRequest) (r.Result, error) {
+	// Client values are untrusted: bound the page size and page, and accept
+	// only the sort columns and directions this table offers.
 	pageSize := 10
 	if req.PageSize > 0 {
-		pageSize = req.PageSize
+		pageSize = min(req.PageSize, 100)
 	}
+	req.Page = min(max(req.Page, 1), 20)
+	if req.Sort < 0 || req.Sort > 7 { // all 8 columns are sortable
+		req.Sort = -1
+	}
+	if req.Dir != "desc" {
+		req.Dir = "asc"
+	}
+
+	activeFilters := productFilters(ctx)
 
 	// Handle filter operation: update active filters
 	if req.Operation == "filter" {
-		if req.Type != "" {
-			// Apply a specific column filter
-			if req.Type == "select" && len(req.Vals) == 0 {
-				delete(activeFilters, req.Col)
-			} else if (req.Type == "date" || req.Type == "monthyear") && req.From == "" && req.To == "" {
-				delete(activeFilters, req.Col)
-			} else if req.Type == "number" && req.From == "" && req.To == "" {
-				delete(activeFilters, req.Col)
-			} else if req.Type == "text" && req.Val == "" {
-				delete(activeFilters, req.Col)
-			} else {
-				activeFilters[req.Col] = &activeFilter{
-					Col: req.Col, Type: req.Type, Op: req.Op,
-					Val: req.Val, Vals: req.Vals, From: req.From, To: req.To,
-				}
-			}
-		} else {
+		if req.Type == "" {
 			// Reset all filters
-			activeFilters = map[int]*activeFilter{}
+			clear(activeFilters)
+		} else if productFilterTypes[req.Col] == req.Type {
+			if f := newProductFilter(req); f != nil {
+				activeFilters[req.Col] = f
+			} else {
+				delete(activeFilters, req.Col)
+			}
 		}
 	}
 
@@ -379,9 +427,6 @@ func handleTableData(_ *r.Context, req TableDataRequest) (r.Result, error) {
 
 	// Handle "load more": append rows to existing tbody + replace footer
 	if req.Operation == "loadmore" {
-		if req.Page < 1 {
-			req.Page = 1
-		}
 		start := (req.Page - 1) * pageSize
 		end := min(start+pageSize, totalItems)
 		if start >= totalItems {
@@ -390,7 +435,7 @@ func handleTableData(_ *r.Context, req TableDataRequest) (r.Result, error) {
 		pageData := filtered[start:end]
 		hasMore := end < totalItems
 
-		dt := newDataWithFilters().
+		dt := newDataWithFilters(activeFilters).
 			Page(req.Page).TotalItems(totalItems).HasMore(hasMore).
 			Sort(req.Sort, req.Dir).Search(req.Search).
 			RowOffset(start)
@@ -405,14 +450,11 @@ func handleTableData(_ *r.Context, req TableDataRequest) (r.Result, error) {
 	}
 
 	// Default: full table re-render (search, sort, filter)
-	if req.Page < 1 {
-		req.Page = 1
-	}
 	end := min(req.Page*pageSize, totalItems)
 	pageData := filtered[:end]
 	hasMore := end < totalItems
 
-	dataTable := newDataWithFilters().
+	dataTable := newDataWithFilters(activeFilters).
 		Page(req.Page).TotalItems(totalItems).HasMore(hasMore).
 		Sort(req.Sort, req.Dir).Search(req.Search).
 		Render(pageData)
@@ -420,8 +462,8 @@ func handleTableData(_ *r.Context, req TableDataRequest) (r.Result, error) {
 	return r.Result{}.Replace(productsTableID, dataTable), nil
 }
 
-// newDataWithFilters creates a DataTable with current active filter state applied
-func newDataWithFilters() *r.DataTable[Product] {
+// newDataWithFilters creates a DataTable with the given filter state applied
+func newDataWithFilters(activeFilters map[int]*activeFilter) *r.DataTable[Product] {
 	dt := NewData()
 
 	// Build filter badges and set filter values
@@ -501,13 +543,13 @@ func NewData() *r.DataTable[Product] {
 		Col("Category", r.ColOpt[Product]{
 			Sortable:      true,
 			Filter:        r.SelectFilter,
-			FilterOptions: []string{"Electronics", "Accessories", "Office"},
+			FilterOptions: productCategories,
 			Text:          func(p *Product) *r.Node { return r.Span().Text(p.Category) },
 		}).
 		Col("Status", r.ColOpt[Product]{
 			Sortable:      true,
 			Filter:        r.SelectFilter,
-			FilterOptions: []string{"Draft", "Sent", "Paid", "Overdue"},
+			FilterOptions: productStatuses,
 			Text: func(p *Product) *r.Node {
 				color := "gray-soft"
 				switch p.Status {
@@ -610,15 +652,14 @@ func exportProductsPDF(products []*Product) (r.Result, error) {
 }
 
 func exportProductsCSV(products []*Product) (r.Result, error) {
-	var buf bytes.Buffer
-	buf.WriteString("ID,Name,Price,Stock,Created,Category,Status,ReleaseMonth\n")
+	rows := [][]string{{"ID", "Name", "Price", "Stock", "Created", "Category", "Status", "ReleaseMonth"}}
 	for _, p := range products {
-		name := strings.ReplaceAll(p.Name, "\"", "\"\"")
-		fmt.Fprintf(&buf, "%d,\"%s\",%.2f,%d,%s,%s,%s,%s\n",
-			p.ID, name, p.Price, p.Stock, p.CreatedAt, p.Category, p.Status, p.ReleaseMonth)
+		rows = append(rows, []string{
+			fmt.Sprintf("%d", p.ID), p.Name, fmt.Sprintf("%.2f", p.Price), fmt.Sprintf("%d", p.Stock),
+			p.CreatedAt, p.Category, p.Status, p.ReleaseMonth,
+		})
 	}
-	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	return r.Result{}.Download("products.csv", "text/csv", b64), nil
+	return csvDownload("products.csv", rows)
 }
 
 var tableData r.ActionRef[TableDataRequest]

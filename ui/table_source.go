@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 )
 
@@ -142,7 +143,8 @@ func normalizeTableQuery[T any](q *TableQuery, table *DataTable[T]) {
 		q.Filters = make(map[int]*FilterValue)
 	}
 	for column, value := range q.Filters {
-		if _, ok := table.filters[column]; !ok || value == nil {
+		filter, ok := table.filters[column]
+		if !ok || value == nil || !validFilter(filter, value) {
 			delete(q.Filters, column)
 		}
 	}
@@ -175,4 +177,28 @@ func (source *TableSource[T]) render(ctx *Context, table *DataTable[T], q TableQ
 func (source *TableSource[T]) Render(ctx *Context) (*Node, error) {
 	table := source.table()
 	return source.render(ctx, table, source.query(ctx, table))
+}
+
+// validFilter reports whether a filter value from the browser fits its
+// column: a known operator for the filter type and select values among the
+// options, so a loader can map the operator to SQL with a switch.
+func validFilter(filter *ColumnFilter, v *FilterValue) bool {
+	ops := map[FilterType][]FilterOperator{
+		FilterTypeText:   {"", OpContains, OpStartsWith, OpEquals},
+		FilterTypeNumber: {"", OpRange, OpGTE, OpLTE, OpGT, OpLT, OpEquals},
+		FilterTypeDate:   {"", OpRange, OpGTE, OpLTE, OpGT, OpLT, OpEquals},
+	}
+	ops[FilterTypeMonthYear] = ops[FilterTypeDate]
+	ops[FilterTypeSelect] = []FilterOperator{""}
+	if allowed, ok := ops[filter.Type]; ok && !slices.Contains(allowed, FilterOperator(v.Operator)) {
+		return false
+	}
+	if len(filter.Options) > 0 {
+		for _, value := range append([]string{v.Value}, v.Values...) {
+			if value != "" && !slices.Contains(filter.Options, value) {
+				return false
+			}
+		}
+	}
+	return true
 }

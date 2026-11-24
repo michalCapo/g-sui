@@ -185,8 +185,15 @@ func RemoveClass(id, classes string) *Action { return op("removeClass", id, clas
 // ToggleClass toggles space-separated classes.
 func ToggleClass(id, classes string) *Action { return op("toggleClass", id, classes) }
 
-// SetAttr sets an attribute.
-func SetAttr(id, name, value string) *Action { return op("setAttr", id, name, value) }
+// SetAttr sets an attribute. As on nodes, URL attributes such as href refuse
+// unsafe schemes like javascript:, srcdoc is emptied and event attributes
+// (onclick, ...) are not set.
+func SetAttr(id, name, value string) *Action {
+	if strings.HasPrefix(strings.ToLower(name), "on") {
+		return Seq()
+	}
+	return op("setAttr", id, name, attrValue("", name, value))
+}
 
 // RemoveAttr removes an attribute.
 func RemoveAttr(id, name string) *Action { return op("removeAttr", id, name) }

@@ -13,6 +13,7 @@ const (
 )
 
 type FormData struct {
+	Form       string `json:"Form"`
 	Action     string `json:"Action"`
 	Title      string `json:"Title"`
 	GenderNext string `json:"GenderNext"`
@@ -31,6 +32,9 @@ var formSubmit r.ActionRef[FormData]
 func formBuilder(formID string, data FormData) *r.FormBuilder {
 	return r.NewForm(formID).
 		Action(formSubmit).
+
+		// Which form sent the data; the server checks it against known IDs
+		Hidden("Form").Value(formID).Render().
 
 		// Title (text, required)
 		Text("Title", "Title").Required().Placeholder("Enter title").Value(data.Title).Render().
@@ -107,6 +111,17 @@ func formPageContent(result1 string, data1 FormData, result2 string, data2 FormD
 }
 
 func HandleFormSubmit(_ *r.Context, data FormData) (r.Result, error) {
+	if data.Form != form1ID && data.Form != form2ID {
+		return r.Result{}.Notify("error", "Unknown form"), nil
+	}
+
+	// The browser checks Required fields too, but a client can skip that
+	// check, so the server validates the same rules again.
+	form := formBuilder(data.Form, data)
+	if errs := form.Validate(data); errs.HasErrors() {
+		return form.ShowErrors(errs), nil
+	}
+
 	result := fmt.Sprintf(
 		"Action=%s  Title=%s  GenderNext=%s  Gender=%s  Country=%s  Some=%s  Number=%s  Agree=%v",
 		data.Action, data.Title, data.GenderNext, data.Gender, data.Country, data.Some, data.Number, data.Agree,
@@ -122,8 +137,12 @@ func HandleFormSubmit(_ *r.Context, data FormData) (r.Result, error) {
 		toast = "Form submitted successfully"
 	}
 
+	content := formPageContent(result, data, "", FormData{})
+	if data.Form == form2ID {
+		content = formPageContent("", FormData{}, result, data)
+	}
 	return r.Result{}.
-		Replace(formPageID, formPageContent(result, data, "", FormData{})).
+		Replace(formPageID, content).
 		Notify("success", toast), nil
 }
 

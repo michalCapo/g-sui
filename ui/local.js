@@ -57,8 +57,10 @@
     },
     nav: function (el, path, patch, replace, regions) { __ws.navigate(path, {patch: patch, replace: replace, regions: regions}); },
     redirect: function (el, url) {
+      var u; try { u = new URL(url, location.href); } catch (_) { return; }
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') { console.warn('[g-sui] refused redirect', url); return; }
       document.body.style.visibility = 'hidden';
-      setTimeout(function () { window.location.href = url; }, 200);
+      setTimeout(function () { window.location.href = u.href; }, 200);
     },
     reload: function () { location.reload(); },
     back: function () { history.back(); },

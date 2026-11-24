@@ -131,9 +131,12 @@
   window.__gsuiNavigate = function (path, options) {
     options = options || {};
     var url = new URL(path, location.href);
+    // Navigate opens local pages only: a javascript: URL would run script and
+    // another origin would be an open redirect.
+    if (url.origin !== location.origin) { console.warn('[g-sui] refused non-local navigation', path); return; }
     // Before the client runs, or when the socket is reported offline, a full
     // load is the only way. While connecting, the call waits for the socket.
-    if (url.origin !== location.origin || !__ws.beginNavigation || (!__ws.connected() && __ws.state() === 'offline')) { location.assign(url.href); return; }
+    if (!__ws.beginNavigation || (!__ws.connected() && __ws.state() === 'offline')) { location.assign(url.href); return; }
     // A full queue refuses the navigation before the page changes anything.
     if (!__ws.accepts(true)) { window.__gsuiReport((window.__gsuiText || {}).lostNotSent || 'Connection lost before sending. Please try again.'); return; }
     if (options.history !== 'none') rememberScroll();
@@ -225,7 +228,8 @@
     if (request.history === 'none') window.scrollTo(request.x, request.y);
     else if (!request.patch) {
       var hash = new URL(request.url, location.href).hash;
-      var target = hash ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
+      var id = hash.slice(1); try { id = decodeURIComponent(id); } catch (_) {}
+      var target = id ? document.getElementById(id) : null;
       if (target) target.scrollIntoView(); else window.scrollTo(0, 0);
     }
     if (!request.patch) {
