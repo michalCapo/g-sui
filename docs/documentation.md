@@ -576,6 +576,7 @@ still navigates.
 | `DragToScroll()` | Drag with the mouse to scroll horizontally |
 | `ActiveClass(active, inactive...)` | Classes for a link to the current page; sets `aria-current="page"` |
 | `ActivePrefix()` | Also mark the link active on nested paths |
+| `ActiveExcept(paths...)` | Keep the link inactive on these paths and their nested paths, e.g. pages with their own link under a prefix. Paths compare like the href: query and fragment ignored, a trailing slash ignored, `/` covers every path |
 | `ShowIfInstallable()` | Hide the node unless the app can be installed. Needs [`App.PWA`](#pwa) |
 | `ShowIfNotifications(states...)` | Show the node only in these notification states. See [Notifications](#notifications) |
 | `NotificationSwitch()` | On/off switch for notifications on this device. See [Notifications](#notifications) |
@@ -2407,6 +2408,13 @@ on the input pointer when implemented. `ValidationError` displays field messages
 sets ARIA error state and focuses the first invalid field. Errors do not replace
 the form or discard its values. Busy state belongs to the submitting control,
 and another request's reply does not release it.
+
+A form is busy while any of its calls waits for a reply. Submits that come
+meanwhile, such as a filter whose select submits on change, join into one: once
+the form's last reply is applied, the form submits again with its values at that
+moment and the button chosen last. The repeat is dropped when the call ends
+without a reply (restart, drop, expiry), when the reply belongs to an earlier
+page, when the form has left the page, or when its submit action changed.
 
 ### Server-owned views
 

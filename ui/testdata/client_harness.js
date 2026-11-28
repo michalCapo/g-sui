@@ -346,6 +346,79 @@ const tests = {
     check('expired call is never sent', !env.latest().sent.some(m => JSON.parse(m).act === 'save'));
   },
 
+  async busyFormSubmitsAgainAfterReply() {
+    const env = makeEnv();
+    const ws = env.run({grace: 0, reloadAfter: 0, keepAlive: -1, inst: 'srv-1'});
+    const a = env.latest();
+    a.accept(); hello(a, 'srv-1');
+    const reply = id => a.deliver(JSON.stringify({__r: 1, id, version: 1, js: ''}));
+    // A g-sui form: its submit handler is bound; requestSubmit records
+    // the button it gets.
+    const makeForm = () => {
+      const form = makeEl('form');
+      form.__gsuiHandlers = {submit() {}};
+      form.submits = [];
+      form.requestSubmit = function (button) { form.submits.push(button || null); };
+      return form;
+    };
+    const form = makeForm();
+    const id = ws.call('filter', {}, null, form);
+    check('a pending form is busy', form.getAttribute('aria-busy') === 'true');
+    const publish = makeEl('button'); publish.form = form;
+    form.__gsuiAgain = {action: 'filter', submitter: publish}; // two changes while it waited (__gsuiSubmit)
+    reply(id);
+    check('the reply frees the form', form.getAttribute('aria-busy') === null && !form.__gsuiAgain);
+    await sleep(10);
+    check('the form submits once more, with the button chosen', form.submits.length === 1 && form.submits[0] === publish);
+    reply(id);
+    await sleep(10);
+    check('a repeated reply submits nothing more', form.submits.length === 1);
+
+    // Two buttons of one form: the form waits for both calls.
+    const save = makeEl('button'); save.form = form;
+    const send = makeEl('input'); send.form = form;
+    const first = ws.call('save', {}, null, save), second = ws.call('send', {}, null, send);
+    check('an input submit makes its form busy too', send.disabled === true && form.__gsuiCalls === 2);
+    form.__gsuiAgain = {action: 'filter', submitter: null};
+    reply(first);
+    check('the form stays busy while a call of it waits', form.getAttribute('aria-busy') === 'true' && save.disabled === false);
+    reply(second);
+    await sleep(10);
+    check('the last reply of the form sends the waiting submit', form.submits.length === 2 && form.getAttribute('aria-busy') === null);
+
+    // A call that takes the form before the repeat keeps it waiting.
+    const third = ws.call('filter', {}, null, form);
+    form.__gsuiAgain = {action: 'filter', submitter: null};
+    reply(third);
+    const fourth = ws.call('save', {}, null, save); // e.g. from a gsui:updated handler
+    await sleep(10);
+    check('a busy form keeps the waiting submit', form.submits.length === 2 && !!form.__gsuiAgain);
+    reply(fourth);
+    await sleep(10);
+    check('it is sent after the next reply', form.submits.length === 3);
+
+    // A reply of an older page, a form off the page and a call ended
+    // without a reply send nothing.
+    const stale = makeForm();
+    const staleID = ws.call('filter', {}, null, stale);
+    stale.__gsuiAgain = {action: 'filter', submitter: null};
+    a.deliver(JSON.stringify({__r: 1, id: staleID, version: 2, js: ''}));
+    const gone = makeForm(); gone.isConnected = false;
+    const goneID = ws.call('filter', {}, null, gone);
+    gone.__gsuiAgain = {action: 'filter', submitter: null};
+    reply(goneID);
+    const other = makeForm();
+    ws.call('filter', {}, null, other);
+    other.__gsuiAgain = {action: 'filter', submitter: null};
+    const pending = ws.restart();
+    env.latest().accept();
+    await pending;
+    await sleep(10);
+    check('a stale reply, a removed form or a restart submit nothing',
+      stale.submits.length === 0 && gone.submits.length === 0 && other.submits.length === 0 && !other.__gsuiAgain &&
+      other.getAttribute('aria-busy') === null && stale.getAttribute('aria-busy') === null);
+  },
+
   async plainReconnectKeepsLiveSocket() {
     const env = makeEnv();
     const ws = env.run({grace: 0, reloadAfter: 0, keepAlive: -1});

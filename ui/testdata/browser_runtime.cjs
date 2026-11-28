@@ -121,6 +121,21 @@ const assert = require('node:assert/strict');
     const reconnectedClock=await page.locator('#live-clock').textContent();
     await page.waitForFunction(old=>document.getElementById('live-clock').textContent!==old,reconnectedClock);
     assert.equal(await page.evaluate(() => window.navigationSentinel),'preserved');
+    // A prefix link stays inactive on the paths it excepts.
+    await page.evaluate(()=>{
+      const back=location.pathname, link=document.createElement('a');
+      link.href='/app'; link.setAttribute('data-gsui-active','on'); link.setAttribute('data-gsui-prefix','');
+      link.setAttribute('data-gsui-inactive','off');
+      link.setAttribute('data-gsui-except',JSON.stringify(['/app/settings/','/app/sales team?tab=1']));
+      const state=path=>{history.replaceState(history.state,'',path);__gsui.active(link);
+        const on=link.classList.contains('on'), off=link.classList.contains('off'), current=link.getAttribute('aria-current')==='page';
+        if(on===off||on!==current)throw Error('active state of '+path+' is mixed');
+        return on;};
+      const got=[state('/app'),state('/app/7/docs'),state('/app/settings'),state('/app/settings/x'),state('/app/settingsx'),
+        state('/app/sales%20team'),state('/app/sales')];
+      history.replaceState(history.state,'',back);
+      if(JSON.stringify(got)!=='[true,true,false,false,true,false,true]')throw Error('active except: '+JSON.stringify(got));
+    });
     const menu=page.getByRole('navigation',{name:'Main navigation'});
     const paths=await menu.locator('a[data-gsui-active]').evaluateAll(links=>links.map(a=>a.getAttribute('href')));
     for(const path of paths) {

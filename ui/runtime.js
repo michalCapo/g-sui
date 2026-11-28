@@ -293,7 +293,10 @@
   };
   window.__gsuiSubmit = function (event, action, values) {
     var form = event.currentTarget;
-    if(form.getAttribute('aria-busy')==='true')return;
+    // A submit while the form waits for its reply is sent after it
+    // (release in the client); a repeat for another action is dropped.
+    if(form.__gsuiRepeat&&form.__gsuiRepeat!==action)return;
+    if(form.getAttribute('aria-busy')==='true'){form.__gsuiAgain={action:action,submitter:event.submitter||null};return;}
     if (!form.reportValidity()) return;
     __gsuiFormErrors(form.id,{});
     var data = {__form:form.id};

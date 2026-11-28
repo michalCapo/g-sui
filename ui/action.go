@@ -328,6 +328,16 @@ func (n *Node) ActiveClass(active string, inactive ...string) *Node {
 // for href "/users". Use with ActiveClass.
 func (n *Node) ActivePrefix() *Node { return n.Attr("data-gsui-prefix", "") }
 
+// ActiveExcept keeps the link inactive on these paths and their nested
+// paths, e.g. a link "/app" with ActivePrefix that is not active on
+// "/app/settings", which has its own link. Paths compare like the link's
+// href: without query or fragment, a trailing slash ignored; "/" covers
+// every path. Use with ActiveClass.
+func (n *Node) ActiveExcept(paths ...string) *Node {
+	b, _ := json.Marshal(paths)
+	return n.Attr("data-gsui-except", string(b))
+}
+
 // mount runs a local step when the node is inserted. A trailing *Action
 // argument becomes a callback with `event` and `el`.
 func (n *Node) mount(name string, args ...any) *Node {

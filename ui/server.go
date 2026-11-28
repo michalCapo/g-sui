@@ -1073,7 +1073,26 @@ var __ws=(function(){
   // run, so it is reported and never repeated.
   var calls={},verifying=false,greeted=false,callTimer=0,reloadAfterFlush=false;
   function message(act,data,id,sub){return JSON.stringify({act:act,data:data||{},id:id||0,sub:sub||'',page:window.__gsuiPage||location.pathname+location.search,version:window.__gsuiVersion})}
-  function release(id){var el=busy[id];if(el){el.disabled=false;el.removeAttribute('aria-busy');if(el.form)el.form.removeAttribute('aria-busy');el.classList.remove('gsui-busy','opacity-60','cursor-wait');delete busy[id]}}
+  // release frees the element of call id and, once no other call holds
+  // it, its form. A submit that came while the form waited (__gsuiAgain,
+  // set by __gsuiSubmit) is sent once more after a reply of the current
+  // page (again) is applied: with the form's latest values and the button
+  // chosen, only while the form is on the page with the same action. A
+  // call ended without a reply drops it.
+  function release(id,again){var b=busy[id];if(!b)return;delete busy[id];var el=b.el,f=b.form;
+    el.disabled=false;el.removeAttribute('aria-busy');el.classList.remove('gsui-busy','opacity-60','cursor-wait');
+    if(!f)return;f.__gsuiCalls=Math.max(0,(f.__gsuiCalls||1)-1);if(f.__gsuiCalls)return;f.removeAttribute('aria-busy');
+    var p=f.__gsuiAgain;if(!p)return;f.__gsuiAgain=null;if(!again)return;
+    var version=window.__gsuiVersion;
+    setTimeout(function(){
+      if(f.isConnected===false||window.__gsuiVersion!==version||!(f.__gsuiHandlers&&f.__gsuiHandlers.submit))return;
+      // Another call took the form meanwhile: the submit waits for it.
+      if(f.getAttribute('aria-busy')==='true'){if(!f.__gsuiAgain)f.__gsuiAgain=p;return}
+      var s=p.submitter&&p.submitter.form===f&&p.submitter.isConnected!==false?p.submitter:null;
+      var submit=window.HTMLFormElement&&f instanceof window.HTMLFormElement?window.HTMLFormElement.prototype.requestSubmit:f.requestSubmit;
+      f.__gsuiRepeat=p.action;
+      try{if(s)submit.call(f,s);else submit.call(f)}finally{f.__gsuiRepeat=null}
+    },0)}
   var inst=typeof __gsuiCfg.inst==='string'?__gsuiCfg.inst:'',cur=inst,pendingReload='';
   // Holds live on window so the pre-client stub and the real client share one
   // counter across the stub handover.
@@ -1366,7 +1385,7 @@ var __ws=(function(){
       if(!m||(!m.__r&&!m.__push))return;
       if(!m.broadcast&&(!Number.isInteger(m.version)||m.version<1))return;
       if(m&&m.__r){
-        delete inflight[m.id];delete calls[m.id];release(m.id);hideLoader();
+        delete inflight[m.id];delete calls[m.id];release(m.id,!m.version||m.version===window.__gsuiVersion);hideLoader();
         // The reload deferred by a long outage runs after this reply is applied.
         if(reloadAfterFlush&&!hasCalls())setTimeout(reloadIfDone,0);
       }
@@ -1497,7 +1516,7 @@ var __ws=(function(){
         collect.forEach(function(id){collectValue(id,d)});
       }
       var id=++seq;
-      if(source&&/^(BUTTON|FORM)$/.test(source.tagName)){busy[id]=source;source.disabled=true;source.setAttribute('aria-busy','true');if(source.form)source.form.setAttribute('aria-busy','true');source.classList.add('gsui-busy','opacity-60','cursor-wait')}
+      if(source&&/^(BUTTON|FORM|INPUT)$/.test(source.tagName)){var form=source.tagName==='FORM'?source:source.form||null;busy[id]={el:source,form:form};source.disabled=true;source.setAttribute('aria-busy','true');if(form){form.__gsuiCalls=(form.__gsuiCalls||0)+1;form.setAttribute('aria-busy','true')}source.classList.add('gsui-busy','opacity-60','cursor-wait')}
       calls[id]={act:act,msg:message(act,d,id),at:Date.now(),sent:false,loader:!(opts&&opts.loader===false)};
       if(send(id))probe(__gsuiOpt('hbTimeout',12000));
       else{expireLater();if(!api.connected())reconnectNow()}

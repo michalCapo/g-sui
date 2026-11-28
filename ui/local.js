@@ -132,6 +132,12 @@
       var path = new URL(el.getAttribute('href') || '', location.href).pathname.replace(/\/$/, '') || '/';
       var here = location.pathname.replace(/\/$/, '') || '/';
       var on = here === path || (path !== '/' && el.hasAttribute('data-gsui-prefix') && here.indexOf(path + '/') === 0);
+      var except = [];
+      try { except = JSON.parse(el.getAttribute('data-gsui-except') || '[]'); } catch (_) {}
+      except.forEach(function (p) {
+        p = new URL(String(p), location.href).pathname.replace(/\/$/, '') || '/';
+        if (p === '/' || here === p || here.indexOf(p + '/') === 0) on = false;
+      });
       words(el.getAttribute('data-gsui-active')).forEach(function (c) { el.classList.toggle(c, on); });
       words(el.getAttribute('data-gsui-inactive')).forEach(function (c) { el.classList.toggle(c, !on); });
       if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');

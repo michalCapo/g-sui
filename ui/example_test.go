@@ -246,6 +246,11 @@ func TestNodeBehaviors(t *testing.T) {
 	expect(t, js, "setAttribute('data-gsui-inactive','text-gray-500')")
 	expect(t, js, "__gsui.active(this);")
 
+	js = NavLink("/app").ActiveClass("font-bold").ActivePrefix().ActiveExcept("/app/settings", "/app/sales team").toJS()
+	expect(t, js, `data-gsui-except`)
+	expect(t, js, `/app/settings`)
+	expect(t, js, `/app/sales team`)
+
 	js = Widget("chart", map[string]any{"points": []int{1, 2}}).toJS()
 	expect(t, js, `__gsui.mount(this,"chart",{"points":[1,2]});`)
 	expect(t, js, "data-gsui-preserve")
